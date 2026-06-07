@@ -1,17 +1,29 @@
-export default function Home() {
+import { getOnePiece } from "@/lib/anilist";
+
+export default async function Home() {
+  const manga = await getOnePiece();
+
   return (
-    <main style={{ padding: 40 }}>
-      <h1>📚 Mi Manga Tracker</h1>
+    <main
+      style={{
+        padding: 40,
+        fontFamily: "sans-serif",
+      }}
+    >
+      <h1>{manga.title.romaji}</h1>
+
+      <img
+        src={manga.coverImage.extraLarge}
+        width={250}
+      />
 
       <p>
-        Próximamente:
+        <b>Estado:</b> {manga.status}
       </p>
 
-      <ul>
-        <li>Buscar mangas</li>
-        <li>Agregar a colección</li>
-        <li>Marcar tomos comprados</li>
-      </ul>
+      <p>
+        <b>Volúmenes:</b> {manga.volumes}
+      </p>
     </main>
   );
 }
