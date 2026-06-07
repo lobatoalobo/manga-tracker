@@ -1,5 +1,6 @@
 import { searchManga } from "@/lib/anilist";
 import SearchBar from "@/components/SearchBar";
+import AddButton from "@/components/AddButton";
 
 export default async function Home({
   searchParams,
@@ -41,6 +42,8 @@ export default async function Home({
       <p>
         <b>Volumes:</b> {manga.volumes}
       </p>
+
+      <AddButton manga={manga} />
     </main>
   );
 }
