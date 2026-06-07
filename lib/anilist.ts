@@ -1,28 +1,28 @@
-const query = `
-query {
-  Media(search: "One Piece", type: MANGA) {
-    id
+export async function searchManga(search: string) {
+  const query = `
+  query ($search: String) {
+    Media(search: $search, type: MANGA) {
+      id
 
-    title {
-      romaji
-      english
-      native
+      title {
+        romaji
+        english
+        native
+      }
+
+      coverImage {
+        extraLarge
+      }
+
+      volumes
+
+      status
+
+      description
     }
-
-    coverImage {
-      extraLarge
-    }
-
-    volumes
-
-    status
-
-    description
   }
-}
-`;
+  `;
 
-export async function getOnePiece() {
   const response = await fetch(
     "https://graphql.anilist.co",
     {
@@ -32,6 +32,9 @@ export async function getOnePiece() {
       },
       body: JSON.stringify({
         query,
+        variables: {
+          search,
+        },
       }),
     }
   );
