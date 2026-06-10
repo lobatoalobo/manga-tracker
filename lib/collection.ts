@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import type { TrackedEdition, OwnedVolume } from "@prisma/client";
 
@@ -75,6 +76,47 @@ export async function getCollectionItems(
     }
   }
   return items;
+}
+
+// --- Compartir colección (opt-in con link) ---
+
+export async function getShareSlug(userId: string): Promise<string | null> {
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { shareSlug: true },
+  });
+  return u?.shareSlug ?? null;
+}
+
+/** Activa o desactiva compartir. Al activar, genera un slug si no existe. */
+export async function setSharing(
+  userId: string,
+  enable: boolean,
+): Promise<string | null> {
+  if (!enable) {
+    await prisma.user.update({ where: { id: userId }, data: { shareSlug: null } });
+    return null;
+  }
+  const existing = await getShareSlug(userId);
+  if (existing) return existing;
+
+  const slug = randomBytes(6).toString("hex");
+  await prisma.user.update({ where: { id: userId }, data: { shareSlug: slug } });
+  return slug;
+}
+
+/** Colección pública por slug (solo lectura). null si el slug no existe. */
+export async function getPublicCollection(
+  slug: string,
+): Promise<{ name: string; items: CollectionItem[] } | null> {
+  const user = await prisma.user.findUnique({
+    where: { shareSlug: slug },
+    select: { id: true, name: true },
+  });
+  if (!user) return null;
+
+  const items = await getCollectionItems(user.id);
+  return { name: user.name ?? "Colección", items };
 }
 
 export async function getSeries(

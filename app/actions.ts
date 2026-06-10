@@ -8,6 +8,7 @@ import {
   toggleVolume,
   setAllVolumes,
   setReading,
+  setSharing,
   type AddEditionInput,
   type ReadingStatus,
 } from "@/lib/collection";
@@ -66,6 +67,13 @@ export async function setReadingAction(
   await setReading(userId, anilistId, key, status, volume);
   revalidatePath("/collection");
   revalidatePath(`/manga/${anilistId}`);
+}
+
+export async function setSharingAction(enable: boolean) {
+  const userId = await requireUserId();
+  const slug = await setSharing(userId, enable);
+  revalidatePath("/collection");
+  return { slug };
 }
 
 export async function createReportAction(input: {

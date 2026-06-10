@@ -2,7 +2,13 @@ import Link from "next/link";
 import RemoveEditionButton from "@/components/RemoveEditionButton";
 import type { CollectionItem } from "@/lib/collection";
 
-export default function MangaCard({ item }: { item: CollectionItem }) {
+export default function MangaCard({
+  item,
+  readOnly = false,
+}: {
+  item: CollectionItem;
+  readOnly?: boolean;
+}) {
   const { edition } = item;
   const owned = edition.ownedVolumes.length;
   const total = edition.totalVolumes;
@@ -11,12 +17,14 @@ export default function MangaCard({ item }: { item: CollectionItem }) {
 
   return (
     <div className="group relative w-full overflow-hidden rounded-xl border border-border bg-surface transition hover:border-accent">
-      <RemoveEditionButton
-        anilistId={item.anilistId}
-        editionKey={edition.key}
-        label="Quitar"
-        className="absolute right-2 top-2 z-10 rounded-md bg-black/60 px-2 py-1 text-xs text-muted opacity-0 backdrop-blur transition hover:text-red-400 group-hover:opacity-100"
-      />
+      {!readOnly && (
+        <RemoveEditionButton
+          anilistId={item.anilistId}
+          editionKey={edition.key}
+          label="Quitar"
+          className="absolute right-2 top-2 z-10 rounded-md bg-black/60 px-2 py-1 text-xs text-muted opacity-0 backdrop-blur transition hover:text-red-400 group-hover:opacity-100"
+        />
+      )}
 
       <Link href={`/manga/${item.anilistId}`} className="block">
         <div className="aspect-2/3 w-full overflow-hidden bg-surface-2">

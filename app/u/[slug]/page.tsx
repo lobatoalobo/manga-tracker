@@ -1,29 +1,27 @@
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
-import { getCollectionItems, getShareSlug } from "@/lib/collection";
+import { notFound } from "next/navigation";
+import { getPublicCollection } from "@/lib/collection";
 import CollectionGrid from "@/components/CollectionGrid";
-import ShareToggle from "@/components/ShareToggle";
 import { getCollectionStats } from "@/services/collectionService";
 
 export const metadata = {
-  title: "Mi colección · Manga Tracker",
+  title: "Colección · Manga Tracker",
 };
 
-export default async function CollectionPage() {
-  const session = await auth();
-  if (!session?.user?.id) redirect("/");
+export default async function PublicCollectionPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const data = await getPublicCollection(slug);
+  if (!data) notFound();
 
-  const [items, shareSlug] = await Promise.all([
-    getCollectionItems(session.user.id),
-    getShareSlug(session.user.id),
-  ]);
-  const stats = getCollectionStats(items);
+  const stats = getCollectionStats(data.items);
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-8">
-      <h1 className="mb-6 text-2xl font-bold">Mi colección</h1>
-
-      <ShareToggle initialSlug={shareSlug} />
+      <p className="text-sm text-muted">Colección de</p>
+      <h1 className="mb-6 text-2xl font-bold">{data.name}</h1>
 
       <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Series" value={stats.series} />
@@ -43,7 +41,7 @@ export default async function CollectionPage() {
         </div>
       </div>
 
-      <CollectionGrid items={items} />
+      <CollectionGrid items={data.items} readOnly />
     </main>
   );
 }

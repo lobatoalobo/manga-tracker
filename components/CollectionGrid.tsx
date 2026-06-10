@@ -15,7 +15,13 @@ function progressOf(i: CollectionItem): number {
   return t > 0 ? i.edition.ownedVolumes.length / t : 0;
 }
 
-export default function CollectionGrid({ items }: { items: CollectionItem[] }) {
+export default function CollectionGrid({
+  items,
+  readOnly = false,
+}: {
+  items: CollectionItem[];
+  readOnly?: boolean;
+}) {
   const [search, setSearch] = useState("");
   const [publisher, setPublisher] = useState("all");
   const [reading, setReading] = useState("all");
@@ -106,7 +112,11 @@ export default function CollectionGrid({ items }: { items: CollectionItem[] }) {
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {filtered.map((i) => (
-            <MangaCard key={`${i.anilistId}-${i.edition.key}`} item={i} />
+            <MangaCard
+              key={`${i.anilistId}-${i.edition.key}`}
+              item={i}
+              readOnly={readOnly}
+            />
           ))}
         </div>
       )}

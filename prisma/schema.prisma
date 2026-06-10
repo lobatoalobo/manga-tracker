@@ -15,6 +15,7 @@ model User {
   email         String?   @unique
   emailVerified DateTime?
   image         String?
+  shareSlug     String?   @unique // si está seteado, la colección es pública en /u/<slug>
   createdAt     DateTime  @default(now())
 
   accounts Account[]
