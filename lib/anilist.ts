@@ -206,13 +206,53 @@ export async function getTrendingManga(includeAdult = true) {
   return json.data.Page.media;
 }
 
+/** Obras (manga) de un autor/staff. */
+export async function getStaffWorks(id: number) {
+  const query = `
+    query ($id: Int) {
+      Staff(id: $id) {
+        id
+        name { full }
+        staffMedia(sort: POPULARITY_DESC, perPage: 50) {
+          nodes {
+            id
+            type
+            title { romaji native }
+            coverImage { large }
+          }
+        }
+      }
+    }
+  `;
+  const response = await fetch("https://graphql.anilist.co", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, variables: { id } }),
+    next: { revalidate: 60 * 60 * 24 },
+  });
+  const json = await response.json();
+  const staff = json.data?.Staff;
+  if (!staff) return null;
+  const works = (staff.staffMedia?.nodes ?? []).filter(
+    (n: any) => n.type === "MANGA",
+  );
+  return { name: staff.name.full as string, works };
+}
+
 /** Listado A-Z de mangas, paginado (10 por página). */
-export async function getMangaPage(page: number, includeAdult = true) {
+export async function getMangaPage(
+  page: number,
+  includeAdult = true,
+  onlyFinished = false,
+) {
+  const filters =
+    (includeAdult ? "" : ", isAdult: false") +
+    (onlyFinished ? ", status: FINISHED" : "");
   const query = `
     query ($page: Int) {
       Page(page: $page, perPage: 10) {
         pageInfo { currentPage hasNextPage }
-        media(type: MANGA, sort: TITLE_ROMAJI${includeAdult ? "" : ", isAdult: false"}) {
+        media(type: MANGA, sort: TITLE_ROMAJI${filters}) {
           id
           title { romaji english native }
           coverImage { large }
@@ -301,6 +341,7 @@ export async function getMangaById(
             role
 
             node {
+              id
               name {
                 full
               }

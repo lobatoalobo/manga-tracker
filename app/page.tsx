@@ -11,7 +11,12 @@ import Link from "next/link";
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ search?: string; tab?: string; page?: string }>;
+  searchParams: Promise<{
+    search?: string;
+    tab?: string;
+    page?: string;
+    finished?: string;
+  }>;
 }) {
   const session = await auth();
   // +18 en búsqueda: cualquier logueado.
@@ -22,6 +27,7 @@ export default async function Home({
   const query = params.search?.trim();
   const tab = params.tab === "az" ? "az" : "hot";
   const page = Math.max(1, Number(params.page) || 1);
+  const onlyFinished = params.finished === "1";
 
   let mangas: any[];
   let pageInfo: { hasNextPage: boolean } | null = null;
@@ -29,12 +35,14 @@ export default async function Home({
   if (query) {
     mangas = await searchMangaList(query, adultInSearch);
   } else if (tab === "az") {
-    const res = await getMangaPage(page, adultInLists);
+    const res = await getMangaPage(page, adultInLists, onlyFinished);
     mangas = res.media;
     pageInfo = res.pageInfo;
   } else {
     mangas = await getTrendingManga(adultInLists);
   }
+
+  const azBase = onlyFinished ? "/?tab=az&finished=1" : "/?tab=az";
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-8">
@@ -50,13 +58,25 @@ export default async function Home({
           Resultados para &quot;{query}&quot;
         </h2>
       ) : (
-        <div className="mt-8 mb-4 flex gap-2">
+        <div className="mt-8 mb-4 flex flex-wrap items-center gap-2">
           <Tab href="/?tab=hot" active={tab === "hot"}>
             🔥 Hot esta semana
           </Tab>
           <Tab href="/?tab=az" active={tab === "az"}>
             A-Z
           </Tab>
+          {tab === "az" && (
+            <Link
+              href={onlyFinished ? "/?tab=az" : "/?tab=az&finished=1"}
+              className={`ml-1 rounded-lg px-3 py-2 text-sm transition ${
+                onlyFinished
+                  ? "bg-accent text-white"
+                  : "border border-border text-muted hover:text-foreground"
+              }`}
+            >
+              ✓ Solo terminadas
+            </Link>
+          )}
         </div>
       )}
 
@@ -91,7 +111,7 @@ export default async function Home({
         <div className="mt-8 flex items-center justify-center gap-3">
           {page > 1 ? (
             <Link
-              href={`/?tab=az&page=${page - 1}`}
+              href={`${azBase}&page=${page - 1}`}
               className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
             >
               ← Anterior
@@ -104,7 +124,7 @@ export default async function Home({
           <span className="text-sm text-muted">Página {page}</span>
           {pageInfo.hasNextPage ? (
             <Link
-              href={`/?tab=az&page=${page + 1}`}
+              href={`${azBase}&page=${page + 1}`}
               className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
             >
               Siguiente →

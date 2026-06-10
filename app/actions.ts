@@ -28,6 +28,7 @@ import {
 } from "@/lib/purchases";
 import { parseCsv } from "@/lib/csv";
 import { addWish, removeWish } from "@/lib/wishlist";
+import { setNote } from "@/lib/notes";
 
 export async function addEditionAction(input: AddEditionInput) {
   const userId = await requireUserId();
@@ -225,6 +226,21 @@ export async function removeWishAction(anilistId: number) {
   const userId = await requireUserId();
   await removeWish(userId, anilistId);
   revalidatePath("/deseados");
+  revalidatePath(`/manga/${anilistId}`);
+}
+
+// --- Notas / puntaje ---
+
+export async function setNoteAction(
+  anilistId: number,
+  rating: number | null,
+  note: string | null,
+) {
+  const userId = await requireUserId();
+  await setNote(userId, anilistId, {
+    rating: rating && rating > 0 ? rating : null,
+    note: note?.trim() || null,
+  });
   revalidatePath(`/manga/${anilistId}`);
 }
 

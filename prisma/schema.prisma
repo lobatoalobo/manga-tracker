@@ -23,6 +23,20 @@ model User {
   mangas    Manga[]
   purchases Purchase[]
   wishlist  WishlistItem[]
+  notes     UserNote[]
+}
+
+// Nota y puntaje personal de una serie (independiente de tenerla en la colección).
+model UserNote {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  anilistId Int
+  rating    Int? // 1-10
+  note      String?
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, anilistId])
 }
 
 // Lista de deseados: series que el usuario quiere comprar (aparte de la colección).

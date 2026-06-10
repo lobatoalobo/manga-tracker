@@ -44,6 +44,7 @@ export function normalizeAnilist(manga: any) {
           staff.role === "Art",
       )
       .map((staff: any) => ({
+        id: staff.node.id,
         role: staff.role,
 
         name: staff.node.name.full,

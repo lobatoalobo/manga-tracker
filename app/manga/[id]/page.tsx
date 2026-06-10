@@ -1,12 +1,15 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { auth } from "@/auth";
 import { getSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
 import { isWished } from "@/lib/wishlist";
+import { getNote } from "@/lib/notes";
 import type { ReadingLink } from "@/lib/normalizeAnilist";
 import TrackingPanel from "@/components/TrackingPanel";
 import ReportButton from "@/components/ReportButton";
 import WishButton from "@/components/WishButton";
+import NoteEditor from "@/components/NoteEditor";
 import { SignIn } from "@/components/AuthButtons";
 import EditionsSection from "./EditionsSection";
 
@@ -21,10 +24,11 @@ export default async function Page({
   const { id } = await params;
   const mangaId = Number(id);
 
-  const [anilist, series, wished] = await Promise.all([
+  const [anilist, series, wished, note] = await Promise.all([
     getMangaCore(mangaId),
     userId ? getSeries(userId, mangaId) : Promise.resolve(null),
     userId ? isWished(userId, mangaId) : Promise.resolve(false),
+    userId ? getNote(userId, mangaId) : Promise.resolve(null),
   ]);
 
   // Contenido +18 solo para usuarios logueados.
@@ -44,7 +48,6 @@ export default async function Page({
 
   const canTrack = !!userId;
   const trackedKeys = series?.editions.map((e) => e.key) ?? [];
-  const authors = anilist.staff.map((a: { name: string }) => a.name).join(", ");
 
   return (
     <main className="mx-auto max-w-4xl px-5 py-8">
@@ -57,7 +60,14 @@ export default async function Page({
         />
 
         <div className="flex-1">
-          <h1 className="text-2xl font-bold">{anilist.title.romaji}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-bold">{anilist.title.romaji}</h1>
+            {anilist.status === "HIATUS" && (
+              <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-300">
+                ⏸ En pausa
+              </span>
+            )}
+          </div>
           {anilist.title.native && (
             <p className="text-muted">{anilist.title.native}</p>
           )}
@@ -74,9 +84,28 @@ export default async function Page({
           </div>
 
           <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-            <Field label="Autor" value={authors || "Sin datos"} />
+            <div>
+              <dt className="text-xs text-muted">Autor</dt>
+              <dd className="font-medium">
+                {anilist.staff.length > 0
+                  ? dedupeStaff(anilist.staff).map(
+                      (s: { id: number; name: string }, i: number) => (
+                        <span key={s.id}>
+                          {i > 0 && ", "}
+                          <Link
+                            href={`/autor/${s.id}`}
+                            className="hover:text-accent hover:underline"
+                          >
+                            {s.name}
+                          </Link>
+                        </span>
+                      ),
+                    )
+                  : "Sin datos"}
+              </dd>
+            </div>
             <Field label="Score" value={anilist.averageScore ? `${anilist.averageScore}/100` : "—"} />
-            <Field label="Estado" value={anilist.status} />
+            <Field label="Estado" value={translateStatus(anilist.status)} />
             <Field label="Popularidad" value={anilist.popularity ?? "—"} />
           </dl>
 
@@ -149,6 +178,14 @@ export default async function Page({
         </section>
       )}
 
+      {canTrack && (
+        <NoteEditor
+          anilistId={mangaId}
+          initialRating={note?.rating ?? null}
+          initialNote={note?.note ?? null}
+        />
+      )}
+
       <ReportButton mangaId={mangaId} mangaTitle={anilist.title.romaji} />
     </main>
   );
@@ -165,6 +202,32 @@ function EditionsSkeleton() {
       ))}
     </div>
   );
+}
+
+function dedupeStaff(staff: { id: number; name: string }[]) {
+  const seen = new Set<number>();
+  return staff.filter((s) => {
+    if (seen.has(s.id)) return false;
+    seen.add(s.id);
+    return true;
+  });
+}
+
+function translateStatus(status?: string | null): string {
+  switch (status) {
+    case "RELEASING":
+      return "En curso";
+    case "FINISHED":
+      return "Finalizado";
+    case "HIATUS":
+      return "En pausa";
+    case "CANCELLED":
+      return "Cancelado";
+    case "NOT_YET_RELEASED":
+      return "No publicado";
+    default:
+      return status ?? "—";
+  }
 }
 
 function Field({
