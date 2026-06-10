@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { externalHref } from "@/lib/url";
 
 export interface StoreItem {
   id: number;
@@ -78,7 +79,7 @@ export default function StoreList({ stores }: { stores: StoreItem[] }) {
               <div className="mt-2 flex flex-wrap gap-3 text-sm">
                 {s.website && (
                   <a
-                    href={s.website}
+                    href={externalHref(s.website)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-accent hover:underline"
@@ -88,7 +89,7 @@ export default function StoreList({ stores }: { stores: StoreItem[] }) {
                 )}
                 {s.social && (
                   <a
-                    href={toUrl(s.social)}
+                    href={externalHref(s.social)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-accent hover:underline"
@@ -103,11 +104,4 @@ export default function StoreList({ stores }: { stores: StoreItem[] }) {
       )}
     </>
   );
-}
-
-function toUrl(social: string): string {
-  if (social.startsWith("http")) return social;
-  if (social.startsWith("@"))
-    return `https://instagram.com/${social.slice(1)}`;
-  return social;
 }

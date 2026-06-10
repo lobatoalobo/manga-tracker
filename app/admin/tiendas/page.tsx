@@ -5,6 +5,7 @@ import { getApprovedStores, getPendingStores } from "@/lib/stores";
 import { createStoreAdminAction } from "@/app/actions";
 import StoreFields from "@/components/StoreFields";
 import StoreAdminActions from "@/components/StoreAdminActions";
+import { externalHref } from "@/lib/url";
 
 export const metadata = { title: "Tiendas (admin) · Nakama" };
 
@@ -91,7 +92,7 @@ function StoreRow({
         <div className="mt-1 flex flex-wrap gap-3 text-xs">
           {store.website && (
             <a
-              href={store.website}
+              href={externalHref(store.website)}
               target="_blank"
               rel="noopener noreferrer"
               className="text-accent break-all hover:underline"
@@ -101,13 +102,7 @@ function StoreRow({
           )}
           {store.social && (
             <a
-              href={
-                store.social.startsWith("http")
-                  ? store.social
-                  : store.social.startsWith("@")
-                    ? `https://instagram.com/${store.social.slice(1)}`
-                    : store.social
-              }
+              href={externalHref(store.social)}
               target="_blank"
               rel="noopener noreferrer"
               className="text-accent break-all hover:underline"
