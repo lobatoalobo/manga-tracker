@@ -4,22 +4,17 @@ import AddEditionButton from "@/components/AddEditionButton";
 export default async function EditionsSection({
   anilist,
   knownSlug,
-  trackedPublisher,
-  inCollection,
+  trackedKeys,
 }: {
   anilist: any;
   knownSlug?: string | null;
-  trackedPublisher: string | null;
-  inCollection: boolean;
+  trackedKeys: string[];
 }) {
   const { editions, muVolumes } = await resolveEditions(
     anilist,
     titlesOf(anilist),
     knownSlug,
   );
-
-  const japanVolumes =
-    editions.find((e) => e.region === "JP")?.volumes ?? null;
 
   if (editions.length === 0) {
     return (
@@ -29,12 +24,12 @@ export default async function EditionsSection({
     );
   }
 
+  const tracked = new Set(trackedKeys);
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {editions.map((ed) => {
-        const isTracked =
-          inCollection && (ed.publisher ?? ed.source) === trackedPublisher;
-
+        const isTracked = tracked.has(ed.id);
         return (
           <div
             key={ed.id}
@@ -44,14 +39,7 @@ export default async function EditionsSection({
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-medium">{ed.source}</span>
-              <div className="flex items-center gap-2">
-                {isTracked && (
-                  <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-white">
-                    ✓ Trackeando
-                  </span>
-                )}
-                <RegionBadge region={ed.region} />
-              </div>
+              <RegionBadge region={ed.region} />
             </div>
             <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
               <Field label="Tomos" value={ed.volumes || "—"} />
@@ -71,16 +59,14 @@ export default async function EditionsSection({
                 Ver en {ed.publisher ?? ed.source} ↗
               </a>
             )}
-            {!inCollection && (
-              <div className="mt-auto">
-                <AddEditionButton
-                  manga={anilist}
-                  edition={ed}
-                  muVolumes={muVolumes}
-                  japanVolumes={japanVolumes}
-                />
-              </div>
-            )}
+            <div className="mt-auto">
+              <AddEditionButton
+                anilist={anilist}
+                edition={ed}
+                muVolumes={muVolumes}
+                isTracked={isTracked}
+              />
+            </div>
           </div>
         );
       })}
@@ -103,7 +89,7 @@ function Field({
   );
 }
 
-function RegionBadge({ region }: { region: "AR" | "JP" | "INT" }) {
+function RegionBadge({ region }: { region: string }) {
   const map: Record<string, { label: string; className: string }> = {
     AR: { label: "🇦🇷 Argentina", className: "bg-sky-500/15 text-sky-300" },
     JP: { label: "🇯🇵 Japón", className: "bg-rose-500/15 text-rose-300" },
@@ -113,7 +99,6 @@ function RegionBadge({ region }: { region: "AR" | "JP" | "INT" }) {
     },
   };
   const { label, className } = map[region] ?? map.INT;
-
   return (
     <span
       className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${className}`}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { setReadingAction } from "@/app/actions";
 import type { ReadingStatus } from "@/lib/collection";
 
@@ -11,35 +11,30 @@ const STATUSES: { key: ReadingStatus; label: string }[] = [
 ];
 
 export default function ReadingControl({
-  mangaId,
+  anilistId,
+  editionKey,
   total,
-  initialStatus,
-  initialVolume,
+  status,
+  volume,
+  onChange,
 }: {
-  mangaId: number;
+  anilistId: number;
+  editionKey: string;
   total: number;
-  initialStatus: string;
-  initialVolume: number | null;
+  status: string;
+  volume: number | null;
+  onChange: (status: ReadingStatus, volume: number | null) => void;
 }) {
-  const [status, setStatus] = useState<ReadingStatus>(
-    (initialStatus as ReadingStatus) || "UNREAD",
-  );
-  const [volume, setVolume] = useState<number | null>(initialVolume);
   const [, startTransition] = useTransition();
 
   function persist(next: ReadingStatus, vol: number | null) {
-    setStatus(next);
-    setVolume(vol);
-    startTransition(() => setReadingAction(mangaId, next, vol));
+    onChange(next, vol);
+    startTransition(() => setReadingAction(anilistId, editionKey, next, vol));
   }
 
   function pickStatus(s: ReadingStatus) {
     const vol =
-      s === "READ"
-        ? total || null
-        : s === "UNREAD"
-          ? null
-          : volume || 1;
+      s === "READ" ? total || null : s === "UNREAD" ? null : volume || 1;
     persist(s, vol);
   }
 
@@ -70,10 +65,9 @@ export default function ReadingControl({
             min={1}
             max={total || undefined}
             value={volume ?? ""}
-            onChange={(e) => {
-              const n = e.target.value ? Number(e.target.value) : null;
-              persist("READING", n);
-            }}
+            onChange={(e) =>
+              persist("READING", e.target.value ? Number(e.target.value) : null)
+            }
             className="w-20 rounded-lg border border-border bg-surface-2 px-2 py-1 text-foreground outline-none focus:border-accent"
           />
           {total > 0 && <span>de {total}</span>}

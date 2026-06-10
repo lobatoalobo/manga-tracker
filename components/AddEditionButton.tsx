@@ -2,50 +2,67 @@
 
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
-import { addMangaAction } from "@/app/actions";
+import { addEditionAction, removeEditionAction } from "@/app/actions";
 import type { Edition } from "@/lib/editions";
 
 export default function AddEditionButton({
-  manga,
+  anilist,
   edition,
   muVolumes,
-  japanVolumes,
+  isTracked,
 }: {
-  manga: any;
+  anilist: any;
   edition: Edition;
   muVolumes?: number | null;
-  japanVolumes?: number | null;
+  isTracked: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  function add() {
+  function track() {
     startTransition(async () => {
-      await addMangaAction({
-        id: manga.id,
-        title: manga.title,
-        coverImage: manga.coverImage,
-        volumes: manga.volumes ?? null,
+      await addEditionAction({
+        anilistId: anilist.id,
+        title: anilist.title,
+        coverImage: anilist.coverImage,
+        volumes: anilist.volumes ?? null,
         muVolumes: muVolumes ?? null,
-        japanVolumes: japanVolumes ?? null,
         edition: {
-          // Para formatos japoneses (sin editorial) usamos el nombre como etiqueta.
-          publisher: edition.publisher ?? edition.source,
+          key: edition.id,
+          label: edition.source,
+          publisher: edition.publisher,
           slug: edition.slug,
-          status: edition.status,
-          volumes: edition.volumes,
-          nextVolume: edition.nextVolume,
+          region: edition.region,
+          totalVolumes: edition.volumes,
         },
       });
-
-      router.push("/collection");
+      router.refresh();
     });
+  }
+
+  function untrack() {
+    startTransition(async () => {
+      await removeEditionAction(anilist.id, edition.id);
+      router.refresh();
+    });
+  }
+
+  if (isTracked) {
+    return (
+      <button
+        onClick={untrack}
+        disabled={isPending}
+        className="mt-3 w-full rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+      >
+        {isPending ? "…" : "✓ Trackeando · quitar"}
+      </button>
+    );
   }
 
   return (
     <button
-      onClick={add}
-      disabled={isPending}
+      onClick={track}
+      disabled={isPending || edition.volumes <= 0}
       className="mt-3 w-full rounded-lg border border-accent/60 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent hover:text-white disabled:opacity-50"
     >
       {isPending ? "Agregando…" : "+ Trackear esta edición"}

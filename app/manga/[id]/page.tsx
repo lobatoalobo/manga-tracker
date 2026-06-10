@@ -1,9 +1,9 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { getMangaFromCollection } from "@/lib/collection";
+import { getSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
-import MangaCollectionSection from "@/components/MangaCollectionSection";
+import TrackingPanel from "@/components/TrackingPanel";
 import ReportButton from "@/components/ReportButton";
 import EditionsSection from "./EditionsSection";
 
@@ -18,13 +18,12 @@ export default async function Page({
   const { id } = await params;
   const mangaId = Number(id);
 
-  // Camino rápido: AniList (1 request) + colección (DB). Las editoriales (lento)
-  // se resuelven en <Suspense> y se streamean, sin bloquear el render inicial.
-  const [anilist, inCollection] = await Promise.all([
+  const [anilist, series] = await Promise.all([
     getMangaCore(mangaId),
-    getMangaFromCollection(session.user.id, mangaId),
+    getSeries(session.user.id, mangaId),
   ]);
 
+  const trackedKeys = series?.editions.map((e) => e.key) ?? [];
   const authors = anilist.staff.map((a: { name: string }) => a.name).join(", ");
 
   return (
@@ -63,27 +62,25 @@ export default async function Page({
         </div>
       </div>
 
-      {/* Si ya está en la colección, la grilla de tomos se muestra al instante
-          (desde la DB), sin esperar a las editoriales. */}
-      {inCollection && <MangaCollectionSection manga={inCollection} />}
-
-      {/* Ediciones (lento): se streamean con Suspense. */}
+      {/* Ediciones (arriba): elegí cuáles trackear. Se streamean con Suspense. */}
       <section className="mt-6">
         <h2 className="mb-1 text-lg font-semibold">Ediciones</h2>
-        {!inCollection && (
-          <p className="mb-3 text-sm text-muted">
-            Elegí qué edición coleccionás para trackearla.
-          </p>
-        )}
+        <p className="mb-3 text-sm text-muted">
+          Trackeá una o varias ediciones; abajo marcás los tomos de cada una.
+        </p>
         <Suspense fallback={<EditionsSkeleton />}>
-          <EditionsSection
-            anilist={anilist}
-            knownSlug={inCollection?.editionSlug}
-            trackedPublisher={inCollection?.publisher ?? null}
-            inCollection={!!inCollection}
-          />
+          <EditionsSection anilist={anilist} trackedKeys={trackedKeys} />
         </Suspense>
       </section>
+
+      {/* Panel de tomos de la edición seleccionada (remonta si cambian las ediciones). */}
+      {series && series.editions.length > 0 && (
+        <TrackingPanel
+          key={trackedKeys.slice().sort().join("|")}
+          anilistId={mangaId}
+          editions={series.editions}
+        />
+      )}
 
       {anilist.description && (
         <p className="mt-6 whitespace-pre-wrap text-sm leading-relaxed text-muted">
@@ -102,7 +99,7 @@ function EditionsSkeleton() {
       {[0, 1].map((i) => (
         <div
           key={i}
-          className="h-32 animate-pulse rounded-xl border border-border bg-surface"
+          className="h-40 animate-pulse rounded-xl border border-border bg-surface"
         />
       ))}
     </div>

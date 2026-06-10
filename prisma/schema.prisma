@@ -60,6 +60,8 @@ model VerificationToken {
 
 // --- Dominio ---
 
+// Una serie en la colección del usuario. La info de tomos/lectura vive en cada
+// edición trackeada (un usuario puede seguir varias ediciones de la misma serie).
 model Manga {
   id        Int    @id @default(autoincrement())
   anilistId Int // id de AniList
@@ -71,43 +73,52 @@ model Manga {
   nativeTitle  String?
   coverImage   String
 
-  // Totales de tomos por fuente (prioridad en lib/getTotalVolumes.ts)
-  apiTotalVolumes    Int?
-  muVolumes          Int?
-  customTotalVolumes Int?
+  // Referencia (no editable): totales de AniList / MangaUpdates.
+  apiTotalVolumes Int?
+  muVolumes       Int?
 
-  // Datos de la edición local (Ivrea / Panini / Ovni)
-  publisher        String?
-  editionSlug      String?
-  argentinaStatus  String?
-  argentinaVolumes Int?
-  japanStatus      String?
-  japanVolumes     Int?
-  nextVolume       Int?
+  editions TrackedEdition[]
 
-  status String @default("IN_PROGRESS") // IN_PROGRESS | COMPLETED (según tomos que tenés)
+  createdAt DateTime @default(now())
 
-  // Lectura (eje independiente de "tener" el tomo)
-  readingStatus String @default("UNREAD") // UNREAD | READING | READ
+  @@unique([userId, anilistId])
+}
+
+// Una edición trackeada de una serie (Ivrea, Panini, Ovni, japonesa estándar…),
+// con su propio conteo de tomos, progreso y estado de lectura.
+model TrackedEdition {
+  id      Int   @id @default(autoincrement())
+  mangaId Int
+  manga   Manga @relation(fields: [mangaId], references: [id], onDelete: Cascade)
+
+  key       String // "ivrea" | "panini" | "ovni" | "mu-volumes" | "mu-kanzenban" | …
+  label     String // nombre legible: "Ivrea Argentina", "Edición estándar (japonesa)"
+  publisher String?
+  slug      String?
+  region    String  @default("AR") // AR | JP | INT
+
+  totalVolumes Int
+  status       String @default("IN_PROGRESS") // IN_PROGRESS | COMPLETED
+
+  readingStatus String  @default("UNREAD") // UNREAD | READING | READ
   readingVolume Int?
 
   ownedVolumes OwnedVolume[]
 
   createdAt DateTime @default(now())
 
-  // Una serie de AniList aparece una vez por usuario.
-  @@unique([userId, anilistId])
+  @@unique([mangaId, key])
 }
 
 model OwnedVolume {
   id Int @id @default(autoincrement())
 
-  mangaId Int
-  volume  Int
+  editionId Int
+  volume    Int
 
-  manga Manga @relation(fields: [mangaId], references: [id], onDelete: Cascade)
+  edition TrackedEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
 
-  @@unique([mangaId, volume])
+  @@unique([editionId, volume])
 }
 
 // Índice de catálogos de las editoriales (poblado por scripts/crawl.ts).

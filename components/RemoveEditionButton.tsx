@@ -1,23 +1,29 @@
 "use client";
 
 import { useTransition } from "react";
-import { removeMangaAction } from "@/app/actions";
+import { useRouter } from "next/navigation";
+import { removeEditionAction } from "@/app/actions";
 
-export default function RemoveButton({
-  id,
+export default function RemoveEditionButton({
+  anilistId,
+  editionKey,
+  label = "Dejar de trackear",
   className,
 }: {
-  id: number;
+  anilistId: number;
+  editionKey: string;
+  label?: string;
   className?: string;
 }) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   function remove(e: React.MouseEvent<HTMLButtonElement>) {
     e.preventDefault();
     e.stopPropagation();
-
     startTransition(async () => {
-      await removeMangaAction(id);
+      await removeEditionAction(anilistId, editionKey);
+      router.refresh();
     });
   }
 
@@ -31,7 +37,7 @@ export default function RemoveButton({
         "rounded-lg border border-border px-4 py-2 text-sm text-muted transition hover:border-red-500 hover:text-red-400 disabled:opacity-50"
       }
     >
-      {isPending ? "Quitando…" : "Quitar"}
+      {isPending ? "Quitando…" : label}
     </button>
   );
 }

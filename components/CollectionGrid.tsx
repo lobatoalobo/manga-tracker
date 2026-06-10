@@ -3,55 +3,54 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import MangaCard from "./MangaCard";
-import { getTotalVolumes } from "@/lib/getTotalVolumes";
-import type { MangaView } from "@/lib/collection";
+import type { CollectionItem } from "@/lib/collection";
 
 type SortKey = "title" | "progress" | "volumes";
 
-function progressOf(m: MangaView): number {
-  const total = getTotalVolumes(m);
-  return total > 0 ? m.ownedVolumes.length / total : 0;
+// Editoriales que siempre aparecen en el filtro, aunque no tengas series.
+const KNOWN_PUBLISHERS = ["Ivrea Argentina", "Panini Argentina", "Ovni Press"];
+
+function progressOf(i: CollectionItem): number {
+  const t = i.edition.totalVolumes;
+  return t > 0 ? i.edition.ownedVolumes.length / t : 0;
 }
 
-export default function CollectionGrid({
-  collection,
-}: {
-  collection: MangaView[];
-}) {
+export default function CollectionGrid({ items }: { items: CollectionItem[] }) {
   const [search, setSearch] = useState("");
   const [publisher, setPublisher] = useState("all");
   const [reading, setReading] = useState("all");
   const [sort, setSort] = useState<SortKey>("title");
 
-  const publishers = useMemo(
-    () =>
-      [...new Set(collection.map((m) => m.publisher).filter(Boolean))].sort(),
-    [collection],
-  );
+  const publishers = useMemo(() => {
+    const present = items.map((i) => i.edition.label);
+    return [...new Set([...KNOWN_PUBLISHERS, ...present])].sort();
+  }, [items]);
 
   const filtered = useMemo(() => {
-    const out = collection.filter((m) => {
-      const matchSearch = (m.title.romaji ?? "")
+    const out = items.filter((i) => {
+      const matchSearch = i.title.romaji
         .toLowerCase()
         .includes(search.toLowerCase());
-      const matchPublisher = publisher === "all" || m.publisher === publisher;
-      const matchReading = reading === "all" || m.readingStatus === reading;
+      const matchPublisher =
+        publisher === "all" || i.edition.label === publisher;
+      const matchReading =
+        reading === "all" || i.edition.readingStatus === reading;
       return matchSearch && matchPublisher && matchReading;
     });
 
     out.sort((a, b) => {
       if (sort === "title") return a.title.romaji.localeCompare(b.title.romaji);
       if (sort === "progress") return progressOf(b) - progressOf(a);
-      return getTotalVolumes(b) - getTotalVolumes(a); // volumes
+      return b.edition.totalVolumes - a.edition.totalVolumes;
     });
 
     return out;
-  }, [collection, search, publisher, reading, sort]);
+  }, [items, search, publisher, reading, sort]);
 
-  if (collection.length === 0) {
+  if (items.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-surface p-10 text-center">
-        <p className="text-muted">Todavía no agregaste ningún manga.</p>
+        <p className="text-muted">Todavía no agregaste ninguna edición.</p>
         <Link
           href="/"
           className="mt-3 inline-block rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
@@ -76,7 +75,7 @@ export default function CollectionGrid({
         <Select value={publisher} onChange={setPublisher}>
           <option value="all">Toda editorial</option>
           {publishers.map((p) => (
-            <option key={p} value={p as string}>
+            <option key={p} value={p}>
               {p}
             </option>
           ))}
@@ -96,18 +95,20 @@ export default function CollectionGrid({
         </Select>
       </div>
 
-      <p className="mb-4 text-sm text-muted">{filtered.length} series</p>
+      <p className="mb-4 text-sm text-muted">{filtered.length} ediciones</p>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-        {filtered.map((manga) => (
-          <MangaCard key={manga.id} manga={manga} />
-        ))}
-      </div>
-
-      {filtered.length === 0 && (
-        <p className="mt-6 text-center text-sm text-muted">
-          Ninguna serie coincide con los filtros.
+      {filtered.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border bg-surface p-10 text-center text-sm text-muted">
+          {publisher !== "all"
+            ? `No tenés series de ${publisher}.`
+            : "Ninguna serie coincide con los filtros."}
         </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          {filtered.map((i) => (
+            <MangaCard key={`${i.anilistId}-${i.edition.key}`} item={i} />
+          ))}
+        </div>
       )}
     </>
   );

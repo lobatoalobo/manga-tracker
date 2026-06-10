@@ -3,62 +3,60 @@
 import { revalidatePath } from "next/cache";
 import { auth, requireUserId } from "@/auth";
 import {
-  addToCollection,
-  removeFromCollection,
+  addEdition,
+  removeEdition,
   toggleVolume,
-  setCustomTotal,
   setAllVolumes,
   setReading,
-  type AddMangaInput,
+  type AddEditionInput,
   type ReadingStatus,
 } from "@/lib/collection";
 import { createReport, setReportStatus } from "@/lib/reports";
 
-export async function addMangaAction(manga: AddMangaInput) {
+export async function addEditionAction(input: AddEditionInput) {
   const userId = await requireUserId();
-  await addToCollection(userId, manga);
+  await addEdition(userId, input);
   revalidatePath("/collection");
-  revalidatePath(`/manga/${manga.id}`);
+  revalidatePath(`/manga/${input.anilistId}`);
 }
 
-export async function removeMangaAction(anilistId: number) {
+export async function removeEditionAction(anilistId: number, key: string) {
   const userId = await requireUserId();
-  await removeFromCollection(userId, anilistId);
-  revalidatePath("/collection");
-  revalidatePath(`/manga/${anilistId}`);
-}
-
-export async function toggleVolumeAction(anilistId: number, volume: number) {
-  const userId = await requireUserId();
-  await toggleVolume(userId, anilistId, volume);
+  await removeEdition(userId, anilistId, key);
   revalidatePath("/collection");
   revalidatePath(`/manga/${anilistId}`);
 }
 
-export async function setAllVolumesAction(anilistId: number, owned: boolean) {
+export async function toggleVolumeAction(
+  anilistId: number,
+  key: string,
+  volume: number,
+) {
   const userId = await requireUserId();
-  await setAllVolumes(userId, anilistId, owned);
+  await toggleVolume(userId, anilistId, key, volume);
+  revalidatePath("/collection");
+  revalidatePath(`/manga/${anilistId}`);
+}
+
+export async function setAllVolumesAction(
+  anilistId: number,
+  key: string,
+  owned: boolean,
+) {
+  const userId = await requireUserId();
+  await setAllVolumes(userId, anilistId, key, owned);
   revalidatePath("/collection");
   revalidatePath(`/manga/${anilistId}`);
 }
 
 export async function setReadingAction(
   anilistId: number,
+  key: string,
   status: ReadingStatus,
   volume: number | null,
 ) {
   const userId = await requireUserId();
-  await setReading(userId, anilistId, status, volume);
-  revalidatePath("/collection");
-  revalidatePath(`/manga/${anilistId}`);
-}
-
-export async function setCustomTotalAction(
-  anilistId: number,
-  total: number | null,
-) {
-  const userId = await requireUserId();
-  await setCustomTotal(userId, anilistId, total);
+  await setReading(userId, anilistId, key, status, volume);
   revalidatePath("/collection");
   revalidatePath(`/manga/${anilistId}`);
 }
