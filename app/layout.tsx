@@ -71,6 +71,12 @@ export default async function RootLayout({
                   Mi colección
                 </Link>
                 <Link
+                  href="/deseados"
+                  className="text-sm text-muted transition hover:text-foreground"
+                >
+                  Deseados
+                </Link>
+                <Link
                   href="/compras"
                   className="text-sm text-muted transition hover:text-foreground"
                 >

@@ -2,9 +2,11 @@ import { Suspense } from "react";
 import { auth } from "@/auth";
 import { getSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
+import { isWished } from "@/lib/wishlist";
 import type { ReadingLink } from "@/lib/normalizeAnilist";
 import TrackingPanel from "@/components/TrackingPanel";
 import ReportButton from "@/components/ReportButton";
+import WishButton from "@/components/WishButton";
 import { SignIn } from "@/components/AuthButtons";
 import EditionsSection from "./EditionsSection";
 
@@ -19,9 +21,10 @@ export default async function Page({
   const { id } = await params;
   const mangaId = Number(id);
 
-  const [anilist, series] = await Promise.all([
+  const [anilist, series, wished] = await Promise.all([
     getMangaCore(mangaId),
     userId ? getSeries(userId, mangaId) : Promise.resolve(null),
+    userId ? isWished(userId, mangaId) : Promise.resolve(false),
   ]);
 
   // Contenido +18 solo para usuarios logueados.
@@ -76,6 +79,15 @@ export default async function Page({
             <Field label="Estado" value={anilist.status} />
             <Field label="Popularidad" value={anilist.popularity ?? "—"} />
           </dl>
+
+          {canTrack && (
+            <WishButton
+              anilistId={mangaId}
+              title={anilist.title.romaji}
+              coverImage={anilist.coverImage}
+              initialWished={wished}
+            />
+          )}
         </div>
       </div>
 

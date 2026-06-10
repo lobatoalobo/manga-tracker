@@ -27,6 +27,7 @@ import {
   deletePurchase,
 } from "@/lib/purchases";
 import { parseCsv } from "@/lib/csv";
+import { addWish, removeWish } from "@/lib/wishlist";
 
 export async function addEditionAction(input: AddEditionInput) {
   const userId = await requireUserId();
@@ -200,6 +201,31 @@ export async function deletePurchaseAction(id: number) {
   const userId = await requireUserId();
   await deletePurchase(userId, id);
   revalidatePath("/compras");
+}
+
+// --- Wishlist ---
+
+export async function toggleWishAction(item: {
+  anilistId: number;
+  title: string;
+  coverImage: string;
+  wished: boolean;
+}) {
+  const userId = await requireUserId();
+  if (item.wished) {
+    await removeWish(userId, item.anilistId);
+  } else {
+    await addWish(userId, item);
+  }
+  revalidatePath("/deseados");
+  revalidatePath(`/manga/${item.anilistId}`);
+}
+
+export async function removeWishAction(anilistId: number) {
+  const userId = await requireUserId();
+  await removeWish(userId, anilistId);
+  revalidatePath("/deseados");
+  revalidatePath(`/manga/${anilistId}`);
 }
 
 // --- Importar colección (CSV) ---

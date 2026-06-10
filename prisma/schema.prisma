@@ -22,6 +22,20 @@ model User {
   sessions  Session[]
   mangas    Manga[]
   purchases Purchase[]
+  wishlist  WishlistItem[]
+}
+
+// Lista de deseados: series que el usuario quiere comprar (aparte de la colección).
+model WishlistItem {
+  id         Int      @id @default(autoincrement())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  anilistId  Int
+  title      String
+  coverImage String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, anilistId])
 }
 
 // Historial de compras del usuario (lo que antes llevaba en un Excel).
