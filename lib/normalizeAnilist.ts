@@ -24,6 +24,8 @@ export function normalizeAnilist(manga: any) {
 
     status: manga.status,
 
+    isAdult: manga.isAdult ?? false,
+
     volumes: manga.volumes,
 
     chapters: manga.chapters,

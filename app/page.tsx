@@ -4,6 +4,7 @@ import {
   getMangaPage,
 } from "@/lib/anilist";
 import SearchBar from "@/components/SearchBar";
+import { auth } from "@/auth";
 import Link from "next/link";
 
 export default async function Home({
@@ -11,6 +12,9 @@ export default async function Home({
 }: {
   searchParams: Promise<{ search?: string; tab?: string; page?: string }>;
 }) {
+  const session = await auth();
+  const includeAdult = !!session; // contenido +18 solo para logueados
+
   const params = await searchParams;
   const query = params.search?.trim();
   const tab = params.tab === "az" ? "az" : "hot";
@@ -20,13 +24,13 @@ export default async function Home({
   let pageInfo: { hasNextPage: boolean } | null = null;
 
   if (query) {
-    mangas = await searchMangaList(query);
+    mangas = await searchMangaList(query, includeAdult);
   } else if (tab === "az") {
-    const res = await getMangaPage(page);
+    const res = await getMangaPage(page, includeAdult);
     mangas = res.media;
     pageInfo = res.pageInfo;
   } else {
-    mangas = await getTrendingManga();
+    mangas = await getTrendingManga(includeAdult);
   }
 
   return (

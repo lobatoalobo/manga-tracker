@@ -5,6 +5,7 @@ import { getMangaCore } from "@/lib/getMangaDetails";
 import type { ReadingLink } from "@/lib/normalizeAnilist";
 import TrackingPanel from "@/components/TrackingPanel";
 import ReportButton from "@/components/ReportButton";
+import { SignIn } from "@/components/AuthButtons";
 import EditionsSection from "./EditionsSection";
 
 export default async function Page({
@@ -22,6 +23,21 @@ export default async function Page({
     getMangaCore(mangaId),
     userId ? getSeries(userId, mangaId) : Promise.resolve(null),
   ]);
+
+  // Contenido +18 solo para usuarios logueados.
+  if (anilist.isAdult && !userId) {
+    return (
+      <main className="mx-auto flex max-w-md flex-col items-center px-5 py-24 text-center">
+        <h1 className="text-2xl font-bold">Contenido +18</h1>
+        <p className="mt-3 text-muted">
+          Esta serie tiene contenido adulto. Iniciá sesión para verla.
+        </p>
+        <div className="mt-6">
+          <SignIn />
+        </div>
+      </main>
+    );
+  }
 
   const canTrack = !!userId;
   const trackedKeys = series?.editions.map((e) => e.key) ?? [];

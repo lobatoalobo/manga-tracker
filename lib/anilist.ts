@@ -121,13 +121,14 @@ export async function searchManga(search: string) {
 
 export async function searchMangaList(
   search: string,
+  includeAdult = true,
 ) {
   const query = `
     query ($search: String) {
       Page(page: 1, perPage: 10) {
         media(
           search: $search,
-          type: MANGA
+          type: MANGA${includeAdult ? "" : ",\n          isAdult: false"}
         ) {
           id
 
@@ -181,11 +182,11 @@ export async function searchMangaList(
  * Top de mangas "hot" del momento (trending de AniList).
  * Cacheado 1 semana: se refresca solo, sin cron.
  */
-export async function getTrendingManga() {
+export async function getTrendingManga(includeAdult = true) {
   const query = `
     query {
       Page(page: 1, perPage: 10) {
-        media(type: MANGA, sort: TRENDING_DESC) {
+        media(type: MANGA, sort: TRENDING_DESC${includeAdult ? "" : ", isAdult: false"}) {
           id
           title { romaji english native }
           coverImage { large }
@@ -206,12 +207,12 @@ export async function getTrendingManga() {
 }
 
 /** Listado A-Z de mangas, paginado (10 por página). */
-export async function getMangaPage(page: number) {
+export async function getMangaPage(page: number, includeAdult = true) {
   const query = `
     query ($page: Int) {
       Page(page: $page, perPage: 10) {
         pageInfo { currentPage hasNextPage }
-        media(type: MANGA, sort: TITLE_ROMAJI) {
+        media(type: MANGA, sort: TITLE_ROMAJI${includeAdult ? "" : ", isAdult: false"}) {
           id
           title { romaji english native }
           coverImage { large }
@@ -273,6 +274,8 @@ export async function getMangaById(
         format
 
         status
+
+        isAdult
 
         volumes
 
