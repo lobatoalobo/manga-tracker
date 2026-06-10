@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "crawl": "tsx scripts/crawl.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

@@ -1,24 +1,31 @@
-import type { IvreaData } from "./providers/ivrea";
-import type { PaniniData } from "./providers/panini";
-import type { OvniData } from "./providers/ovni";
 import type { MangaUpdatesData } from "./providers/mangaupdates";
 
 /**
  * Una "edición" de un manga: cómo lo publica una editorial local, o un formato
- * de la edición original (estándar/kanzenban/etc. según MangaUpdates). Se
- * calcula en vivo al abrir el detalle; no se persiste.
+ * de la edición original (estándar/kanzenban/etc. según MangaUpdates).
  */
 export interface Edition {
-  id: string; // key estable (p. ej. "ivrea", "mu-volumes")
-  source: string; // nombre legible
+  id: string;
+  source: string;
   region: "AR" | "JP" | "INT";
   publisher: string | null;
-  slug: string | null; // slug de la editorial, si aplica (para re-resolver)
+  slug: string | null;
   status: string;
   volumes: number;
   nextVolume: number | null;
   url: string | null;
-  note?: string; // aclaración (p. ej. "en catálogo, puede faltar stock")
+  note?: string;
+}
+
+/** Edición local (editorial argentina) ya resuelta, lista para mostrar. */
+export interface LocalEdition {
+  id: string; // "ivrea" | "panini" | "ovni"
+  publisher: string;
+  slug: string | null;
+  volumes: number;
+  status: string;
+  url: string | null;
+  note?: string;
 }
 
 interface AnilistLike {
@@ -28,67 +35,30 @@ interface AnilistLike {
 
 export interface BuiltEditions {
   editions: Edition[];
-  /** Tomos de la edición estándar (MangaUpdates) para trackear. */
   muVolumes: number | null;
 }
 
-/**
- * Arma la lista de ediciones a partir de todas las fuentes:
- *   - Editoriales locales (Ivrea, Panini): quién publica + link + disponibilidad.
- *   - Formatos de MangaUpdates (estándar, kanzenban, combini-ban): conteo autoritativo.
- *   - Respaldo japonés de AniList si MangaUpdates no resolvió.
- */
 export function buildEditions(
   anilist: AnilistLike,
-  ivrea: IvreaData | null,
-  panini: PaniniData | null,
-  ovni: OvniData | null,
+  local: LocalEdition[],
   mu: MangaUpdatesData | null,
 ): BuiltEditions {
   const editions: Edition[] = [];
 
   // --- Editoriales locales (Argentina) ---
-  if (ivrea && ivrea.argentinaVolumes > 0) {
+  for (const le of local) {
+    if (le.volumes <= 0) continue;
     editions.push({
-      id: "ivrea",
-      source: "Ivrea Argentina",
+      id: le.id,
+      source: le.publisher,
       region: "AR",
-      publisher: "Ivrea Argentina",
-      slug: ivrea.slug,
-      status: ivrea.argentinaStatus,
-      volumes: ivrea.argentinaVolumes,
-      nextVolume: ivrea.nextVolume,
-      url: ivrea.url,
-    });
-  }
-
-  if (panini && panini.totalVolumes > 0) {
-    editions.push({
-      id: "panini",
-      source: "Panini Argentina",
-      region: "AR",
-      publisher: "Panini Argentina",
-      slug: null,
-      status: "EN CATÁLOGO",
-      volumes: panini.totalVolumes,
+      publisher: le.publisher,
+      slug: le.slug,
+      status: le.status,
+      volumes: le.volumes,
       nextVolume: null,
-      url: panini.url,
-      note: `${panini.listed} tomos en catálogo`,
-    });
-  }
-
-  if (ovni && ovni.totalVolumes > 0) {
-    editions.push({
-      id: "ovni",
-      source: "Ovni Press",
-      region: "AR",
-      publisher: "Ovni Press",
-      slug: null,
-      status: "EN CATÁLOGO",
-      volumes: ovni.totalVolumes,
-      nextVolume: null,
-      url: ovni.url,
-      note: `${ovni.listed} tomos en catálogo`,
+      url: le.url,
+      note: le.note,
     });
   }
 
@@ -109,12 +79,8 @@ export function buildEditions(
     }
   } else {
     // Respaldo: edición japonesa desde AniList si MU no resolvió.
-    const jpVolumes = Math.max(anilist.volumes ?? 0, ivrea?.japanVolumes ?? 0);
-    const jpStatus =
-      ivrea?.japanStatus && ivrea.japanStatus !== "UNKNOWN"
-        ? ivrea.japanStatus
-        : translateStatus(anilist.status);
-
+    const jpVolumes = anilist.volumes ?? 0;
+    const jpStatus = translateStatus(anilist.status);
     if (jpVolumes > 0 || jpStatus !== "DESCONOCIDO") {
       editions.push({
         id: "jp",
@@ -133,12 +99,12 @@ export function buildEditions(
   return { editions, muVolumes: mu?.standardVolumes ?? null };
 }
 
-/** Etiqueta legible para un formato de MangaUpdates. */
 function formatName(label: string): string {
   const l = label.toLowerCase();
   if (/^volumes?$/.test(l)) return "Edición estándar (japonesa)";
   if (l.includes("kanzenban")) return "Kanzenban (japonesa)";
-  if (l.includes("combini") || l.includes("conbini")) return "Combini-ban (japonesa)";
+  if (l.includes("combini") || l.includes("conbini"))
+    return "Combini-ban (japonesa)";
   if (l.includes("bunkoban")) return "Bunkoban (japonesa)";
   return `${label} (japonesa)`;
 }

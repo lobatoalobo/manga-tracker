@@ -110,6 +110,23 @@ model OwnedVolume {
   @@unique([mangaId, volume])
 }
 
+// Índice de catálogos de las editoriales (poblado por scripts/crawl.ts).
+// Permite resolver ediciones con un lookup rápido en vez de scrapear en vivo.
+model PublisherEdition {
+  id        Int      @id @default(autoincrement())
+  publisher String // "Ivrea Argentina" | "Panini Argentina" | "Ovni Press"
+  slug      String // slug en el sitio de la editorial
+  title     String // título tal como lo lista la editorial
+  normTitle String // título normalizado, para matching
+  volumes   Int
+  status    String?
+  url       String
+  updatedAt DateTime @updatedAt
+
+  @@unique([publisher, slug])
+  @@index([normTitle])
+}
+
 // Reportes/correcciones de datos enviados por usuarios (revisión del dueño).
 model Report {
   id         Int      @id @default(autoincrement())
