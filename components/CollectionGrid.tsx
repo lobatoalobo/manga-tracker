@@ -18,9 +18,11 @@ function progressOf(i: CollectionItem): number {
 export default function CollectionGrid({
   items,
   readOnly = false,
+  hrefBase = "/manga",
 }: {
   items: CollectionItem[];
   readOnly?: boolean;
+  hrefBase?: string;
 }) {
   const [search, setSearch] = useState("");
   const [publisher, setPublisher] = useState("all");
@@ -116,6 +118,7 @@ export default function CollectionGrid({
               key={`${i.anilistId}-${i.edition.key}`}
               item={i}
               readOnly={readOnly}
+              hrefBase={hrefBase}
             />
           ))}
         </div>

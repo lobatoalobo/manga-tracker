@@ -72,9 +72,11 @@ export default async function Page({
       {/* Ediciones (arriba): elegí cuáles trackear. Se streamean con Suspense. */}
       <section className="mt-6">
         <h2 className="mb-1 text-lg font-semibold">Ediciones</h2>
-        <p className="mb-3 text-sm text-muted">
-          Trackeá una o varias ediciones; abajo marcás los tomos de cada una.
-        </p>
+        {canTrack && (
+          <p className="mb-3 text-sm text-muted">
+            Trackeá una o varias ediciones; abajo marcás los tomos de cada una.
+          </p>
+        )}
         <Suspense fallback={<EditionsSkeleton />}>
           <EditionsSection
             anilist={anilist}

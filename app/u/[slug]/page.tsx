@@ -41,7 +41,7 @@ export default async function PublicCollectionPage({
         </div>
       </div>
 
-      <CollectionGrid items={data.items} readOnly />
+      <CollectionGrid items={data.items} readOnly hrefBase={`/u/${slug}`} />
     </main>
   );
 }

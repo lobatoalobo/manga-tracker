@@ -5,9 +5,11 @@ import type { CollectionItem } from "@/lib/collection";
 export default function MangaCard({
   item,
   readOnly = false,
+  hrefBase = "/manga",
 }: {
   item: CollectionItem;
   readOnly?: boolean;
+  hrefBase?: string;
 }) {
   const { edition } = item;
   const owned = edition.ownedVolumes.length;
@@ -26,7 +28,7 @@ export default function MangaCard({
         />
       )}
 
-      <Link href={`/manga/${item.anilistId}`} className="block">
+      <Link href={`${hrefBase}/${item.anilistId}`} className="block">
         <div className="aspect-2/3 w-full overflow-hidden bg-surface-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img

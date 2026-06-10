@@ -119,6 +119,23 @@ export async function getPublicCollection(
   return { name: user.name ?? "Colección", items };
 }
 
+/** Una serie de una colección pública (solo lectura). */
+export async function getPublicSeries(
+  slug: string,
+  anilistId: number,
+): Promise<{ ownerName: string; series: SeriesView } | null> {
+  const user = await prisma.user.findUnique({
+    where: { shareSlug: slug },
+    select: { id: true, name: true },
+  });
+  if (!user) return null;
+
+  const series = await getSeries(user.id, anilistId);
+  if (!series) return null;
+
+  return { ownerName: user.name ?? "Colección", series };
+}
+
 export async function getSeries(
   userId: string,
   anilistId: number,
