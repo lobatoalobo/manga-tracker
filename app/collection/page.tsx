@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { getCollectionItems, getShareSlug } from "@/lib/collection";
 import CollectionGrid from "@/components/CollectionGrid";
 import ShareToggle from "@/components/ShareToggle";
+import ImportExport from "@/components/ImportExport";
 import { getCollectionStats } from "@/services/collectionService";
 
 export const metadata = {
@@ -24,6 +25,8 @@ export default async function CollectionPage() {
       <h1 className="mb-6 text-2xl font-bold">Mi colección</h1>
 
       <ShareToggle initialSlug={shareSlug} />
+
+      <ImportExport />
 
       <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Series" value={stats.series} />

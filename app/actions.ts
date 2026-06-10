@@ -9,6 +9,7 @@ import {
   setAllVolumes,
   setReading,
   setSharing,
+  importEdition,
   type AddEditionInput,
   type ReadingStatus,
 } from "@/lib/collection";
@@ -25,6 +26,7 @@ import {
   setPurchaseStatus,
   deletePurchase,
 } from "@/lib/purchases";
+import { parseCsv } from "@/lib/csv";
 
 export async function addEditionAction(input: AddEditionInput) {
   const userId = await requireUserId();
@@ -198,4 +200,82 @@ export async function deletePurchaseAction(id: number) {
   const userId = await requireUserId();
   await deletePurchase(userId, id);
   revalidatePath("/compras");
+}
+
+// --- Importar colección (CSV) ---
+
+export async function importCollectionAction(_prev: unknown, formData: FormData) {
+  const userId = await requireUserId();
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0)
+    return { ok: false as const, error: "Subí un archivo CSV." };
+
+  const rows = parseCsv(await file.text());
+  if (rows.length < 2)
+    return { ok: false as const, error: "El CSV está vacío o sin filas." };
+
+  const header = rows[0].map((h) => h.trim().toLowerCase());
+  const idx = (names: string[]) => {
+    for (const n of names) {
+      const k = header.indexOf(n);
+      if (k >= 0) return k;
+    }
+    return -1;
+  };
+  const col = {
+    anilistId: idx(["anilistid"]),
+    romaji: idx(["romaji", "title", "titulo", "título", "nombre"]),
+    english: idx(["english"]),
+    native: idx(["native"]),
+    cover: idx(["coverimage", "cover", "portada"]),
+    editionKey: idx(["editionkey"]),
+    editionLabel: idx([
+      "editionlabel",
+      "edition",
+      "edicion",
+      "edición",
+      "editorial",
+    ]),
+    publisher: idx(["publisher"]),
+    region: idx(["region", "región"]),
+    total: idx(["totalvolumes", "total", "tomos"]),
+    readingStatus: idx(["readingstatus", "lectura"]),
+    readingVolume: idx(["readingvolume"]),
+    owned: idx(["owned", "mis_tomos", "tengo"]),
+  };
+
+  let imported = 0;
+  const errors: string[] = [];
+
+  for (let r = 1; r < rows.length; r++) {
+    const cells = rows[r];
+    const g = (k: number) => (k >= 0 ? (cells[k] ?? "").trim() : "");
+    try {
+      const owned = g(col.owned)
+        .split(/[^0-9]+/)
+        .filter(Boolean)
+        .map(Number);
+      await importEdition(userId, {
+        anilistId: g(col.anilistId) ? Number(g(col.anilistId)) : null,
+        romaji: g(col.romaji) || null,
+        english: g(col.english) || null,
+        native: g(col.native) || null,
+        coverImage: g(col.cover) || null,
+        editionKey: g(col.editionKey) || null,
+        editionLabel: g(col.editionLabel) || "Edición",
+        publisher: g(col.publisher) || null,
+        region: g(col.region) || null,
+        totalVolumes: Number(g(col.total)) || 0,
+        readingStatus: g(col.readingStatus) || null,
+        readingVolume: g(col.readingVolume) ? Number(g(col.readingVolume)) : null,
+        owned,
+      });
+      imported++;
+    } catch (e) {
+      errors.push(`Fila ${r}: ${(e as Error).message}`);
+    }
+  }
+
+  revalidatePath("/collection");
+  return { ok: true as const, imported, errors: errors.slice(0, 5) };
 }

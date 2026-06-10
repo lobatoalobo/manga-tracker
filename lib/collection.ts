@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
+import { getMangaById, searchMangaList } from "@/lib/anilist";
 import type { TrackedEdition, OwnedVolume } from "@prisma/client";
 
 type EditionRow = TrackedEdition & { ownedVolumes: OwnedVolume[] };
@@ -327,5 +328,115 @@ export async function setReading(
   await prisma.trackedEdition.update({
     where: { id: ed.id },
     data: { readingStatus: status, readingVolume: volume },
+  });
+}
+
+export interface ImportRow {
+  anilistId?: number | null;
+  romaji?: string | null;
+  english?: string | null;
+  native?: string | null;
+  coverImage?: string | null;
+  editionKey?: string | null;
+  editionLabel: string;
+  publisher?: string | null;
+  region?: string | null;
+  totalVolumes: number;
+  readingStatus?: string | null;
+  readingVolume?: number | null;
+  owned: number[];
+}
+
+/** Importa una edición desde una fila de CSV. Resuelve datos faltantes en AniList. */
+export async function importEdition(
+  userId: string,
+  row: ImportRow,
+): Promise<void> {
+  let anilistId = row.anilistId ?? null;
+  let romaji = row.romaji ?? null;
+  let english = row.english ?? null;
+  let native = row.native ?? null;
+  let cover = row.coverImage ?? null;
+
+  if (!anilistId) {
+    const title = romaji || english;
+    if (!title) throw new Error("fila sin anilistId ni título");
+    const hit = (await searchMangaList(title, true))[0];
+    if (!hit) throw new Error(`no se encontró "${title}" en AniList`);
+    anilistId = hit.id;
+    romaji = romaji || hit.title.romaji;
+    english = english ?? hit.title.english;
+    native = native ?? hit.title.native;
+    cover = cover || hit.coverImage.large;
+  } else if (!cover || !romaji) {
+    const m = await getMangaById(anilistId);
+    romaji = romaji || m.title.romaji;
+    english = english ?? m.title.english;
+    native = native ?? m.title.native;
+    cover = cover || m.coverImage.extraLarge;
+  }
+
+  if (anilistId == null) throw new Error("no se pudo resolver el id de AniList");
+
+  const manga = await prisma.manga.upsert({
+    where: { userId_anilistId: { userId, anilistId } },
+    update: {},
+    create: {
+      anilistId,
+      userId,
+      romajiTitle: romaji ?? "—",
+      englishTitle: english ?? null,
+      nativeTitle: native ?? null,
+      coverImage: cover ?? "",
+    },
+  });
+
+  const key =
+    row.editionKey?.trim() ||
+    row.editionLabel
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") ||
+    "edicion";
+
+  const total = row.totalVolumes || 0;
+  const owned = [
+    ...new Set(row.owned.filter((v) => v > 0 && (total === 0 || v <= total))),
+  ];
+
+  const ed = await prisma.trackedEdition.upsert({
+    where: { mangaId_key: { mangaId: manga.id, key } },
+    update: {
+      label: row.editionLabel,
+      publisher: row.publisher ?? null,
+      region: row.region || "AR",
+      totalVolumes: total,
+      readingStatus: row.readingStatus || "UNREAD",
+      readingVolume: row.readingVolume ?? null,
+    },
+    create: {
+      mangaId: manga.id,
+      key,
+      label: row.editionLabel,
+      publisher: row.publisher ?? null,
+      region: row.region || "AR",
+      totalVolumes: total,
+      readingStatus: row.readingStatus || "UNREAD",
+      readingVolume: row.readingVolume ?? null,
+    },
+  });
+
+  await prisma.ownedVolume.deleteMany({ where: { editionId: ed.id } });
+  if (owned.length) {
+    await prisma.ownedVolume.createMany({
+      data: owned.map((v) => ({ editionId: ed.id, volume: v })),
+    });
+  }
+
+  await prisma.trackedEdition.update({
+    where: { id: ed.id },
+    data: {
+      status: total > 0 && owned.length >= total ? "COMPLETED" : "IN_PROGRESS",
+    },
   });
 }
