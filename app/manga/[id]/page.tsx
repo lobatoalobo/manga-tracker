@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
+import type { ReadingLink } from "@/lib/normalizeAnilist";
 import TrackingPanel from "@/components/TrackingPanel";
 import ReportButton from "@/components/ReportButton";
 import EditionsSection from "./EditionsSection";
@@ -80,6 +81,32 @@ export default async function Page({
           anilistId={mangaId}
           editions={series.editions}
         />
+      )}
+
+      {anilist.readingLinks.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-1 text-lg font-semibold">Leer online</h2>
+          <p className="mb-3 text-sm text-muted">
+            Lectores oficiales de las editoriales/plataformas.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {anilist.readingLinks.map((l: ReadingLink, i: number) => (
+              <a
+                key={`${l.site}-${i}`}
+                href={l.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm transition hover:border-accent"
+              >
+                {l.site}
+                {l.language && (
+                  <span className="ml-1 text-xs text-muted">· {l.language}</span>
+                )}{" "}
+                ↗
+              </a>
+            ))}
+          </div>
+        </section>
       )}
 
       {anilist.description && (

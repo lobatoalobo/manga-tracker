@@ -220,6 +220,13 @@ export async function getMangaById(
 
         countryOfOrigin
 
+        externalLinks {
+          url
+          site
+          type
+          language
+        }
+
         startDate {
           year
           month
