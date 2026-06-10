@@ -63,6 +63,12 @@ export default async function Page({
         </div>
       </div>
 
+      {anilist.description && (
+        <p className="mt-6 whitespace-pre-wrap text-sm leading-relaxed text-muted">
+          {anilist.description}
+        </p>
+      )}
+
       {/* Ediciones (arriba): elegí cuáles trackear. Se streamean con Suspense. */}
       <section className="mt-6">
         <h2 className="mb-1 text-lg font-semibold">Ediciones</h2>
@@ -107,12 +113,6 @@ export default async function Page({
             ))}
           </div>
         </section>
-      )}
-
-      {anilist.description && (
-        <p className="mt-6 whitespace-pre-wrap text-sm leading-relaxed text-muted">
-          {anilist.description}
-        </p>
       )}
 
       <ReportButton mangaId={mangaId} mangaTitle={anilist.title.romaji} />
