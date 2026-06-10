@@ -76,14 +76,22 @@ const LANG_PRIORITY: Record<string, number> = {
  * Son lectores legales (MANGA Plus, VIZ, etc.); no hosteamos nada.
  */
 function readingLinks(links: any[] | null | undefined): ReadingLink[] {
-  const seen = new Set<string>();
+  const seenUrl = new Set<string>();
+  const seenSiteLang = new Set<string>();
+
   return (links ?? [])
     .filter((l) => l.type === "STREAMING")
     .map((l) => ({ url: l.url, site: l.site, language: l.language ?? null }))
+    // Dedup respetando el orden de AniList:
+    //  - por URL: a veces AniList repite la misma URL en dos idiomas (dato
+    //    erróneo, p. ej. español y alemán apuntando al mismo título). Nos
+    //    quedamos con la primera para no mostrar un link mal etiquetado.
+    //  - por sitio+idioma: evita el mismo lector/idioma duplicado.
     .filter((l) => {
-      const key = `${l.site}|${l.language}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
+      const siteLang = `${l.site}|${l.language}`;
+      if (seenUrl.has(l.url) || seenSiteLang.has(siteLang)) return false;
+      seenUrl.add(l.url);
+      seenSiteLang.add(siteLang);
       return true;
     })
     .sort(
