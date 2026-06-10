@@ -1,14 +1,17 @@
 import { resolveEditions, titlesOf } from "@/lib/getMangaDetails";
 import AddEditionButton from "@/components/AddEditionButton";
+import { SignIn } from "@/components/AuthButtons";
 
 export default async function EditionsSection({
   anilist,
   knownSlug,
   trackedKeys,
+  canTrack,
 }: {
   anilist: any;
   knownSlug?: string | null;
   trackedKeys: string[];
+  canTrack: boolean;
 }) {
   const { editions, muVolumes } = await resolveEditions(
     anilist,
@@ -27,6 +30,13 @@ export default async function EditionsSection({
   const tracked = new Set(trackedKeys);
 
   return (
+    <>
+    {!canTrack && (
+      <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface p-3 text-sm text-muted">
+        <span>Iniciá sesión para trackear ediciones en tu colección.</span>
+        <SignIn className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white transition hover:opacity-90" />
+      </div>
+    )}
     <div className="grid gap-3 sm:grid-cols-2">
       {editions.map((ed) => {
         const isTracked = tracked.has(ed.id);
@@ -59,18 +69,21 @@ export default async function EditionsSection({
                 Ver en {ed.publisher ?? ed.source} ↗
               </a>
             )}
-            <div className="mt-auto">
-              <AddEditionButton
-                anilist={anilist}
-                edition={ed}
-                muVolumes={muVolumes}
-                isTracked={isTracked}
-              />
-            </div>
+            {canTrack && (
+              <div className="mt-auto">
+                <AddEditionButton
+                  anilist={anilist}
+                  edition={ed}
+                  muVolumes={muVolumes}
+                  isTracked={isTracked}
+                />
+              </div>
+            )}
           </div>
         );
       })}
     </div>
+    </>
   );
 }
 

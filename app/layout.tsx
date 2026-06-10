@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { countPendingReports } from "@/lib/reports";
 import { countPendingStores } from "@/lib/stores";
-import { SignOut } from "@/components/AuthButtons";
+import { SignIn, SignOut } from "@/components/AuthButtons";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -49,25 +49,26 @@ export default async function RootLayout({
               📚 Manga Tracker
             </Link>
 
+            <Link
+              href="/"
+              className="text-sm text-muted transition hover:text-foreground"
+            >
+              Buscar
+            </Link>
+            <Link
+              href="/tiendas"
+              className="text-sm text-muted transition hover:text-foreground"
+            >
+              Tiendas
+            </Link>
+
             {session && (
               <>
-                <Link
-                  href="/"
-                  className="text-sm text-muted transition hover:text-foreground"
-                >
-                  Buscar
-                </Link>
                 <Link
                   href="/collection"
                   className="text-sm text-muted transition hover:text-foreground"
                 >
                   Mi colección
-                </Link>
-                <Link
-                  href="/tiendas"
-                  className="text-sm text-muted transition hover:text-foreground"
-                >
-                  Tiendas
                 </Link>
                 {admin && (
                   <>
@@ -98,7 +99,7 @@ export default async function RootLayout({
               </>
             )}
 
-            {session?.user && (
+            {session?.user ? (
               <div className="ml-auto flex items-center gap-3">
                 {session.user.image && (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -112,6 +113,10 @@ export default async function RootLayout({
                   {session.user.name}
                 </span>
                 <SignOut />
+              </div>
+            ) : (
+              <div className="ml-auto">
+                <SignIn className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90" />
               </div>
             )}
           </div>

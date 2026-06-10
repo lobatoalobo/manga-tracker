@@ -1,7 +1,5 @@
-import { searchMangaList } from "@/lib/anilist";
+import { searchMangaList, getTrendingManga } from "@/lib/anilist";
 import SearchBar from "@/components/SearchBar";
-import { SignIn } from "@/components/AuthButtons";
-import { auth } from "@/auth";
 import Link from "next/link";
 
 export default async function Home({
@@ -9,26 +7,10 @@ export default async function Home({
 }: {
   searchParams: Promise<{ search?: string }>;
 }) {
-  const session = await auth();
-
-  if (!session) {
-    return (
-      <main className="mx-auto flex max-w-md flex-col items-center px-5 py-24 text-center">
-        <h1 className="text-3xl font-bold">📚 Manga Tracker</h1>
-        <p className="mt-3 text-muted">
-          Seguí tu colección de manga: qué tomos tenés, qué te falta y qué estás
-          leyendo. Con datos de las editoriales argentinas.
-        </p>
-        <div className="mt-8">
-          <SignIn />
-        </div>
-      </main>
-    );
-  }
-
   const params = await searchParams;
-  const query = params.search?.trim() || "one piece";
-  const mangas = await searchMangaList(query);
+  const query = params.search?.trim();
+
+  const mangas = query ? await searchMangaList(query) : await getTrendingManga();
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-8">
@@ -39,7 +21,11 @@ export default async function Home({
 
       <SearchBar />
 
-      <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+      <h2 className="mt-8 mb-4 text-lg font-semibold">
+        {query ? `Resultados para "${query}"` : "🔥 Hot esta semana"}
+      </h2>
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {mangas.map((manga: any) => (
           <Link
             key={manga.id}

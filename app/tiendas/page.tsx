@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getApprovedStores } from "@/lib/stores";
 import StoreList from "@/components/StoreList";
@@ -10,8 +9,6 @@ export const metadata = {
 
 export default async function TiendasPage() {
   const session = await auth();
-  if (!session) redirect("/");
-
   const stores = await getApprovedStores();
 
   return (
@@ -23,7 +20,7 @@ export default async function TiendasPage() {
 
       <StoreList stores={stores} />
 
-      <ProposeStore />
+      {session && <ProposeStore />}
     </main>
   );
 }

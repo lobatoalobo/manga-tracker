@@ -177,6 +177,34 @@ export async function searchMangaList(
     .media;
 }
 
+/**
+ * Top de mangas "hot" del momento (trending de AniList).
+ * Cacheado 1 semana: se refresca solo, sin cron.
+ */
+export async function getTrendingManga() {
+  const query = `
+    query {
+      Page(page: 1, perPage: 10) {
+        media(type: MANGA, sort: TRENDING_DESC) {
+          id
+          title { romaji english native }
+          coverImage { large }
+        }
+      }
+    }
+  `;
+
+  const response = await fetch("https://graphql.anilist.co", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query }),
+    next: { revalidate: 60 * 60 * 24 * 7 }, // 1 semana
+  });
+
+  const json = await response.json();
+  return json.data.Page.media;
+}
+
 export async function getMangaById(
   id: number,
 ) {

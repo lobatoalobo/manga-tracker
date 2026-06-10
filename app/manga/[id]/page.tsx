@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
@@ -14,16 +13,17 @@ export default async function Page({
   params: Promise<{ id: string }>;
 }) {
   const session = await auth();
-  if (!session?.user?.id) redirect("/");
+  const userId = session?.user?.id ?? null;
 
   const { id } = await params;
   const mangaId = Number(id);
 
   const [anilist, series] = await Promise.all([
     getMangaCore(mangaId),
-    getSeries(session.user.id, mangaId),
+    userId ? getSeries(userId, mangaId) : Promise.resolve(null),
   ]);
 
+  const canTrack = !!userId;
   const trackedKeys = series?.editions.map((e) => e.key) ?? [];
   const authors = anilist.staff.map((a: { name: string }) => a.name).join(", ");
 
@@ -76,7 +76,11 @@ export default async function Page({
           Trackeá una o varias ediciones; abajo marcás los tomos de cada una.
         </p>
         <Suspense fallback={<EditionsSkeleton />}>
-          <EditionsSection anilist={anilist} trackedKeys={trackedKeys} />
+          <EditionsSection
+            anilist={anilist}
+            trackedKeys={trackedKeys}
+            canTrack={canTrack}
+          />
         </Suspense>
       </section>
 
