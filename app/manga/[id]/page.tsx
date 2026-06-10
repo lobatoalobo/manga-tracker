@@ -1,4 +1,6 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { getMangaFromCollection } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
 import MangaCollectionSection from "@/components/MangaCollectionSection";
@@ -10,6 +12,9 @@ export default async function Page({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const session = await auth();
+  if (!session?.user?.id) redirect("/");
+
   const { id } = await params;
   const mangaId = Number(id);
 
@@ -17,7 +22,7 @@ export default async function Page({
   // se resuelven en <Suspense> y se streamean, sin bloquear el render inicial.
   const [anilist, inCollection] = await Promise.all([
     getMangaCore(mangaId),
-    getMangaFromCollection(mangaId),
+    getMangaFromCollection(session.user.id, mangaId),
   ]);
 
   const authors = anilist.staff.map((a: { name: string }) => a.name).join(", ");

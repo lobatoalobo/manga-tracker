@@ -1,3 +1,6 @@
+import { notFound } from "next/navigation";
+import { auth } from "@/auth";
+import { isAdmin } from "@/lib/admin";
 import { getReports } from "@/lib/reports";
 import ReportActions from "@/components/ReportActions";
 
@@ -5,8 +8,10 @@ export const metadata = {
   title: "Reportes · Manga Tracker",
 };
 
-// Nota: sin auth. Es un panel personal; agregar protección si pasa a multiusuario.
 export default async function ReportesPage() {
+  const session = await auth();
+  if (!isAdmin(session?.user?.email)) notFound();
+
   const reports = await getReports();
   const pending = reports.filter((r) => r.status === "PENDING");
   const resolved = reports.filter((r) => r.status === "RESOLVED");

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { auth, requireUserId } from "@/auth";
 import {
   addToCollection,
   removeFromCollection,
@@ -14,46 +15,52 @@ import {
 import { createReport, setReportStatus } from "@/lib/reports";
 
 export async function addMangaAction(manga: AddMangaInput) {
-  await addToCollection(manga);
+  const userId = await requireUserId();
+  await addToCollection(userId, manga);
   revalidatePath("/collection");
   revalidatePath(`/manga/${manga.id}`);
 }
 
-export async function removeMangaAction(id: number) {
-  await removeFromCollection(id);
+export async function removeMangaAction(anilistId: number) {
+  const userId = await requireUserId();
+  await removeFromCollection(userId, anilistId);
   revalidatePath("/collection");
-  revalidatePath(`/manga/${id}`);
+  revalidatePath(`/manga/${anilistId}`);
 }
 
-export async function toggleVolumeAction(mangaId: number, volume: number) {
-  await toggleVolume(mangaId, volume);
+export async function toggleVolumeAction(anilistId: number, volume: number) {
+  const userId = await requireUserId();
+  await toggleVolume(userId, anilistId, volume);
   revalidatePath("/collection");
-  revalidatePath(`/manga/${mangaId}`);
+  revalidatePath(`/manga/${anilistId}`);
 }
 
-export async function setAllVolumesAction(mangaId: number, owned: boolean) {
-  await setAllVolumes(mangaId, owned);
+export async function setAllVolumesAction(anilistId: number, owned: boolean) {
+  const userId = await requireUserId();
+  await setAllVolumes(userId, anilistId, owned);
   revalidatePath("/collection");
-  revalidatePath(`/manga/${mangaId}`);
+  revalidatePath(`/manga/${anilistId}`);
 }
 
 export async function setReadingAction(
-  mangaId: number,
+  anilistId: number,
   status: ReadingStatus,
   volume: number | null,
 ) {
-  await setReading(mangaId, status, volume);
+  const userId = await requireUserId();
+  await setReading(userId, anilistId, status, volume);
   revalidatePath("/collection");
-  revalidatePath(`/manga/${mangaId}`);
+  revalidatePath(`/manga/${anilistId}`);
 }
 
 export async function setCustomTotalAction(
-  mangaId: number,
+  anilistId: number,
   total: number | null,
 ) {
-  await setCustomTotal(mangaId, total);
+  const userId = await requireUserId();
+  await setCustomTotal(userId, anilistId, total);
   revalidatePath("/collection");
-  revalidatePath(`/manga/${mangaId}`);
+  revalidatePath(`/manga/${anilistId}`);
 }
 
 export async function createReportAction(input: {
@@ -64,7 +71,8 @@ export async function createReportAction(input: {
   const message = input.message.trim();
   if (!message) return { ok: false as const, error: "El reporte está vacío." };
 
-  await createReport({ ...input, message });
+  const session = await auth();
+  await createReport({ ...input, message, userId: session?.user?.id ?? null });
   revalidatePath("/admin/reportes");
   return { ok: true as const };
 }

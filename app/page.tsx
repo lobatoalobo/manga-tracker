@@ -1,5 +1,7 @@
 import { searchMangaList } from "@/lib/anilist";
 import SearchBar from "@/components/SearchBar";
+import { SignIn } from "@/components/AuthButtons";
+import { auth } from "@/auth";
 import Link from "next/link";
 
 export default async function Home({
@@ -7,9 +9,25 @@ export default async function Home({
 }: {
   searchParams: Promise<{ search?: string }>;
 }) {
+  const session = await auth();
+
+  if (!session) {
+    return (
+      <main className="mx-auto flex max-w-md flex-col items-center px-5 py-24 text-center">
+        <h1 className="text-3xl font-bold">📚 Manga Tracker</h1>
+        <p className="mt-3 text-muted">
+          Seguí tu colección de manga: qué tomos tenés, qué te falta y qué estás
+          leyendo. Con datos de las editoriales argentinas.
+        </p>
+        <div className="mt-8">
+          <SignIn />
+        </div>
+      </main>
+    );
+  }
+
   const params = await searchParams;
   const query = params.search?.trim() || "one piece";
-
   const mangas = await searchMangaList(query);
 
   return (

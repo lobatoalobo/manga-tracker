@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { auth } from "@/auth";
+import { isAdmin } from "@/lib/admin";
 import { countPendingReports } from "@/lib/reports";
+import { SignOut } from "@/components/AuthButtons";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -24,7 +27,9 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const pendingReports = await countPendingReports().catch(() => 0);
+  const session = await auth();
+  const admin = isAdmin(session?.user?.email);
+  const pendingReports = admin ? await countPendingReports().catch(() => 0) : 0;
 
   return (
     <html
@@ -37,26 +42,53 @@ export default async function RootLayout({
             <Link href="/" className="font-bold">
               📚 Manga Tracker
             </Link>
-            <Link href="/" className="text-sm text-muted transition hover:text-foreground">
-              Buscar
-            </Link>
-            <Link
-              href="/collection"
-              className="text-sm text-muted transition hover:text-foreground"
-            >
-              Mi colección
-            </Link>
-            <Link
-              href="/admin/reportes"
-              className="ml-auto flex items-center gap-1.5 text-sm text-muted transition hover:text-foreground"
-            >
-              Reportes
-              {pendingReports > 0 && (
-                <span className="rounded-full bg-accent px-1.5 py-0.5 text-xs font-semibold text-white">
-                  {pendingReports}
+
+            {session && (
+              <>
+                <Link
+                  href="/"
+                  className="text-sm text-muted transition hover:text-foreground"
+                >
+                  Buscar
+                </Link>
+                <Link
+                  href="/collection"
+                  className="text-sm text-muted transition hover:text-foreground"
+                >
+                  Mi colección
+                </Link>
+                {admin && (
+                  <Link
+                    href="/admin/reportes"
+                    className="flex items-center gap-1.5 text-sm text-muted transition hover:text-foreground"
+                  >
+                    Reportes
+                    {pendingReports > 0 && (
+                      <span className="rounded-full bg-accent px-1.5 py-0.5 text-xs font-semibold text-white">
+                        {pendingReports}
+                      </span>
+                    )}
+                  </Link>
+                )}
+              </>
+            )}
+
+            {session?.user && (
+              <div className="ml-auto flex items-center gap-3">
+                {session.user.image && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={session.user.image}
+                    alt={session.user.name ?? ""}
+                    className="h-7 w-7 rounded-full"
+                  />
+                )}
+                <span className="hidden text-sm text-muted sm:inline">
+                  {session.user.name}
                 </span>
-              )}
-            </Link>
+                <SignOut />
+              </div>
+            )}
           </div>
         </nav>
 

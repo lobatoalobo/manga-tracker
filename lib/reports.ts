@@ -1,12 +1,14 @@
 import { prisma } from "@/lib/prisma";
 
 export async function createReport(input: {
+  userId?: string | null;
   mangaId?: number | null;
   mangaTitle: string;
   message: string;
 }): Promise<void> {
   await prisma.report.create({
     data: {
+      userId: input.userId ?? null,
       mangaId: input.mangaId ?? null,
       mangaTitle: input.mangaTitle,
       message: input.message,

@@ -1,18 +1,27 @@
 import { getMangaDetails } from "../lib/getMangaDetails";
 import { addToCollection } from "../lib/collection";
+import { prisma } from "../lib/prisma";
 
-// Mangas iniciales (AniList ids) para arrancar con algo en la colección.
+// Mangas iniciales (AniList ids).
 const SEED_IDS = [30013]; // One Piece
 
 async function main() {
+  // Seedeamos bajo el primer usuario registrado (logueate una vez en la app).
+  const user = await prisma.user.findFirst();
+  if (!user) {
+    console.log(
+      "No hay usuarios todavía. Logueate una vez en la app y volvé a correr el seed.",
+    );
+    return;
+  }
+
   for (const id of SEED_IDS) {
     const { anilist, editions, muVolumes } = await getMangaDetails(id);
-
     const localEdition = editions.find((e) => e.region === "AR") ?? null;
     const japanVolumes =
       editions.find((e) => e.region === "JP")?.volumes ?? null;
 
-    await addToCollection({
+    await addToCollection(user.id, {
       id: anilist.id,
       title: anilist.title,
       coverImage: anilist.coverImage,
@@ -31,7 +40,7 @@ async function main() {
     });
 
     console.log(
-      `✓ Seedeado: ${anilist.title.romaji} (${localEdition?.publisher ?? "sin editorial"}: ${localEdition?.volumes ?? "?"} tomos)`,
+      `✓ Seedeado para ${user.email}: ${anilist.title.romaji} (${localEdition?.publisher ?? "sin editorial"}: ${localEdition?.volumes ?? "?"} tomos)`,
     );
   }
 }

@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { getCollection } from "@/lib/collection";
 import CollectionGrid from "@/components/CollectionGrid";
 import { getCollectionStats } from "@/services/collectionService";
@@ -7,7 +9,10 @@ export const metadata = {
 };
 
 export default async function CollectionPage() {
-  const collection = await getCollection();
+  const session = await auth();
+  if (!session?.user?.id) redirect("/");
+
+  const collection = await getCollection(session.user.id);
   const stats = getCollectionStats(collection);
 
   return (

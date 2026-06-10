@@ -5,12 +5,11 @@ import type { Manga, OwnedVolume } from "@prisma/client";
 type MangaRow = Manga & { ownedVolumes: OwnedVolume[] };
 
 /**
- * Forma que consume la UI. Mantiene `title` como objeto y `ownedVolumes`
- * como array de números, igual que el formato JSON anterior, para que los
- * componentes existentes sigan funcionando.
+ * Forma que consume la UI. `id` es el id de AniList (no el PK interno), para
+ * que los componentes y rutas sigan trabajando con ids de AniList.
  */
 export interface MangaView {
-  id: number;
+  id: number; // anilistId
   title: { romaji: string; english: string | null; native: string | null };
   coverImage: string;
   apiTotalVolumes: number | null;
@@ -31,7 +30,7 @@ export interface MangaView {
 
 function toView(row: MangaRow): MangaView {
   return {
-    id: row.id,
+    id: row.anilistId,
     title: {
       romaji: row.romajiTitle,
       english: row.englishTitle,
@@ -51,82 +50,76 @@ function toView(row: MangaRow): MangaView {
     status: row.status,
     readingStatus: row.readingStatus,
     readingVolume: row.readingVolume,
-    ownedVolumes: row.ownedVolumes
-      .map((v) => v.volume)
-      .sort((a, b) => a - b),
+    ownedVolumes: row.ownedVolumes.map((v) => v.volume).sort((a, b) => a - b),
   };
 }
 
-export async function getCollection(): Promise<MangaView[]> {
+export async function getCollection(userId: string): Promise<MangaView[]> {
   const rows = await prisma.manga.findMany({
+    where: { userId },
     include: { ownedVolumes: true },
     orderBy: { romajiTitle: "asc" },
   });
-
   return rows.map(toView);
 }
 
 export async function getMangaFromCollection(
-  id: number,
+  userId: string,
+  anilistId: number,
 ): Promise<MangaView | null> {
   const row = await prisma.manga.findUnique({
-    where: { id },
+    where: { userId_anilistId: { userId, anilistId } },
     include: { ownedVolumes: true },
   });
-
   return row ? toView(row) : null;
 }
 
 export interface AddMangaInput {
-  id: number;
+  id: number; // anilistId
   title: { romaji: string; english?: string | null; native?: string | null };
   coverImage: string;
   volumes?: number | null;
-  /** Tomos de la edición estándar según MangaUpdates (fuente autoritativa). */
   muVolumes?: number | null;
-  /** Edición local que se trackea (Ivrea, Panini, etc.). */
   edition?: {
     publisher?: string | null;
     slug?: string | null;
     status?: string | null;
-    volumes?: number | null; // tomos de la edición local
+    volumes?: number | null;
     nextVolume?: number | null;
   } | null;
-  /** Tomos de la edición japonesa (referencia, respaldo para el total). */
   japanVolumes?: number | null;
 }
 
-export async function addToCollection(manga: AddMangaInput): Promise<void> {
+export async function addToCollection(
+  userId: string,
+  manga: AddMangaInput,
+): Promise<void> {
   const edition = manga.edition ?? null;
 
   await prisma.manga.upsert({
-    where: { id: manga.id },
+    where: { userId_anilistId: { userId, anilistId: manga.id } },
     update: {
-      // Al re-agregar, actualizamos la edición elegida y su total.
       publisher: edition?.publisher ?? undefined,
       editionSlug: edition?.slug ?? undefined,
       argentinaStatus: edition?.status ?? undefined,
-      // La edición elegida define el total a coleccionar.
       customTotalVolumes: edition?.volumes ?? undefined,
       nextVolume: edition?.nextVolume ?? undefined,
       muVolumes: manga.muVolumes ?? undefined,
       japanVolumes: manga.japanVolumes ?? undefined,
     },
     create: {
-      id: manga.id,
+      anilistId: manga.id,
+      userId,
       romajiTitle: manga.title.romaji,
       englishTitle: manga.title.english ?? null,
       nativeTitle: manga.title.native ?? null,
       coverImage: manga.coverImage,
       apiTotalVolumes: manga.volumes ?? null,
       muVolumes: manga.muVolumes ?? null,
-      // La edición elegida define el total a coleccionar.
       customTotalVolumes: edition?.volumes ?? null,
       publisher: edition?.publisher ?? null,
       editionSlug: edition?.slug ?? null,
       argentinaStatus: edition?.status ?? null,
-      argentinaVolumes: null,
-      japanStatus: null,
       japanVolumes: manga.japanVolumes ?? null,
       nextVolume: edition?.nextVolume ?? null,
       status: "IN_PROGRESS",
@@ -134,95 +127,97 @@ export async function addToCollection(manga: AddMangaInput): Promise<void> {
   });
 }
 
-export async function removeFromCollection(id: number): Promise<void> {
-  await prisma.manga.deleteMany({ where: { id } });
+export async function removeFromCollection(
+  userId: string,
+  anilistId: number,
+): Promise<void> {
+  await prisma.manga.deleteMany({ where: { userId, anilistId } });
 }
 
 export async function toggleVolume(
-  mangaId: number,
+  userId: string,
+  anilistId: number,
   volume: number,
 ): Promise<void> {
   const manga = await prisma.manga.findUnique({
-    where: { id: mangaId },
+    where: { userId_anilistId: { userId, anilistId } },
     include: { ownedVolumes: true },
   });
-
   if (!manga) return;
 
   const owns = manga.ownedVolumes.some((v) => v.volume === volume);
 
   if (owns) {
-    await prisma.ownedVolume.deleteMany({ where: { mangaId, volume } });
+    await prisma.ownedVolume.deleteMany({ where: { mangaId: manga.id, volume } });
   } else {
-    await prisma.ownedVolume.create({ data: { mangaId, volume } });
+    await prisma.ownedVolume.create({ data: { mangaId: manga.id, volume } });
   }
 
   const ownedCount = owns
     ? manga.ownedVolumes.length - 1
     : manga.ownedVolumes.length + 1;
-
   const total = getTotalVolumes(manga);
 
-  const status =
-    total > 0 && ownedCount >= total ? "COMPLETED" : "IN_PROGRESS";
-
-  await prisma.manga.update({ where: { id: mangaId }, data: { status } });
+  await prisma.manga.update({
+    where: { id: manga.id },
+    data: {
+      status: total > 0 && ownedCount >= total ? "COMPLETED" : "IN_PROGRESS",
+    },
+  });
 }
 
 export async function setCustomTotal(
-  mangaId: number,
+  userId: string,
+  anilistId: number,
   total: number | null,
 ): Promise<void> {
   await prisma.manga.update({
-    where: { id: mangaId },
+    where: { userId_anilistId: { userId, anilistId } },
     data: { customTotalVolumes: total },
   });
 }
 
 export type ReadingStatus = "UNREAD" | "READING" | "READ";
 
-/** Actualiza el estado de lectura y el tomo por el que va el usuario. */
 export async function setReading(
-  mangaId: number,
+  userId: string,
+  anilistId: number,
   status: ReadingStatus,
   volume: number | null,
 ): Promise<void> {
   await prisma.manga.update({
-    where: { id: mangaId },
+    where: { userId_anilistId: { userId, anilistId } },
     data: { readingStatus: status, readingVolume: volume },
   });
 }
 
-/**
- * Marca todos los tomos de una serie como propios, o los limpia todos.
- * Útil para series que ya tenés completas (no ir tomo por tomo).
- */
+/** Marca todos los tomos como propios, o los limpia todos. */
 export async function setAllVolumes(
-  mangaId: number,
+  userId: string,
+  anilistId: number,
   owned: boolean,
 ): Promise<void> {
   const manga = await prisma.manga.findUnique({
-    where: { id: mangaId },
+    where: { userId_anilistId: { userId, anilistId } },
     include: { ownedVolumes: true },
   });
   if (!manga) return;
 
   const total = getTotalVolumes(manga);
 
-  // Reseteamos y, si corresponde, recreamos 1..total de una.
-  await prisma.ownedVolume.deleteMany({ where: { mangaId } });
+  await prisma.ownedVolume.deleteMany({ where: { mangaId: manga.id } });
 
   if (owned && total > 0) {
     await prisma.ownedVolume.createMany({
       data: Array.from({ length: total }, (_, i) => ({
-        mangaId,
+        mangaId: manga.id,
         volume: i + 1,
       })),
     });
   }
 
   await prisma.manga.update({
-    where: { id: mangaId },
+    where: { id: manga.id },
     data: { status: owned && total > 0 ? "COMPLETED" : "IN_PROGRESS" },
   });
 }

@@ -3,23 +3,80 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+// --- Auth.js (NextAuth) ---
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+
+  accounts Account[]
+  sessions Session[]
+  mangas   Manga[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// --- Dominio ---
+
 model Manga {
-  id           Int     @id // AniList media id
+  id        Int    @id @default(autoincrement())
+  anilistId Int // id de AniList
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   romajiTitle  String
   englishTitle String?
   nativeTitle  String?
   coverImage   String
 
   // Totales de tomos por fuente (prioridad en lib/getTotalVolumes.ts)
-  apiTotalVolumes    Int? // AniList (suele ser null en series en curso)
-  muVolumes          Int? // MangaUpdates (edición estándar) — fuente autoritativa
-  customTotalVolumes Int? // override manual del usuario
+  apiTotalVolumes    Int?
+  muVolumes          Int?
+  customTotalVolumes Int?
 
-  // Datos de la edición local (Ivrea Argentina u otra editorial)
+  // Datos de la edición local (Ivrea / Panini / Ovni)
   publisher        String?
   editionSlug      String?
   argentinaStatus  String?
@@ -32,21 +89,14 @@ model Manga {
 
   // Lectura (eje independiente de "tener" el tomo)
   readingStatus String @default("UNREAD") // UNREAD | READING | READ
-  readingVolume Int? // tomo por el que vas leyendo
+  readingVolume Int?
 
   ownedVolumes OwnedVolume[]
 
   createdAt DateTime @default(now())
-}
 
-// Reportes/correcciones de datos enviados por usuarios (revisión manual).
-model Report {
-  id         Int      @id @default(autoincrement())
-  mangaId    Int? // id de AniList, si el reporte es sobre un manga puntual
-  mangaTitle String // título para contexto
-  message    String // p. ej. "La edición de Naruto de Panini tiene 72 tomos"
-  status     String   @default("PENDING") // PENDING | RESOLVED
-  createdAt  DateTime @default(now())
+  // Una serie de AniList aparece una vez por usuario.
+  @@unique([userId, anilistId])
 }
 
 model OwnedVolume {
@@ -58,4 +108,15 @@ model OwnedVolume {
   manga Manga @relation(fields: [mangaId], references: [id], onDelete: Cascade)
 
   @@unique([mangaId, volume])
+}
+
+// Reportes/correcciones de datos enviados por usuarios (revisión del dueño).
+model Report {
+  id         Int      @id @default(autoincrement())
+  userId     String? // quién lo reportó (si está logueado)
+  mangaId    Int? // id de AniList del manga
+  mangaTitle String
+  message    String
+  status     String   @default("PENDING") // PENDING | RESOLVED
+  createdAt  DateTime @default(now())
 }
