@@ -130,25 +130,28 @@ function isTitlePage(response: Response): boolean {
 }
 
 const STATUS = "([A-Za-zÁÉÍÓÚáéíóú ]+?)";
-const DASH = "\\s*[-–—]\\s*";
+// Separador entre el estado y la cantidad: guion ("– 107 TOMOS") o paréntesis
+// de apertura ("(40 TOMOS)"), según la ficha.
+const SEP = "\\s*(?:[-–—]|\\()\\s*";
 
 /**
- * Extrae los tomos publicados en Argentina cubriendo los tres layouts de Ivrea:
+ * Extrae los tomos publicados en Argentina cubriendo los layouts de Ivrea:
  *   1. "ESTADO EN ARGENTINA: EN CURSO – 107 TOMOS"   (fichas nuevas)
- *   2. "ESTADO: COMPLETA – 74 TOMOS"                 (fichas viejas, varias ediciones)
- *   3. "SERIE DE: 11 TOMOS"                          (kanzenban/recopilatorios)
+ *   2. "ESTADO: COMPLETA – 74 TOMOS"                 (fichas viejas)
+ *   3. "ESTADO: COMPLETA (40 TOMOS)"                 (variante con paréntesis)
+ *   4. "SERIE DE: 11 TOMOS"                          (kanzenban/recopilatorios)
  */
 function parseArgentina(text: string): { status: string; volumes: number } {
   // 1) Layout nuevo, explícito para Argentina.
   const ar = text.match(
-    new RegExp(`ESTADO EN ARGENTINA:?\\s*${STATUS}${DASH}(\\d+)\\s*TOMOS`, "i"),
+    new RegExp(`ESTADO EN ARGENTINA:?\\s*${STATUS}${SEP}(\\d+)\\s*TOMOS`, "i"),
   );
   if (ar) return { status: ar[1].trim().toUpperCase(), volumes: Number(ar[2]) };
 
   // 2) Layout viejo con "ESTADO:" (colon inmediato). Puede haber varias
   //    ediciones; nos quedamos con la de más tomos (serie completa).
   const generic = [
-    ...text.matchAll(new RegExp(`ESTADO:\\s*${STATUS}${DASH}(\\d+)\\s*TOMOS`, "gi")),
+    ...text.matchAll(new RegExp(`ESTADO:\\s*${STATUS}${SEP}(\\d+)\\s*TOMOS`, "gi")),
   ];
   if (generic.length) {
     const best = generic.reduce((a, b) => (Number(b[2]) > Number(a[2]) ? b : a));
@@ -167,7 +170,7 @@ function matchEstado(
   pais: "JAPÓN",
 ): { status: string; volumes: number } {
   const re = new RegExp(
-    `ESTADO EN JAP[ÓO]N:?\\s*${STATUS}${DASH}(\\d+)\\s*TOMOS`,
+    `ESTADO EN JAP[ÓO]N:?\\s*${STATUS}${SEP}(\\d+)\\s*TOMOS`,
     "i",
   );
   const m = text.match(re);
