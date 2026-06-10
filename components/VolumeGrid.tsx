@@ -1,36 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { toggleVolumeAction } from "@/app/actions";
-
 export default function VolumeGrid({
-  mangaId,
   totalVolumes,
-  ownedVolumes,
-  onChange,
+  owned,
+  onToggle,
 }: {
-  mangaId: number;
   totalVolumes: number;
-  ownedVolumes: number[];
-  onChange?: (volumes: number[]) => void;
+  owned: number[];
+  onToggle: (volume: number) => void;
 }) {
-  const [owned, setOwned] = useState(ownedVolumes);
-  const [, startTransition] = useTransition();
-
-  function toggle(volume: number) {
-    const updated = owned.includes(volume)
-      ? owned.filter((v) => v !== volume)
-      : [...owned, volume].sort((a, b) => a - b);
-
-    // Actualización optimista.
-    setOwned(updated);
-    onChange?.(updated);
-
-    startTransition(async () => {
-      await toggleVolumeAction(mangaId, volume);
-    });
-  }
-
   if (totalVolumes <= 0) {
     return (
       <p className="text-sm text-muted">
@@ -47,8 +25,10 @@ export default function VolumeGrid({
         return (
           <button
             key={volume}
-            onClick={() => toggle(volume)}
-            title={isOwned ? `Tenés el tomo ${volume}` : `Falta el tomo ${volume}`}
+            onClick={() => onToggle(volume)}
+            title={
+              isOwned ? `Tenés el tomo ${volume}` : `Falta el tomo ${volume}`
+            }
             className={`aspect-square rounded-md border text-sm font-semibold transition ${
               isOwned
                 ? "border-accent bg-accent text-white"

@@ -49,9 +49,15 @@ export default function MangaCard({ manga }: { manga: MangaView }) {
             />
           </div>
 
-          <span className="mt-2 inline-block text-xs">
-            {isComplete ? "🟩 Completado" : "🟨 En progreso"}
-          </span>
+          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+            <span>{isComplete ? "🟩 Completado" : "🟨 En progreso"}</span>
+            {manga.readingStatus === "READING" && (
+              <span className="text-accent">
+                📖 Leyendo{manga.readingVolume ? ` · #${manga.readingVolume}` : ""}
+              </span>
+            )}
+            {manga.readingStatus === "READ" && <span>✅ Leído</span>}
+          </div>
         </div>
       </Link>
     </div>

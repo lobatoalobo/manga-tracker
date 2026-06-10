@@ -24,6 +24,8 @@ export interface MangaView {
   japanVolumes: number | null;
   nextVolume: number | null;
   status: string;
+  readingStatus: string;
+  readingVolume: number | null;
   ownedVolumes: number[];
 }
 
@@ -47,6 +49,8 @@ function toView(row: MangaRow): MangaView {
     japanVolumes: row.japanVolumes,
     nextVolume: row.nextVolume,
     status: row.status,
+    readingStatus: row.readingStatus,
+    readingVolume: row.readingVolume,
     ownedVolumes: row.ownedVolumes
       .map((v) => v.volume)
       .sort((a, b) => a - b),
@@ -172,5 +176,53 @@ export async function setCustomTotal(
   await prisma.manga.update({
     where: { id: mangaId },
     data: { customTotalVolumes: total },
+  });
+}
+
+export type ReadingStatus = "UNREAD" | "READING" | "READ";
+
+/** Actualiza el estado de lectura y el tomo por el que va el usuario. */
+export async function setReading(
+  mangaId: number,
+  status: ReadingStatus,
+  volume: number | null,
+): Promise<void> {
+  await prisma.manga.update({
+    where: { id: mangaId },
+    data: { readingStatus: status, readingVolume: volume },
+  });
+}
+
+/**
+ * Marca todos los tomos de una serie como propios, o los limpia todos.
+ * Útil para series que ya tenés completas (no ir tomo por tomo).
+ */
+export async function setAllVolumes(
+  mangaId: number,
+  owned: boolean,
+): Promise<void> {
+  const manga = await prisma.manga.findUnique({
+    where: { id: mangaId },
+    include: { ownedVolumes: true },
+  });
+  if (!manga) return;
+
+  const total = getTotalVolumes(manga);
+
+  // Reseteamos y, si corresponde, recreamos 1..total de una.
+  await prisma.ownedVolume.deleteMany({ where: { mangaId } });
+
+  if (owned && total > 0) {
+    await prisma.ownedVolume.createMany({
+      data: Array.from({ length: total }, (_, i) => ({
+        mangaId,
+        volume: i + 1,
+      })),
+    });
+  }
+
+  await prisma.manga.update({
+    where: { id: mangaId },
+    data: { status: owned && total > 0 ? "COMPLETED" : "IN_PROGRESS" },
   });
 }

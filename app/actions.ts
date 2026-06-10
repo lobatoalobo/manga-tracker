@@ -6,7 +6,10 @@ import {
   removeFromCollection,
   toggleVolume,
   setCustomTotal,
+  setAllVolumes,
+  setReading,
   type AddMangaInput,
+  type ReadingStatus,
 } from "@/lib/collection";
 import { createReport, setReportStatus } from "@/lib/reports";
 
@@ -24,6 +27,22 @@ export async function removeMangaAction(id: number) {
 
 export async function toggleVolumeAction(mangaId: number, volume: number) {
   await toggleVolume(mangaId, volume);
+  revalidatePath("/collection");
+  revalidatePath(`/manga/${mangaId}`);
+}
+
+export async function setAllVolumesAction(mangaId: number, owned: boolean) {
+  await setAllVolumes(mangaId, owned);
+  revalidatePath("/collection");
+  revalidatePath(`/manga/${mangaId}`);
+}
+
+export async function setReadingAction(
+  mangaId: number,
+  status: ReadingStatus,
+  volume: number | null,
+) {
+  await setReading(mangaId, status, volume);
   revalidatePath("/collection");
   revalidatePath(`/manga/${mangaId}`);
 }

@@ -4,18 +4,27 @@ import { getIvreaEdition } from "./providers/ivrea";
 import { getPaniniEdition } from "./providers/panini";
 import { getOvniEdition } from "./providers/ovni";
 import { getMangaUpdatesData } from "./providers/mangaupdates";
-import { buildEditions } from "./editions";
+import { buildEditions, type BuiltEditions } from "./editions";
 
-export async function getMangaDetails(id: number, knownSlug?: string | null) {
-  const raw = await getMangaById(id);
+/** Datos rápidos de AniList (1 request). Para el render inmediato del detalle. */
+export async function getMangaCore(id: number) {
+  return normalizeAnilist(await getMangaById(id));
+}
 
-  const anilist = normalizeAnilist(raw);
+interface AnilistLike {
+  status?: string | null;
+  volumes?: number | null;
+}
 
-  const titles = [anilist.title.english, anilist.title.romaji].filter(
-    (t): t is string => Boolean(t),
-  );
-
-  // Resolvemos editoriales locales y MangaUpdates en paralelo.
+/**
+ * Resuelve las ediciones consultando todas las editoriales + MangaUpdates en
+ * paralelo. Es la parte lenta (scraping); conviene streamearla con <Suspense>.
+ */
+export async function resolveEditions(
+  anilist: AnilistLike,
+  titles: string[],
+  knownSlug?: string | null,
+): Promise<BuiltEditions> {
   const [edition, panini, ovni, mu] = await Promise.all([
     getIvreaEdition(titles, knownSlug).catch(() => null),
     getPaniniEdition(titles).catch(() => null),
@@ -25,21 +34,26 @@ export async function getMangaDetails(id: number, knownSlug?: string | null) {
     ),
   ]);
 
-  // `edition` = edición local primaria (Ivrea) para resolver el slug guardado.
-  // `editions` = todas las ediciones (locales + formatos) para el detalle.
-  // `muVolumes` = total estándar autoritativo para trackear.
-  const { editions, muVolumes } = buildEditions(
+  return buildEditions(anilist, edition, panini, ovni, mu);
+}
+
+/** Conveniencia (scripts/seed): combina core + ediciones. */
+export async function getMangaDetails(id: number, knownSlug?: string | null) {
+  const anilist = await getMangaCore(id);
+  const titles = titlesOf(anilist);
+  const { editions, muVolumes } = await resolveEditions(
     anilist,
-    edition,
-    panini,
-    ovni,
-    mu,
+    titles,
+    knownSlug,
   );
 
-  return {
-    anilist,
-    edition,
-    editions,
-    muVolumes,
-  };
+  return { anilist, editions, muVolumes };
+}
+
+export function titlesOf(anilist: {
+  title: { english?: string | null; romaji?: string | null };
+}): string[] {
+  return [anilist.title.english, anilist.title.romaji].filter(
+    (t): t is string => Boolean(t),
+  );
 }

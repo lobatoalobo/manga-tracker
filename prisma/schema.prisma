@@ -28,7 +28,11 @@ model Manga {
   japanVolumes     Int?
   nextVolume       Int?
 
-  status String @default("IN_PROGRESS") // IN_PROGRESS | COMPLETED
+  status String @default("IN_PROGRESS") // IN_PROGRESS | COMPLETED (según tomos que tenés)
+
+  // Lectura (eje independiente de "tener" el tomo)
+  readingStatus String @default("UNREAD") // UNREAD | READING | READ
+  readingVolume Int? // tomo por el que vas leyendo
 
   ownedVolumes OwnedVolume[]
 

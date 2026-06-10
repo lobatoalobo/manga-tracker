@@ -1,8 +1,9 @@
+import { Suspense } from "react";
 import { getMangaFromCollection } from "@/lib/collection";
-import { getMangaDetails } from "@/lib/getMangaDetails";
-import AddEditionButton from "@/components/AddEditionButton";
+import { getMangaCore } from "@/lib/getMangaDetails";
 import MangaCollectionSection from "@/components/MangaCollectionSection";
 import ReportButton from "@/components/ReportButton";
+import EditionsSection from "./EditionsSection";
 
 export default async function Page({
   params,
@@ -12,12 +13,12 @@ export default async function Page({
   const { id } = await params;
   const mangaId = Number(id);
 
-  const inCollection = await getMangaFromCollection(mangaId);
-
-  const details = await getMangaDetails(mangaId, inCollection?.editionSlug);
-  const { anilist, editions, muVolumes } = details;
-
-  const japanVolumes = editions.find((e) => e.region === "JP")?.volumes ?? null;
+  // Camino rápido: AniList (1 request) + colección (DB). Las editoriales (lento)
+  // se resuelven en <Suspense> y se streamean, sin bloquear el render inicial.
+  const [anilist, inCollection] = await Promise.all([
+    getMangaCore(mangaId),
+    getMangaFromCollection(mangaId),
+  ]);
 
   const authors = anilist.staff.map((a: { name: string }) => a.name).join(", ");
 
@@ -57,78 +58,26 @@ export default async function Page({
         </div>
       </div>
 
-      {/* Ediciones disponibles */}
+      {/* Si ya está en la colección, la grilla de tomos se muestra al instante
+          (desde la DB), sin esperar a las editoriales. */}
+      {inCollection && <MangaCollectionSection manga={inCollection} />}
+
+      {/* Ediciones (lento): se streamean con Suspense. */}
       <section className="mt-6">
         <h2 className="mb-1 text-lg font-semibold">Ediciones</h2>
-        {!inCollection && editions.length > 0 && (
+        {!inCollection && (
           <p className="mb-3 text-sm text-muted">
             Elegí qué edición coleccionás para trackearla.
           </p>
         )}
-        {editions.length > 0 ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {editions.map((ed) => {
-              const isTracked =
-                !!inCollection &&
-                (ed.publisher ?? ed.source) === inCollection.publisher;
-
-              return (
-              <div
-                key={ed.id}
-                className={`flex flex-col rounded-xl border bg-surface p-4 ${
-                  isTracked ? "border-accent" : "border-border"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">{ed.source}</span>
-                  <div className="flex items-center gap-2">
-                    {isTracked && (
-                      <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-white">
-                        ✓ Trackeando
-                      </span>
-                    )}
-                    <RegionBadge region={ed.region} />
-                  </div>
-                </div>
-                <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                  <Field label="Tomos" value={ed.volumes || "—"} />
-                  <Field label="Estado" value={ed.status} />
-                  {ed.nextVolume ? (
-                    <Field label="Próximo tomo" value={`#${ed.nextVolume}`} />
-                  ) : null}
-                </dl>
-                {ed.note && (
-                  <p className="mt-2 text-xs text-muted">{ed.note}</p>
-                )}
-                {ed.url && (
-                  <a
-                    href={ed.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 inline-block text-xs text-accent hover:underline"
-                  >
-                    Ver en {ed.publisher} ↗
-                  </a>
-                )}
-                {!inCollection && (
-                  <div className="mt-auto">
-                    <AddEditionButton
-                      manga={anilist}
-                      edition={ed}
-                      muVolumes={muVolumes}
-                      japanVolumes={japanVolumes}
-                    />
-                  </div>
-                )}
-              </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-sm text-muted">
-            No encontramos ediciones para esta serie.
-          </p>
-        )}
+        <Suspense fallback={<EditionsSkeleton />}>
+          <EditionsSection
+            anilist={anilist}
+            knownSlug={inCollection?.editionSlug}
+            trackedPublisher={inCollection?.publisher ?? null}
+            inCollection={!!inCollection}
+          />
+        </Suspense>
       </section>
 
       {anilist.description && (
@@ -137,10 +86,21 @@ export default async function Page({
         </p>
       )}
 
-      {inCollection && <MangaCollectionSection manga={inCollection} />}
-
       <ReportButton mangaId={mangaId} mangaTitle={anilist.title.romaji} />
     </main>
+  );
+}
+
+function EditionsSkeleton() {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {[0, 1].map((i) => (
+        <div
+          key={i}
+          className="h-32 animate-pulse rounded-xl border border-border bg-surface"
+        />
+      ))}
+    </div>
   );
 }
 
@@ -156,20 +116,5 @@ function Field({
       <dt className="text-xs text-muted">{label}</dt>
       <dd className="font-medium">{value ?? "—"}</dd>
     </div>
-  );
-}
-
-function RegionBadge({ region }: { region: "AR" | "JP" | "INT" }) {
-  const map: Record<string, { label: string; className: string }> = {
-    AR: { label: "🇦🇷 Argentina", className: "bg-sky-500/15 text-sky-300" },
-    JP: { label: "🇯🇵 Japón", className: "bg-rose-500/15 text-rose-300" },
-    INT: { label: "🌎 Internacional", className: "bg-emerald-500/15 text-emerald-300" },
-  };
-  const { label, className } = map[region] ?? map.INT;
-
-  return (
-    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${className}`}>
-      {label}
-    </span>
   );
 }

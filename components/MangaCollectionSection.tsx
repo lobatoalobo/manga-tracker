@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import VolumeGrid from "./VolumeGrid";
 import RemoveButton from "./RemoveButton";
+import ReadingControl from "./ReadingControl";
 import { getTotalVolumes } from "@/lib/getTotalVolumes";
+import { toggleVolumeAction, setAllVolumesAction } from "@/app/actions";
 import type { MangaView } from "@/lib/collection";
 
 export default function MangaCollectionSection({
@@ -11,20 +13,35 @@ export default function MangaCollectionSection({
 }: {
   manga: MangaView;
 }) {
-  const [ownedVolumes, setOwnedVolumes] = useState<number[]>(
-    manga.ownedVolumes ?? [],
-  );
+  const [owned, setOwned] = useState<number[]>(manga.ownedVolumes ?? []);
+  const [, startTransition] = useTransition();
 
   const total = getTotalVolumes(manga);
-  const owned = ownedVolumes.length;
-  const percentage = total > 0 ? Math.floor((owned / total) * 100) : 0;
+  const ownedCount = owned.length;
+  const percentage = total > 0 ? Math.floor((ownedCount / total) * 100) : 0;
 
   const missing =
     total > 0
       ? Array.from({ length: total }, (_, i) => i + 1).filter(
-          (v) => !ownedVolumes.includes(v),
+          (v) => !owned.includes(v),
         )
       : null;
+
+  const allOwned = total > 0 && ownedCount >= total;
+
+  function toggle(volume: number) {
+    setOwned((prev) =>
+      prev.includes(volume)
+        ? prev.filter((v) => v !== volume)
+        : [...prev, volume].sort((a, b) => a - b),
+    );
+    startTransition(() => toggleVolumeAction(manga.id, volume));
+  }
+
+  function setAll(value: boolean) {
+    setOwned(value ? Array.from({ length: total }, (_, i) => i + 1) : []);
+    startTransition(() => setAllVolumesAction(manga.id, value));
+  }
 
   return (
     <section className="mt-6 rounded-xl border border-border bg-surface p-5">
@@ -35,7 +52,8 @@ export default function MangaCollectionSection({
           </span>
           {manga.publisher && (
             <p className="mt-2 text-sm text-muted">
-              Trackeando: <span className="text-foreground">{manga.publisher}</span>
+              Trackeando:{" "}
+              <span className="text-foreground">{manga.publisher}</span>
             </p>
           )}
         </div>
@@ -45,7 +63,7 @@ export default function MangaCollectionSection({
       <div className="mt-4">
         <div className="flex items-baseline justify-between text-sm">
           <span className="font-medium">
-            {owned} / {total} tomos
+            {ownedCount} / {total} tomos
           </span>
           <span className="text-muted">{percentage}%</span>
         </div>
@@ -66,13 +84,27 @@ export default function MangaCollectionSection({
             : "¡colección completa! 🎉"}
       </p>
 
-      <h2 className="mt-6 mb-3 text-lg font-semibold">Tomos</h2>
+      <div className="mt-6 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Tomos</h2>
+        {total > 0 && (
+          <button
+            onClick={() => setAll(!allOwned)}
+            className="rounded-lg border border-border px-3 py-1.5 text-sm transition hover:border-accent"
+          >
+            {allOwned ? "Limpiar todos" : "Tengo todos"}
+          </button>
+        )}
+      </div>
 
-      <VolumeGrid
+      <div className="mt-3">
+        <VolumeGrid totalVolumes={total} owned={owned} onToggle={toggle} />
+      </div>
+
+      <ReadingControl
         mangaId={manga.id}
-        totalVolumes={total}
-        ownedVolumes={ownedVolumes}
-        onChange={setOwnedVolumes}
+        total={total}
+        initialStatus={manga.readingStatus}
+        initialVolume={manga.readingVolume}
       />
     </section>
   );
