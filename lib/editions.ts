@@ -1,5 +1,6 @@
 import type { IvreaData } from "./providers/ivrea";
 import type { PaniniData } from "./providers/panini";
+import type { OvniData } from "./providers/ovni";
 import type { MangaUpdatesData } from "./providers/mangaupdates";
 
 /**
@@ -41,6 +42,7 @@ export function buildEditions(
   anilist: AnilistLike,
   ivrea: IvreaData | null,
   panini: PaniniData | null,
+  ovni: OvniData | null,
   mu: MangaUpdatesData | null,
 ): BuiltEditions {
   const editions: Edition[] = [];
@@ -72,6 +74,21 @@ export function buildEditions(
       nextVolume: null,
       url: panini.url,
       note: `${panini.listed} tomos en catálogo`,
+    });
+  }
+
+  if (ovni && ovni.totalVolumes > 0) {
+    editions.push({
+      id: "ovni",
+      source: "Ovni Press",
+      region: "AR",
+      publisher: "Ovni Press",
+      slug: null,
+      status: "EN CATÁLOGO",
+      volumes: ovni.totalVolumes,
+      nextVolume: null,
+      url: ovni.url,
+      note: `${ovni.listed} tomos en catálogo`,
     });
   }
 

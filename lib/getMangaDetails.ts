@@ -2,6 +2,7 @@ import { getMangaById } from "./anilist";
 import { normalizeAnilist } from "./normalizeAnilist";
 import { getIvreaEdition } from "./providers/ivrea";
 import { getPaniniEdition } from "./providers/panini";
+import { getOvniEdition } from "./providers/ovni";
 import { getMangaUpdatesData } from "./providers/mangaupdates";
 import { buildEditions } from "./editions";
 
@@ -15,9 +16,10 @@ export async function getMangaDetails(id: number, knownSlug?: string | null) {
   );
 
   // Resolvemos editoriales locales y MangaUpdates en paralelo.
-  const [edition, panini, mu] = await Promise.all([
+  const [edition, panini, ovni, mu] = await Promise.all([
     getIvreaEdition(titles, knownSlug).catch(() => null),
     getPaniniEdition(titles).catch(() => null),
+    getOvniEdition(titles).catch(() => null),
     getMangaUpdatesData(titles, { expectedVolumes: anilist.volumes }).catch(
       () => null,
     ),
@@ -26,7 +28,13 @@ export async function getMangaDetails(id: number, knownSlug?: string | null) {
   // `edition` = edición local primaria (Ivrea) para resolver el slug guardado.
   // `editions` = todas las ediciones (locales + formatos) para el detalle.
   // `muVolumes` = total estándar autoritativo para trackear.
-  const { editions, muVolumes } = buildEditions(anilist, edition, panini, mu);
+  const { editions, muVolumes } = buildEditions(
+    anilist,
+    edition,
+    panini,
+    ovni,
+    mu,
+  );
 
   return {
     anilist,
