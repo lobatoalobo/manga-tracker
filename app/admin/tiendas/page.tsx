@@ -6,7 +6,7 @@ import { createStoreAdminAction } from "@/app/actions";
 import StoreFields from "@/components/StoreFields";
 import StoreAdminActions from "@/components/StoreAdminActions";
 
-export const metadata = { title: "Tiendas (admin) · Manga Tracker" };
+export const metadata = { title: "Tiendas (admin) · Nakama" };
 
 export default async function AdminTiendasPage() {
   const session = await auth();
@@ -69,6 +69,8 @@ function StoreRow({
     province: string | null;
     phone: string | null;
     hours: string | null;
+    website: string | null;
+    social: string | null;
   };
   pending: boolean;
 }) {
@@ -86,6 +88,34 @@ function StoreRow({
             {[store.phone, store.hours].filter(Boolean).join(" · ")}
           </p>
         )}
+        <div className="mt-1 flex flex-wrap gap-3 text-xs">
+          {store.website && (
+            <a
+              href={store.website}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent break-all hover:underline"
+            >
+              🌐 {store.website}
+            </a>
+          )}
+          {store.social && (
+            <a
+              href={
+                store.social.startsWith("http")
+                  ? store.social
+                  : store.social.startsWith("@")
+                    ? `https://instagram.com/${store.social.slice(1)}`
+                    : store.social
+              }
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent break-all hover:underline"
+            >
+              📱 {store.social}
+            </a>
+          )}
+        </div>
       </div>
       <StoreAdminActions id={store.id} pending={pending} />
     </li>

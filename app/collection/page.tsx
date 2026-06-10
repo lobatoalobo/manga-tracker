@@ -6,7 +6,7 @@ import ShareToggle from "@/components/ShareToggle";
 import { getCollectionStats } from "@/services/collectionService";
 
 export const metadata = {
-  title: "Mi colección · Manga Tracker",
+  title: "Mi colección · Nakama",
 };
 
 export default async function CollectionPage() {

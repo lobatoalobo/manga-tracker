@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Manga Tracker",
+  title: "Nakama",
   description: "Seguí tu colección de mangas al estilo Whakoom.",
 };
 
@@ -46,7 +46,7 @@ export default async function RootLayout({
         <nav className="sticky top-0 z-20 border-b border-border bg-surface/80 backdrop-blur">
           <div className="mx-auto flex max-w-6xl items-center gap-6 px-5 py-4">
             <Link href="/" className="font-bold">
-              📚 Manga Tracker
+              📚 Nakama
             </Link>
 
             <Link
@@ -123,6 +123,20 @@ export default async function RootLayout({
         </nav>
 
         {children}
+
+        <footer className="mt-12 border-t border-border py-8 text-center text-sm text-muted">
+          <p>Nakama · datos de AniList, MangaUpdates y editoriales locales.</p>
+          {process.env.NEXT_PUBLIC_DONATE_URL && (
+            <a
+              href={process.env.NEXT_PUBLIC_DONATE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-block rounded-lg border border-border px-4 py-2 transition hover:border-accent hover:text-foreground"
+            >
+              ☕ Invitame un cafecito
+            </a>
+          )}
+        </footer>
       </body>
     </html>
   );

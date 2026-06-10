@@ -4,7 +4,7 @@ import { getPublicSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
 import VolumeGrid from "@/components/VolumeGrid";
 
-export const metadata = { title: "Colección · Manga Tracker" };
+export const metadata = { title: "Colección · Nakama" };
 
 export default async function PublicSeriesPage({
   params,

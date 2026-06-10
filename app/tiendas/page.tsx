@@ -4,7 +4,7 @@ import StoreList from "@/components/StoreList";
 import ProposeStore from "@/components/ProposeStore";
 
 export const metadata = {
-  title: "Tiendas · Manga Tracker",
+  title: "Tiendas · Nakama",
 };
 
 export default async function TiendasPage() {

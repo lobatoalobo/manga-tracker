@@ -205,6 +205,38 @@ export async function getTrendingManga() {
   return json.data.Page.media;
 }
 
+/** Listado A-Z de mangas, paginado (10 por página). */
+export async function getMangaPage(page: number) {
+  const query = `
+    query ($page: Int) {
+      Page(page: $page, perPage: 10) {
+        pageInfo { currentPage hasNextPage }
+        media(type: MANGA, sort: TITLE_ROMAJI) {
+          id
+          title { romaji english native }
+          coverImage { large }
+        }
+      }
+    }
+  `;
+
+  const response = await fetch("https://graphql.anilist.co", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, variables: { page } }),
+    next: { revalidate: 60 * 60 * 24 },
+  });
+
+  const json = await response.json();
+  return {
+    media: json.data.Page.media,
+    pageInfo: json.data.Page.pageInfo as {
+      currentPage: number;
+      hasNextPage: boolean;
+    },
+  };
+}
+
 export async function getMangaById(
   id: number,
 ) {

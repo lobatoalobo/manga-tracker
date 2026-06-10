@@ -5,7 +5,7 @@ import { getReports } from "@/lib/reports";
 import ReportActions from "@/components/ReportActions";
 
 export const metadata = {
-  title: "Reportes · Manga Tracker",
+  title: "Reportes · Nakama",
 };
 
 export default async function ReportesPage() {

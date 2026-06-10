@@ -4,7 +4,7 @@ import CollectionGrid from "@/components/CollectionGrid";
 import { getCollectionStats } from "@/services/collectionService";
 
 export const metadata = {
-  title: "Colección · Manga Tracker",
+  title: "Colección · Nakama",
 };
 
 export default async function PublicCollectionPage({
