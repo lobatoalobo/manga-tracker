@@ -20,6 +20,11 @@ import {
   type StoreInput,
 } from "@/lib/stores";
 import { isAdmin } from "@/lib/admin";
+import {
+  addPurchase,
+  setPurchaseStatus,
+  deletePurchase,
+} from "@/lib/purchases";
 
 export async function addEditionAction(input: AddEditionInput) {
   const userId = await requireUserId();
@@ -151,4 +156,46 @@ export async function deleteStoreAction(id: number) {
 async function assertAdmin() {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) throw new Error("No autorizado");
+}
+
+// --- Compras ---
+
+export async function addPurchaseAction(_prev: unknown, formData: FormData) {
+  const userId = await requireUserId();
+  const get = (k: string) => ((formData.get(k) as string | null) ?? "").trim();
+
+  const title = get("title");
+  const price = Number(get("price"));
+  if (!title || !Number.isFinite(price)) {
+    return { ok: false as const, error: "Faltan título o precio." };
+  }
+
+  const dateStr = get("purchasedAt");
+  await addPurchase(userId, {
+    title,
+    volume: get("volume") ? Number(get("volume")) : null,
+    edition: get("edition") || null,
+    price,
+    store: get("store") || null,
+    status: get("status") === "RECEIVED" ? "RECEIVED" : "ORDERED",
+    purchasedAt: dateStr ? new Date(dateStr) : null,
+  });
+
+  revalidatePath("/compras");
+  return { ok: true as const };
+}
+
+export async function setPurchaseStatusAction(
+  id: number,
+  status: "ORDERED" | "RECEIVED",
+) {
+  const userId = await requireUserId();
+  await setPurchaseStatus(userId, id, status);
+  revalidatePath("/compras");
+}
+
+export async function deletePurchaseAction(id: number) {
+  const userId = await requireUserId();
+  await deletePurchase(userId, id);
+  revalidatePath("/compras");
 }

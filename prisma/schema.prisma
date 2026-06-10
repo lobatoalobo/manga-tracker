@@ -18,9 +18,31 @@ model User {
   shareSlug     String?   @unique // si está seteado, la colección es pública en /u/<slug>
   createdAt     DateTime  @default(now())
 
-  accounts Account[]
-  sessions Session[]
-  mangas   Manga[]
+  accounts  Account[]
+  sessions  Session[]
+  mangas    Manga[]
+  purchases Purchase[]
+}
+
+// Historial de compras del usuario (lo que antes llevaba en un Excel).
+model Purchase {
+  id        Int    @id @default(autoincrement())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title     String // título del manga (texto libre)
+  anilistId Int? // link opcional a la serie
+  volume    Int? // tomo, opcional
+  edition   String? // edición/editorial, opcional
+  price     Float // precio pagado (ARS)
+  store     String? // dónde lo compraste
+  status    String   @default("ORDERED") // ORDERED (pedido) | RECEIVED (recibido/retirado)
+
+  purchasedAt DateTime  @default(now()) // fecha de compra/pedido
+  receivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model Account {

@@ -14,7 +14,7 @@ export default async function Home({
   searchParams: Promise<{ search?: string; tab?: string; page?: string }>;
 }) {
   const session = await auth();
-  // +18 en búsqueda: cualquier logueado. En listados (Hot/A-Z): solo admin.
+  // +18 en búsqueda: cualquier logueado.
   const adultInSearch = !!session;
   const adultInLists = isAdmin(session?.user?.email);
 
