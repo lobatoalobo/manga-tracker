@@ -12,6 +12,13 @@ import {
   type ReadingStatus,
 } from "@/lib/collection";
 import { createReport, setReportStatus } from "@/lib/reports";
+import {
+  createStore,
+  setStoreStatus,
+  deleteStore,
+  type StoreInput,
+} from "@/lib/stores";
+import { isAdmin } from "@/lib/admin";
 
 export async function addEditionAction(input: AddEditionInput) {
   const userId = await requireUserId();
@@ -81,4 +88,59 @@ export async function resolveReportAction(
 ) {
   await setReportStatus(id, status);
   revalidatePath("/admin/reportes");
+}
+
+// --- Tiendas ---
+
+function readStore(formData: FormData): StoreInput {
+  const get = (k: string) => (formData.get(k) as string | null) ?? null;
+  return {
+    name: (get("name") ?? "").trim(),
+    address: get("address"),
+    city: get("city"),
+    province: get("province"),
+    phone: get("phone"),
+    hours: get("hours"),
+    website: get("website"),
+    social: get("social"),
+  };
+}
+
+/** Propuesta de la comunidad: queda PENDING para que el dueño la apruebe. */
+export async function submitStoreAction(_prev: unknown, formData: FormData) {
+  const userId = await requireUserId();
+  const input = readStore(formData);
+  if (!input.name) return { ok: false as const, error: "Falta el nombre." };
+
+  await createStore(input, { status: "PENDING", submittedBy: userId });
+  revalidatePath("/admin/tiendas");
+  return { ok: true as const };
+}
+
+export async function createStoreAdminAction(formData: FormData) {
+  await assertAdmin();
+  const input = readStore(formData);
+  if (!input.name) return;
+  await createStore(input, { status: "APPROVED" });
+  revalidatePath("/admin/tiendas");
+  revalidatePath("/tiendas");
+}
+
+export async function approveStoreAction(id: number) {
+  await assertAdmin();
+  await setStoreStatus(id, "APPROVED");
+  revalidatePath("/admin/tiendas");
+  revalidatePath("/tiendas");
+}
+
+export async function deleteStoreAction(id: number) {
+  await assertAdmin();
+  await deleteStore(id);
+  revalidatePath("/admin/tiendas");
+  revalidatePath("/tiendas");
+}
+
+async function assertAdmin() {
+  const session = await auth();
+  if (!isAdmin(session?.user?.email)) throw new Error("No autorizado");
 }

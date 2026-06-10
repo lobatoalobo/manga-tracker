@@ -4,6 +4,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { countPendingReports } from "@/lib/reports";
+import { countPendingStores } from "@/lib/stores";
 import { SignOut } from "@/components/AuthButtons";
 import "./globals.css";
 
@@ -29,7 +30,12 @@ export default async function RootLayout({
 }>) {
   const session = await auth();
   const admin = isAdmin(session?.user?.email);
-  const pendingReports = admin ? await countPendingReports().catch(() => 0) : 0;
+  const [pendingReports, pendingStores] = admin
+    ? await Promise.all([
+        countPendingReports().catch(() => 0),
+        countPendingStores().catch(() => 0),
+      ])
+    : [0, 0];
 
   return (
     <html
@@ -57,18 +63,37 @@ export default async function RootLayout({
                 >
                   Mi colección
                 </Link>
+                <Link
+                  href="/tiendas"
+                  className="text-sm text-muted transition hover:text-foreground"
+                >
+                  Tiendas
+                </Link>
                 {admin && (
-                  <Link
-                    href="/admin/reportes"
-                    className="flex items-center gap-1.5 text-sm text-muted transition hover:text-foreground"
-                  >
-                    Reportes
-                    {pendingReports > 0 && (
-                      <span className="rounded-full bg-accent px-1.5 py-0.5 text-xs font-semibold text-white">
-                        {pendingReports}
-                      </span>
-                    )}
-                  </Link>
+                  <>
+                    <Link
+                      href="/admin/reportes"
+                      className="flex items-center gap-1.5 text-sm text-muted transition hover:text-foreground"
+                    >
+                      Reportes
+                      {pendingReports > 0 && (
+                        <span className="rounded-full bg-accent px-1.5 py-0.5 text-xs font-semibold text-white">
+                          {pendingReports}
+                        </span>
+                      )}
+                    </Link>
+                    <Link
+                      href="/admin/tiendas"
+                      className="flex items-center gap-1.5 text-sm text-muted transition hover:text-foreground"
+                    >
+                      Tiendas admin
+                      {pendingStores > 0 && (
+                        <span className="rounded-full bg-accent px-1.5 py-0.5 text-xs font-semibold text-white">
+                          {pendingStores}
+                        </span>
+                      )}
+                    </Link>
+                  </>
                 )}
               </>
             )}

@@ -138,6 +138,24 @@ model PublisherEdition {
   @@index([normTitle])
 }
 
+// Comiquerías / tiendas locales. Curadas por el dueño o propuestas por usuarios.
+model Store {
+  id          Int      @id @default(autoincrement())
+  name        String
+  address     String?
+  city        String?
+  province    String?
+  phone       String?
+  hours       String?
+  website     String?
+  social      String?
+  status      String   @default("APPROVED") // APPROVED | PENDING
+  submittedBy String? // userId que la propuso (si vino de la comunidad)
+  createdAt   DateTime @default(now())
+
+  @@index([status])
+}
+
 // Reportes/correcciones de datos enviados por usuarios (revisión del dueño).
 model Report {
   id         Int      @id @default(autoincrement())
