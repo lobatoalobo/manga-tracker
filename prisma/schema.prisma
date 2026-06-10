@@ -1,6 +1,5 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../lib/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -9,9 +8,50 @@ datasource db {
 }
 
 model Manga {
-  id           Int    @id
-  title        String
+  id           Int     @id // AniList media id
+  romajiTitle  String
+  englishTitle String?
+  nativeTitle  String?
   coverImage   String
-  totalVolumes Int
-  ownedVolumes String
+
+  // Totales de tomos por fuente (prioridad en lib/getTotalVolumes.ts)
+  apiTotalVolumes    Int? // AniList (suele ser null en series en curso)
+  muVolumes          Int? // MangaUpdates (edición estándar) — fuente autoritativa
+  customTotalVolumes Int? // override manual del usuario
+
+  // Datos de la edición local (Ivrea Argentina u otra editorial)
+  publisher        String?
+  editionSlug      String?
+  argentinaStatus  String?
+  argentinaVolumes Int?
+  japanStatus      String?
+  japanVolumes     Int?
+  nextVolume       Int?
+
+  status String @default("IN_PROGRESS") // IN_PROGRESS | COMPLETED
+
+  ownedVolumes OwnedVolume[]
+
+  createdAt DateTime @default(now())
+}
+
+// Reportes/correcciones de datos enviados por usuarios (revisión manual).
+model Report {
+  id         Int      @id @default(autoincrement())
+  mangaId    Int? // id de AniList, si el reporte es sobre un manga puntual
+  mangaTitle String // título para contexto
+  message    String // p. ej. "La edición de Naruto de Panini tiene 72 tomos"
+  status     String   @default("PENDING") // PENDING | RESOLVED
+  createdAt  DateTime @default(now())
+}
+
+model OwnedVolume {
+  id Int @id @default(autoincrement())
+
+  mangaId Int
+  volume  Int
+
+  manga Manga @relation(fields: [mangaId], references: [id], onDelete: Cascade)
+
+  @@unique([mangaId, volume])
 }

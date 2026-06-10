@@ -1,69 +1,64 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
+import { toggleVolumeAction } from "@/app/actions";
 
 export default function VolumeGrid({
   mangaId,
   totalVolumes,
   ownedVolumes,
-  wishlistVolumes,
+  onChange,
 }: {
   mangaId: number;
   totalVolumes: number;
   ownedVolumes: number[];
-  wishlistVolumes: number[];
+  onChange?: (volumes: number[]) => void;
 }) {
-  const router = useRouter();
+  const [owned, setOwned] = useState(ownedVolumes);
+  const [, startTransition] = useTransition();
 
-  async function toggle(volume: number) {
-    await fetch("/api/collection", {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        mangaId,
-        volume,
-      }),
+  function toggle(volume: number) {
+    const updated = owned.includes(volume)
+      ? owned.filter((v) => v !== volume)
+      : [...owned, volume].sort((a, b) => a - b);
+
+    // Actualización optimista.
+    setOwned(updated);
+    onChange?.(updated);
+
+    startTransition(async () => {
+      await toggleVolumeAction(mangaId, volume);
     });
-
-    router.refresh();
   }
 
-  const volumes = [];
-
-  for (let i = 1; i <= totalVolumes; i++) {
-    const owned = ownedVolumes.includes(i);
-
-    const wished = wishlistVolumes.includes(i);
-
-    volumes.push(
-      <button
-        key={i}
-        onClick={() => toggle(i)}
-        style={{
-          width: 60,
-          height: 60,
-          cursor: "pointer",
-          fontWeight: "bold",
-          backgroundColor: owned ? "#90EE90" : wished ? "#FFE066" : "#FFFFFF",
-          border: "1px solid black",
-        }}
-      >
-        {i}
-      </button>,
+  if (totalVolumes <= 0) {
+    return (
+      <p className="text-sm text-muted">
+        Todavía no conocemos la cantidad de tomos de esta serie.
+      </p>
     );
   }
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(5, 60px)",
-        gap: "10px",
-      }}
-    >
-      {volumes}
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(48px,1fr))] gap-2">
+      {Array.from({ length: totalVolumes }, (_, i) => i + 1).map((volume) => {
+        const isOwned = owned.includes(volume);
+
+        return (
+          <button
+            key={volume}
+            onClick={() => toggle(volume)}
+            title={isOwned ? `Tenés el tomo ${volume}` : `Falta el tomo ${volume}`}
+            className={`aspect-square rounded-md border text-sm font-semibold transition ${
+              isOwned
+                ? "border-accent bg-accent text-white"
+                : "border-border bg-surface-2 text-muted hover:border-accent hover:text-foreground"
+            }`}
+          >
+            {volume}
+          </button>
+        );
+      })}
     </div>
   );
 }

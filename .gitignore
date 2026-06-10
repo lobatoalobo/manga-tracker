@@ -42,4 +42,9 @@ next-env.d.ts
 
 /lib/generated/prisma
 
-/lib/generated/prisma
+# Claude Code settings locales (no compartir)
+.claude/settings.local.json
+
+# Base de datos SQLite local (se recrea con las migraciones de Prisma)
+/prisma/dev.db
+/prisma/dev.db-journal
