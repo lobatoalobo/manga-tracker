@@ -5,6 +5,7 @@ import {
 } from "@/lib/anilist";
 import SearchBar from "@/components/SearchBar";
 import { auth } from "@/auth";
+import { isAdmin } from "@/lib/admin";
 import Link from "next/link";
 
 export default async function Home({
@@ -13,7 +14,9 @@ export default async function Home({
   searchParams: Promise<{ search?: string; tab?: string; page?: string }>;
 }) {
   const session = await auth();
-  const includeAdult = !!session; // contenido +18 solo para logueados
+  // +18 en búsqueda: cualquier logueado. En listados (Hot/A-Z): solo admin.
+  const adultInSearch = !!session;
+  const adultInLists = isAdmin(session?.user?.email);
 
   const params = await searchParams;
   const query = params.search?.trim();
@@ -24,13 +27,13 @@ export default async function Home({
   let pageInfo: { hasNextPage: boolean } | null = null;
 
   if (query) {
-    mangas = await searchMangaList(query, includeAdult);
+    mangas = await searchMangaList(query, adultInSearch);
   } else if (tab === "az") {
-    const res = await getMangaPage(page, includeAdult);
+    const res = await getMangaPage(page, adultInLists);
     mangas = res.media;
     pageInfo = res.pageInfo;
   } else {
-    mangas = await getTrendingManga(includeAdult);
+    mangas = await getTrendingManga(adultInLists);
   }
 
   return (
