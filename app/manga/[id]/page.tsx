@@ -4,7 +4,6 @@ import { auth } from "@/auth";
 import { getSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
 import { getHiatus } from "@/lib/anilist";
-import { crumbSearch } from "@/lib/crumb";
 import { isWished } from "@/lib/wishlist";
 import { getNote, getSeriesNotes } from "@/lib/notes";
 import type { ReadingLink } from "@/lib/normalizeAnilist";
@@ -14,6 +13,7 @@ import WishButton from "@/components/WishButton";
 import NoteEditor from "@/components/NoteEditor";
 import { SignIn } from "@/components/AuthButtons";
 import EditionsSection from "./EditionsSection";
+import CrumbBuyButton from "./CrumbBuyButton";
 
 export default async function Page({
   params,
@@ -125,14 +125,9 @@ export default async function Page({
                 initialWished={wished}
               />
             )}
-            <a
-              href={crumbSearch(anilist.title.romaji)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
-            >
-              🛒 Comprar en Crumb
-            </a>
+            <Suspense fallback={null}>
+              <CrumbBuyButton anilist={anilist} />
+            </Suspense>
           </div>
         </div>
       </div>

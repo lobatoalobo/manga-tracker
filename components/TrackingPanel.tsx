@@ -137,7 +137,7 @@ export default function TrackingPanel({
             : "¡colección completa! 🎉"}
       </p>
 
-      {missing.length > 0 && (
+      {missing.length > 0 && sel.region === "AR" && (
         <a
           href={crumbSearch(title)}
           target="_blank"

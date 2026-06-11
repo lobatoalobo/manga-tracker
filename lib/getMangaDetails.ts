@@ -1,3 +1,4 @@
+import { cache as reactCache } from "react";
 import { getMangaById } from "./anilist";
 import { normalizeAnilist } from "./normalizeAnilist";
 import { getIvreaEdition } from "./providers/ivrea";
@@ -38,7 +39,7 @@ const PUBLISHER_ID: Record<string, string> = {
  * editoriales que no estén, scrapea en vivo y las cachea en el índice.
  * MangaUpdates se consulta siempre en vivo (formatos).
  */
-export async function resolveEditions(
+export const resolveEditions = reactCache(async function resolveEditions(
   anilist: AnilistLike,
   titles: string[],
   knownSlug?: string | null,
@@ -50,7 +51,7 @@ export async function resolveEditions(
   const built = await resolveEditionsLive(anilist, titles, knownSlug);
   await saveEditionsCache(anilist.id, built);
   return built;
-}
+});
 
 async function getEditionsCache(
   anilistId: number,

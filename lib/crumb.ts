@@ -1,8 +1,10 @@
 export const CRUMB_URL = "https://www.crumb.com.ar";
 
-/** Link de búsqueda en Crumb (VTEX full-text). */
+/** Link de búsqueda filtrada en el catálogo de Crumb. */
 export function crumbSearch(title: string): string {
-  return `${CRUMB_URL}/${encodeURIComponent(title.trim())}?map=ft`;
+  return `${CRUMB_URL}/productos/?filter=${encodeURIComponent(
+    title.trim(),
+  )}&order=0&view=1`;
 }
 
 /** Categorías de manga por editorial en Crumb. */
