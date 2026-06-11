@@ -50,6 +50,16 @@ export function normalizeAnilist(manga: any) {
         name: staff.node.name.full,
       })),
 
+    // Asistentes (ayudantes de la obra): el rol de AniList contiene "Assistant"
+    // (p. ej. Gege Akutami fue asistente en "Kiss x Death").
+    assistants: manga.staff.edges
+      .filter((staff: any) => /assistant/i.test(staff.role ?? ""))
+      .map((staff: any) => ({
+        id: staff.node.id,
+        role: staff.role,
+        name: staff.node.name.full,
+      })),
+
     characters: manga.characters.edges.map((character: any) => ({
       role: character.role,
 

@@ -121,6 +121,27 @@ export default async function Page({
             <Field label="Popularidad" value={anilist.popularity ?? "—"} />
           </dl>
 
+          {anilist.assistants?.length > 0 && (
+            <div className="mt-2 text-sm">
+              <dt className="text-xs text-muted">Asistentes</dt>
+              <dd className="font-medium">
+                {dedupeStaff(anilist.assistants).map(
+                  (s: { id: number; name: string }, i: number) => (
+                    <span key={s.id}>
+                      {i > 0 && ", "}
+                      <Link
+                        href={`/autor/${s.id}`}
+                        className="hover:text-accent hover:underline"
+                      >
+                        {s.name}
+                      </Link>
+                    </span>
+                  ),
+                )}
+              </dd>
+            </div>
+          )}
+
           <div className="mt-4 flex flex-wrap items-center gap-3">
             {canTrack && (
               <WishButton
