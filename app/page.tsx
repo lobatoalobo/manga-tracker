@@ -8,6 +8,7 @@ import SearchBar from "@/components/SearchBar";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { displayTitle, isExactTitleMatch } from "@/lib/title";
+import Pager from "@/components/Pager";
 import Link from "next/link";
 
 export default async function Home({
@@ -33,7 +34,7 @@ export default async function Home({
   const isList = tab === "az" || tab === "mangaka";
 
   let mangas: any[];
-  let pageInfo: { hasNextPage: boolean } | null = null;
+  let pageInfo: { hasNextPage: boolean; lastPage: number } | null = null;
 
   if (query) {
     // Traemos +18 solo para logueados; y para no-admin, las series Hentai
@@ -138,33 +139,7 @@ export default async function Home({
       </div>
 
       {!query && isList && pageInfo && (
-        <div className="mt-8 flex items-center justify-center gap-3">
-          {page > 1 ? (
-            <Link
-              href={`${listBase}&page=${page - 1}`}
-              className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
-            >
-              ← Anterior
-            </Link>
-          ) : (
-            <span className="rounded-lg border border-border px-4 py-2 text-sm text-muted opacity-40">
-              ← Anterior
-            </span>
-          )}
-          <span className="text-sm text-muted">Página {page}</span>
-          {pageInfo.hasNextPage ? (
-            <Link
-              href={`${listBase}&page=${page + 1}`}
-              className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
-            >
-              Siguiente →
-            </Link>
-          ) : (
-            <span className="rounded-lg border border-border px-4 py-2 text-sm text-muted opacity-40">
-              Siguiente →
-            </span>
-          )}
-        </div>
+        <Pager basePath={listBase} page={page} lastPage={pageInfo.lastPage} />
       )}
     </main>
   );

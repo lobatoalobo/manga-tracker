@@ -256,7 +256,7 @@ export async function getMangaPage(
   const query = `
     query ($page: Int) {
       Page(page: $page, perPage: 10) {
-        pageInfo { currentPage hasNextPage }
+        pageInfo { currentPage hasNextPage lastPage }
         media(type: MANGA, sort: TITLE_ROMAJI${filters}) {
           id
           title { romaji english native }
@@ -280,6 +280,7 @@ export async function getMangaPage(
     pageInfo: json.data.Page.pageInfo as {
       currentPage: number;
       hasNextPage: boolean;
+      lastPage: number;
     },
   };
 }
