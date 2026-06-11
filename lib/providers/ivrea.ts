@@ -1,9 +1,11 @@
 import * as cheerio from "cheerio";
+import { authorMatches } from "@/lib/authorMatch";
 
 export interface IvreaData {
   publisher: string;
   slug: string;
   title: string;
+  author: string | null;
   url: string;
   argentinaStatus: string;
   argentinaVolumes: number;
@@ -36,6 +38,8 @@ export async function getIvreaDataBySlug(
   const argentina = parseArgentina(text);
   const japan = matchEstado(text, "JAPÓN");
   const nextMatch = text.match(/PR[ÓO]XIMO TOMO A LA VENTA:\s*#?(\d+)/i);
+  // La ficha lista el autor como "AUTOR: NOMBRE • ..." (separador • o salto).
+  const authorMatch = text.match(/AUTOR(?:ES)?:\s*([^•·|\n]+)/i);
 
   return {
     publisher: "Ivrea Argentina",
@@ -45,6 +49,7 @@ export async function getIvreaDataBySlug(
       .load($("h1").first().text() || "")("body")
       .text()
       .trim(),
+    author: authorMatch ? authorMatch[1].trim() : null,
     url,
     argentinaStatus: argentina.status,
     argentinaVolumes: argentina.volumes,
@@ -67,7 +72,9 @@ export async function getIvreaDataBySlug(
 export async function getIvreaEdition(
   titles: string | string[],
   knownSlug?: string | null,
+  authors: string[] = [],
 ): Promise<IvreaData | null> {
+  // Slug guardado en la colección: es de confianza, no se re-valida por autor.
   if (knownSlug) {
     const data = await getIvreaDataBySlug(knownSlug);
     if (data) return data;
@@ -75,9 +82,14 @@ export async function getIvreaEdition(
 
   const titleList = (Array.isArray(titles) ? titles : [titles]).filter(Boolean);
 
+  // Descarta una ficha cuyo título matchea pero el autor no: distintas obras
+  // homónimas (p. ej. "Real" de Inoue vs. otra serie llamada "Real").
+  const ok = (d: IvreaData | null) =>
+    d && authorMatches(authors, d.author) ? d : null;
+
   // 1) Slug directo a partir de cada título.
   for (const title of titleList) {
-    const data = await getIvreaDataBySlug(slugify(title));
+    const data = ok(await getIvreaDataBySlug(slugify(title)));
     if (data) return data;
   }
 
@@ -86,7 +98,7 @@ export async function getIvreaEdition(
     const candidates = await searchIvrea(title);
 
     for (const slug of candidates) {
-      const data = await getIvreaDataBySlug(slug);
+      const data = ok(await getIvreaDataBySlug(slug));
       if (data) return data;
     }
   }

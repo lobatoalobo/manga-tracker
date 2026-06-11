@@ -1,7 +1,8 @@
 import { cache as reactCache } from "react";
 import { getMangaById } from "./anilist";
 import { normalizeAnilist } from "./normalizeAnilist";
-import { getIvreaEdition } from "./providers/ivrea";
+import { getIvreaEdition, getIvreaDataBySlug } from "./providers/ivrea";
+import { authorMatches } from "./authorMatch";
 import { getPaniniEdition } from "./providers/panini";
 import { getOvniEdition } from "./providers/ovni";
 import { getMangaUpdatesData } from "./providers/mangaupdates";
@@ -16,6 +17,12 @@ import { buildEditions, type BuiltEditions, type LocalEdition } from "./editions
 import { prisma } from "./prisma";
 
 const EDITIONS_CACHE_TTL = 1000 * 60 * 60 * 24 * 3; // 3 días
+// Subir cuando cambie la lógica de resolución: invalida cachés viejas (p. ej.
+// para reaplicar la verificación de autor que evita mezclar obras homónimas).
+const EDITIONS_CACHE_VERSION = 2;
+
+/** Lo que guardamos en EditionsCache.data: las ediciones + la versión de esquema. */
+type CachedEditions = BuiltEditions & { _v?: number };
 
 /** Datos rápidos de AniList (1 request). Para el render inmediato del detalle. */
 export async function getMangaCore(id: number) {
@@ -26,6 +33,7 @@ interface AnilistLike {
   id: number;
   status?: string | null;
   volumes?: number | null;
+  staff?: { name: string }[];
 }
 
 const PUBLISHER_ID: Record<string, string> = {
@@ -69,11 +77,13 @@ export async function nationalEditionIds(
     });
     return new Set(
       rows
-        .filter((r) =>
-          ((r.data as unknown as BuiltEditions)?.editions ?? []).some(
-            (e) => e.region === "AR",
-          ),
-        )
+        .filter((r) => {
+          const data = r.data as unknown as CachedEditions;
+          // Solo confiamos en cachés de la versión actual (las viejas pueden
+          // tener una edición nacional mal matcheada por homonimia).
+          if (data?._v !== EDITIONS_CACHE_VERSION) return false;
+          return (data.editions ?? []).some((e) => e.region === "AR");
+        })
         .map((r) => r.anilistId),
     );
   } catch {
@@ -89,8 +99,10 @@ async function getEditionsCache(
       where: { anilistId },
     });
     if (!row) return null;
+    const data = row.data as unknown as CachedEditions;
+    if (data?._v !== EDITIONS_CACHE_VERSION) return null;
     if (Date.now() - row.updatedAt.getTime() > EDITIONS_CACHE_TTL) return null;
-    return row.data as unknown as BuiltEditions;
+    return data;
   } catch {
     return null;
   }
@@ -98,10 +110,11 @@ async function getEditionsCache(
 
 async function saveEditionsCache(anilistId: number, built: BuiltEditions) {
   try {
+    const data = { ...built, _v: EDITIONS_CACHE_VERSION } as unknown as object;
     await prisma.editionsCache.upsert({
       where: { anilistId },
-      update: { data: built as unknown as object },
-      create: { anilistId, data: built as unknown as object },
+      update: { data },
+      create: { anilistId, data },
     });
   } catch {
     /* best-effort */
@@ -113,18 +126,23 @@ async function resolveEditionsLive(
   titles: string[],
   knownSlug?: string | null,
 ): Promise<BuiltEditions> {
+  const authors = (anilist.staff ?? []).map((s) => s.name).filter(Boolean);
+
   // 1) Índice.
   const indexed = await lookupEditions(titles);
   const byPub = new Map<string, IndexedEdition>(
     indexed.map((e) => [e.publisher, e]),
   );
+  // El índice matchea solo por título; si la edición de Ivrea vino de ahí,
+  // la verificamos por autor para no mezclar obras homónimas (ver abajo).
+  const ivreaFromIndex = byPub.has("Ivrea Argentina");
 
   // 2) Fallback en vivo (en paralelo) para editoriales faltantes + MU.
   const tasks: Promise<void>[] = [];
 
   if (!byPub.has("Ivrea Argentina")) {
     tasks.push(
-      getIvreaEdition(titles, knownSlug)
+      getIvreaEdition(titles, knownSlug, authors)
         .then((d) => {
           if (d && d.argentinaVolumes > 0)
             cache(byPub, {
@@ -180,6 +198,19 @@ async function resolveEditionsLive(
 
   await Promise.all(tasks);
   const mu = await muPromise;
+
+  // Verificación por autor de la edición de Ivrea que vino del índice (el
+  // índice matchea solo por título). Releemos la ficha para conocer el autor
+  // y descartamos si no coincide con el de la serie (obras homónimas).
+  if (ivreaFromIndex && authors.length) {
+    const e = byPub.get("Ivrea Argentina");
+    if (e) {
+      const ficha = await getIvreaDataBySlug(e.slug).catch(() => null);
+      if (ficha && !authorMatches(authors, ficha.author)) {
+        byPub.delete("Ivrea Argentina");
+      }
+    }
+  }
 
   // 3) Lista uniforme de ediciones locales.
   const local: LocalEdition[] = PUBLISHERS.filter((p) => byPub.has(p)).map(
