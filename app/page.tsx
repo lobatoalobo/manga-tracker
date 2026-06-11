@@ -2,6 +2,7 @@ import {
   searchMangaList,
   getTrendingManga,
   getMangaPage,
+  getHiatusSet,
 } from "@/lib/anilist";
 import SearchBar from "@/components/SearchBar";
 import { auth } from "@/auth";
@@ -49,6 +50,8 @@ export default async function Home({
   } else {
     mangas = await getTrendingManga(adultInLists);
   }
+
+  const hiatusSet = await getHiatusSet(mangas.map((m: any) => m.id));
 
   const listBase =
     `/?tab=${tab}` + (onlyFinished ? "&finished=1" : "");
@@ -99,7 +102,12 @@ export default async function Home({
             href={`/manga/${manga.id}`}
             className="group overflow-hidden rounded-xl border border-border bg-surface transition hover:border-accent"
           >
-            <div className="aspect-2/3 w-full overflow-hidden bg-surface-2">
+            <div className="relative aspect-2/3 w-full overflow-hidden bg-surface-2">
+              {hiatusSet.has(manga.id) && (
+                <span className="absolute left-2 top-2 z-10 rounded-full bg-amber-500/90 px-2 py-0.5 text-xs font-medium text-black">
+                  ⏸ En pausa
+                </span>
+              )}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={manga.coverImage.large}

@@ -299,6 +299,22 @@ export async function getHiatus(id: number): Promise<boolean> {
   return !!json.data?.Media;
 }
 
+/** Devuelve el subconjunto de ids que están en hiatus (1 sola query). */
+export async function getHiatusSet(ids: number[]): Promise<Set<number>> {
+  if (ids.length === 0) return new Set();
+  const query = `query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids, type: MANGA, status: HIATUS) { id } } }`;
+  const response = await fetch("https://graphql.anilist.co", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, variables: { ids: ids.slice(0, 50) } }),
+    next: { revalidate: 60 * 60 * 24 },
+  });
+  const json = await response.json();
+  return new Set(
+    (json.data?.Page?.media ?? []).map((m: { id: number }) => m.id),
+  );
+}
+
 export async function getMangaById(
   id: number,
 ) {
