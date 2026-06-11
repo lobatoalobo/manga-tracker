@@ -282,6 +282,23 @@ export async function getMangaPage(
   };
 }
 
+/**
+ * ¿La serie está en hiatus? AniList tiene un bug: el campo `status` devuelve
+ * RELEASING aunque la serie esté pausada, pero el filtro `status: HIATUS` sí
+ * la matchea. Así que detectamos hiatus preguntando por el filtro.
+ */
+export async function getHiatus(id: number): Promise<boolean> {
+  const query = `query ($id: Int) { Media(id: $id, type: MANGA, status: HIATUS) { id } }`;
+  const response = await fetch("https://graphql.anilist.co", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, variables: { id } }),
+    next: { revalidate: 60 * 60 * 24 },
+  });
+  const json = await response.json();
+  return !!json.data?.Media;
+}
+
 export async function getMangaById(
   id: number,
 ) {
