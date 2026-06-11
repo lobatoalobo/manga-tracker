@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { externalHref } from "@/lib/url";
 
 /** Tiendas fijadas arriba (por nombre). */
@@ -73,9 +74,18 @@ export default function StoreList({ stores }: { stores: StoreItem[] }) {
           {filtered.map((s) => (
             <div
               key={s.id}
-              className="rounded-xl border border-border bg-surface p-4"
+              className={`rounded-xl border bg-surface p-4 ${
+                isPinned(s) ? "border-accent/50" : "border-border"
+              }`}
             >
-              <h3 className="font-semibold">{s.name}</h3>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-semibold">{s.name}</h3>
+                {isPinned(s) && (
+                  <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-white">
+                    ★ Amiga
+                  </span>
+                )}
+              </div>
               <p className="mt-0.5 text-sm text-muted">
                 {[s.address, s.city, s.province].filter(Boolean).join(", ") ||
                   "Sin dirección"}
@@ -104,6 +114,14 @@ export default function StoreList({ stores }: { stores: StoreItem[] }) {
                   >
                     Redes ↗
                   </a>
+                )}
+                {isPinned(s) && (
+                  <Link
+                    href="/tiendas/crumb"
+                    className="font-medium text-accent hover:underline"
+                  >
+                    Ver tienda →
+                  </Link>
                 )}
               </div>
             </div>

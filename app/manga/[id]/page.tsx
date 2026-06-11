@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { getSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
 import { getHiatus } from "@/lib/anilist";
+import { crumbSearch } from "@/lib/crumb";
 import { isWished } from "@/lib/wishlist";
 import { getNote, getSeriesNotes } from "@/lib/notes";
 import type { ReadingLink } from "@/lib/normalizeAnilist";
@@ -115,14 +116,24 @@ export default async function Page({
             <Field label="Popularidad" value={anilist.popularity ?? "—"} />
           </dl>
 
-          {canTrack && (
-            <WishButton
-              anilistId={mangaId}
-              title={anilist.title.romaji}
-              coverImage={anilist.coverImage}
-              initialWished={wished}
-            />
-          )}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            {canTrack && (
+              <WishButton
+                anilistId={mangaId}
+                title={anilist.title.romaji}
+                coverImage={anilist.coverImage}
+                initialWished={wished}
+              />
+            )}
+            <a
+              href={crumbSearch(anilist.title.romaji)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
+            >
+              🛒 Comprar en Crumb
+            </a>
+          </div>
         </div>
       </div>
 
@@ -154,6 +165,7 @@ export default async function Page({
         <TrackingPanel
           key={trackedKeys.slice().sort().join("|")}
           anilistId={mangaId}
+          title={anilist.title.romaji}
           editions={series.editions}
         />
       )}

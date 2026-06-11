@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { getWishlist } from "@/lib/wishlist";
+import { crumbSearch } from "@/lib/crumb";
 import RemoveWishButton from "@/components/RemoveWishButton";
 
 export const metadata = { title: "Deseados · Nakama" };
@@ -50,6 +51,14 @@ export default async function DeseadosPage() {
                   </h3>
                 </div>
               </Link>
+              <a
+                href={crumbSearch(w.title)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block border-t border-border px-3 py-2 text-center text-xs text-accent transition hover:bg-accent/10"
+              >
+                🛒 Comprar en Crumb
+              </a>
             </div>
           ))}
         </div>

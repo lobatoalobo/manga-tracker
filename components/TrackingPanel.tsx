@@ -8,13 +8,16 @@ import {
   setAllVolumesAction,
   removeEditionAction,
 } from "@/app/actions";
+import { crumbSearch } from "@/lib/crumb";
 import type { EditionView, ReadingStatus } from "@/lib/collection";
 
 export default function TrackingPanel({
   anilistId,
+  title,
   editions: initial,
 }: {
   anilistId: number;
+  title: string;
   editions: EditionView[];
 }) {
   const [editions, setEditions] = useState<EditionView[]>(initial);
@@ -133,6 +136,17 @@ export default function TrackingPanel({
             ? missing.join(", ")
             : "¡colección completa! 🎉"}
       </p>
+
+      {missing.length > 0 && (
+        <a
+          href={crumbSearch(title)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 inline-block text-sm text-accent hover:underline"
+        >
+          🛒 Conseguir los que faltan en Crumb
+        </a>
+      )}
 
       <div className="mt-6 flex items-center justify-between">
         <h3 className="font-semibold">Tomos</h3>
