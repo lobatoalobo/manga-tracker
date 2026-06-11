@@ -142,6 +142,8 @@ export async function searchMangaList(
             large
           }
 
+          staff(perPage: 1, sort: RELEVANCE) { nodes { name { full } } }
+
           status
         }
       }
@@ -190,6 +192,7 @@ export async function getTrendingManga(includeAdult = true) {
           id
           title { romaji english native }
           coverImage { large }
+          staff(perPage: 1, sort: RELEVANCE) { nodes { name { full } } }
         }
       }
     }
@@ -256,6 +259,7 @@ export async function getMangaPage(
           id
           title { romaji english native }
           coverImage { large }
+          staff(perPage: 1, sort: RELEVANCE) { nodes { name { full } } }
         }
       }
     }

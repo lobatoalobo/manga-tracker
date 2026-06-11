@@ -25,24 +25,33 @@ export default async function Home({
 
   const params = await searchParams;
   const query = params.search?.trim();
-  const tab = params.tab === "az" ? "az" : "hot";
+  const tab =
+    params.tab === "az" ? "az" : params.tab === "mangaka" ? "mangaka" : "hot";
   const page = Math.max(1, Number(params.page) || 1);
   const onlyFinished = params.finished === "1";
+  const isList = tab === "az" || tab === "mangaka";
 
   let mangas: any[];
   let pageInfo: { hasNextPage: boolean } | null = null;
 
   if (query) {
     mangas = await searchMangaList(query, adultInSearch);
-  } else if (tab === "az") {
+  } else if (isList) {
     const res = await getMangaPage(page, adultInLists, onlyFinished);
     mangas = res.media;
     pageInfo = res.pageInfo;
+    if (tab === "mangaka") {
+      // AniList no permite ordenar por autor globalmente; ordenamos la página.
+      mangas = [...mangas].sort((a, b) =>
+        mangakaOf(a).localeCompare(mangakaOf(b)),
+      );
+    }
   } else {
     mangas = await getTrendingManga(adultInLists);
   }
 
-  const azBase = onlyFinished ? "/?tab=az&finished=1" : "/?tab=az";
+  const listBase =
+    `/?tab=${tab}` + (onlyFinished ? "&finished=1" : "");
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-8">
@@ -65,9 +74,12 @@ export default async function Home({
           <Tab href="/?tab=az" active={tab === "az"}>
             A-Z
           </Tab>
-          {tab === "az" && (
+          <Tab href="/?tab=mangaka" active={tab === "mangaka"}>
+            Mangaka
+          </Tab>
+          {isList && (
             <Link
-              href={onlyFinished ? "/?tab=az" : "/?tab=az&finished=1"}
+              href={onlyFinished ? `/?tab=${tab}` : `/?tab=${tab}&finished=1`}
               className={`ml-1 rounded-lg px-3 py-2 text-sm transition ${
                 onlyFinished
                   ? "bg-accent text-white"
@@ -100,18 +112,18 @@ export default async function Home({
                 {manga.title.romaji}
               </h3>
               <p className="mt-1 truncate text-xs text-muted">
-                {manga.title.native}
+                {mangakaOf(manga) || manga.title.native}
               </p>
             </div>
           </Link>
         ))}
       </div>
 
-      {!query && tab === "az" && pageInfo && (
+      {!query && isList && pageInfo && (
         <div className="mt-8 flex items-center justify-center gap-3">
           {page > 1 ? (
             <Link
-              href={`${azBase}&page=${page - 1}`}
+              href={`${listBase}&page=${page - 1}`}
               className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
             >
               ← Anterior
@@ -124,7 +136,7 @@ export default async function Home({
           <span className="text-sm text-muted">Página {page}</span>
           {pageInfo.hasNextPage ? (
             <Link
-              href={`${azBase}&page=${page + 1}`}
+              href={`${listBase}&page=${page + 1}`}
               className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
             >
               Siguiente →
@@ -138,6 +150,10 @@ export default async function Home({
       )}
     </main>
   );
+}
+
+function mangakaOf(manga: any): string {
+  return manga?.staff?.nodes?.[0]?.name?.full ?? "";
 }
 
 function Tab({

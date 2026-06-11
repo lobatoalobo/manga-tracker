@@ -26,8 +26,8 @@ export default function NoteEditor({
   }
 
   return (
-    <section className="mt-6 rounded-xl border border-border bg-surface p-5">
-      <h2 className="mb-3 text-lg font-semibold">Mi nota</h2>
+    <div className="rounded-xl border border-border bg-surface p-5">
+      <h3 className="mb-3 font-semibold">Tu reseña</h3>
 
       <label className="flex items-center gap-2 text-sm">
         Puntaje:
@@ -55,7 +55,7 @@ export default function NoteEditor({
           setSaved(false);
         }}
         rows={3}
-        placeholder="Tus notas privadas sobre esta serie…"
+        placeholder="Tu opinión sobre esta serie (la verán otros usuarios)…"
         className="mt-3 w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent"
       />
 
@@ -69,6 +69,6 @@ export default function NoteEditor({
         </button>
         {saved && <span className="text-sm text-emerald-400">Guardado ✓</span>}
       </div>
-    </section>
+    </div>
   );
 }

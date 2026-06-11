@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { getSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
 import { isWished } from "@/lib/wishlist";
-import { getNote } from "@/lib/notes";
+import { getNote, getSeriesNotes } from "@/lib/notes";
 import type { ReadingLink } from "@/lib/normalizeAnilist";
 import TrackingPanel from "@/components/TrackingPanel";
 import ReportButton from "@/components/ReportButton";
@@ -24,11 +24,12 @@ export default async function Page({
   const { id } = await params;
   const mangaId = Number(id);
 
-  const [anilist, series, wished, note] = await Promise.all([
+  const [anilist, series, wished, note, reviews] = await Promise.all([
     getMangaCore(mangaId),
     userId ? getSeries(userId, mangaId) : Promise.resolve(null),
     userId ? isWished(userId, mangaId) : Promise.resolve(false),
     userId ? getNote(userId, mangaId) : Promise.resolve(null),
+    getSeriesNotes(mangaId),
   ]);
 
   // Contenido +18 solo para usuarios logueados.
@@ -178,13 +179,56 @@ export default async function Page({
         </section>
       )}
 
-      {canTrack && (
-        <NoteEditor
-          anilistId={mangaId}
-          initialRating={note?.rating ?? null}
-          initialNote={note?.note ?? null}
-        />
-      )}
+      <section className="mt-6">
+        <h2 className="mb-3 text-lg font-semibold">
+          Opiniones {reviews.length > 0 && `(${reviews.length})`}
+        </h2>
+
+        {canTrack && (
+          <NoteEditor
+            anilistId={mangaId}
+            initialRating={note?.rating ?? null}
+            initialNote={note?.note ?? null}
+          />
+        )}
+
+        {reviews.length === 0 ? (
+          <p className="mt-3 text-sm text-muted">
+            Todavía no hay opiniones de esta serie.
+          </p>
+        ) : (
+          <ul className="mt-4 space-y-3">
+            {reviews.map((r) => (
+              <li
+                key={r.id}
+                className="rounded-xl border border-border bg-surface p-4"
+              >
+                <div className="flex items-center gap-2">
+                  {r.userImage && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={r.userImage}
+                      alt={r.userName}
+                      className="h-6 w-6 rounded-full"
+                    />
+                  )}
+                  <span className="text-sm font-medium">{r.userName}</span>
+                  {r.rating ? (
+                    <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent">
+                      ★ {r.rating}/10
+                    </span>
+                  ) : null}
+                </div>
+                {r.note && (
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-muted">
+                    {r.note}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <ReportButton mangaId={mangaId} mangaTitle={anilist.title.romaji} />
     </main>
