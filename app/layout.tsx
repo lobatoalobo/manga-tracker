@@ -6,6 +6,7 @@ import { isAdmin } from "@/lib/admin";
 import { countPendingReports } from "@/lib/reports";
 import { countPendingStores } from "@/lib/stores";
 import { countPendingRequests } from "@/lib/social";
+import { countUnread } from "@/lib/notifications";
 import { SignIn, SignOut } from "@/components/AuthButtons";
 import "./globals.css";
 
@@ -37,9 +38,12 @@ export default async function RootLayout({
         countPendingStores().catch(() => 0),
       ])
     : [0, 0];
-  const pendingFriends = session?.user?.id
-    ? await countPendingRequests(session.user.id).catch(() => 0)
-    : 0;
+  const [pendingFriends, unreadNotifs] = session?.user?.id
+    ? await Promise.all([
+        countPendingRequests(session.user.id).catch(() => 0),
+        countUnread(session.user.id).catch(() => 0),
+      ])
+    : [0, 0];
 
   return (
     <html
@@ -128,6 +132,18 @@ export default async function RootLayout({
 
             {session?.user ? (
               <div className="ml-auto flex items-center gap-3">
+                <Link
+                  href="/notificaciones"
+                  className="relative text-lg"
+                  title="Notificaciones"
+                >
+                  🔔
+                  {unreadNotifs > 0 && (
+                    <span className="absolute -right-2 -top-1 rounded-full bg-accent px-1.5 text-xs font-semibold text-white">
+                      {unreadNotifs}
+                    </span>
+                  )}
+                </Link>
                 {session.user.image && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img

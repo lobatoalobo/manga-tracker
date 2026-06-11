@@ -63,6 +63,17 @@ export async function sendFriendRequest(
   await prisma.friendship.create({
     data: { requesterId: userId, addresseeId: target.id },
   });
+  const me = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true },
+  });
+  await prisma.notification.create({
+    data: {
+      userId: target.id,
+      type: "FRIEND_REQUEST",
+      actorName: me?.name ?? "Alguien",
+    },
+  });
   return { ok: true };
 }
 
@@ -77,6 +88,17 @@ export async function respondFriendRequest(
     await prisma.friendship.update({
       where: { id: friendshipId },
       data: { status: "ACCEPTED" },
+    });
+    const me = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    await prisma.notification.create({
+      data: {
+        userId: fr.requesterId,
+        type: "FRIEND_ACCEPTED",
+        actorName: me?.name ?? "Alguien",
+      },
     });
   } else {
     await prisma.friendship.delete({ where: { id: friendshipId } });
@@ -120,10 +142,11 @@ export async function getFriendsFeed(userId: string) {
   const friendIds = fs.map((f) =>
     f.requesterId === userId ? f.addresseeId : f.requesterId,
   );
-  if (friendIds.length === 0) return [];
+  // Incluimos la actividad propia para ver reacciones/comentarios en tus posts.
+  const authorIds = [...friendIds, userId];
 
   const acts = await prisma.activity.findMany({
-    where: { userId: { in: friendIds } },
+    where: { userId: { in: authorIds } },
     orderBy: { createdAt: "desc" },
     take: 60,
     include: {
@@ -182,6 +205,7 @@ export async function toggleReaction(
       update: { emoji },
       create: { activityId, userId, emoji },
     });
+    await notifyOwner(activityId, userId, "REACTION", emoji);
   }
 }
 
@@ -194,6 +218,35 @@ export async function addComment(
   if (!t) return;
   await prisma.activityComment.create({
     data: { activityId, userId, text: t.slice(0, 500) },
+  });
+  await notifyOwner(activityId, userId, "COMMENT", t.slice(0, 200));
+}
+
+/** Notifica al dueño de una actividad cuando alguien reacciona/comenta. */
+async function notifyOwner(
+  activityId: number,
+  actorId: string,
+  type: "REACTION" | "COMMENT",
+  text: string,
+) {
+  const act = await prisma.activity.findUnique({
+    where: { id: activityId },
+    select: { userId: true, anilistId: true, title: true },
+  });
+  if (!act || act.userId === actorId) return;
+  const actor = await prisma.user.findUnique({
+    where: { id: actorId },
+    select: { name: true },
+  });
+  await prisma.notification.create({
+    data: {
+      userId: act.userId,
+      type,
+      actorName: actor?.name ?? "Alguien",
+      activityId,
+      anilistId: act.anilistId,
+      text: act.title ? `${text} · ${act.title}` : text,
+    },
   });
 }
 
