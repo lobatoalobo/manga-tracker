@@ -3,6 +3,11 @@
 import { useMemo, useState } from "react";
 import { externalHref } from "@/lib/url";
 
+/** Tiendas fijadas arriba (por nombre). */
+function isPinned(s: { name: string }): boolean {
+  return s.name.toLowerCase().includes("crumb");
+}
+
 export interface StoreItem {
   id: number;
   name: string;
@@ -24,15 +29,18 @@ export default function StoreList({ stores }: { stores: StoreItem[] }) {
     [stores],
   );
 
-  const filtered = stores.filter((s) => {
-    const q = search.toLowerCase();
-    const matchSearch =
-      s.name.toLowerCase().includes(q) ||
-      (s.city ?? "").toLowerCase().includes(q) ||
-      (s.address ?? "").toLowerCase().includes(q);
-    const matchProvince = province === "all" || s.province === province;
-    return matchSearch && matchProvince;
-  });
+  const filtered = stores
+    .filter((s) => {
+      const q = search.toLowerCase();
+      const matchSearch =
+        s.name.toLowerCase().includes(q) ||
+        (s.city ?? "").toLowerCase().includes(q) ||
+        (s.address ?? "").toLowerCase().includes(q);
+      const matchProvince = province === "all" || s.province === province;
+      return matchSearch && matchProvince;
+    })
+    // "Tienda Crumb" siempre arriba (orden estable para el resto).
+    .sort((a, b) => Number(isPinned(b)) - Number(isPinned(a)));
 
   return (
     <>
