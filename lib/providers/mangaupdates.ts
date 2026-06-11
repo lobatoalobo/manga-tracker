@@ -173,8 +173,9 @@ function titleScore(
     for (const n of names) {
       if (n === t) return 100; // match exacto
 
-      // Solapamiento de tokens sobre el conjunto más chico (evita falsos
-      // positivos como "demon slayer kimetsu no yaiba" ~ "taima no haha").
+      // Similitud Jaccard (intersección / unión): simétrica y estricta.
+      // Evita que un título corto matchee uno más largo que lo contiene
+      // (p. ej. "real" ~ "real clothes" daría 0.5 y se descarta).
       const overlap = tokenOverlap(n, t);
       if (overlap >= 0.6) best = Math.max(best, 40 + overlap * 50);
     }
@@ -189,7 +190,7 @@ function tokenOverlap(a: string, b: string): number {
   if (sa.size === 0 || sb.size === 0) return 0;
   let inter = 0;
   for (const x of sa) if (sb.has(x)) inter++;
-  return inter / Math.min(sa.size, sb.size);
+  return inter / (sa.size + sb.size - inter); // Jaccard
 }
 
 function stripHtml(s: string): string {
