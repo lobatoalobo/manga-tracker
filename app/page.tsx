@@ -92,7 +92,6 @@ export default async function Home({
         <MangakaProvider all={allMangakas}>
           <div className="mt-8 mb-4 flex flex-wrap items-center gap-2">
             <Tabs tab={tab} onlyFinished={onlyFinished} />
-            <MangakaFilterInput />
           </div>
           <MangakaList />
         </MangakaProvider>
@@ -164,6 +163,7 @@ function Tabs({ tab, onlyFinished }: { tab: string; onlyFinished: boolean }) {
       <Tab href="/?tab=mangaka" active={tab === "mangaka"}>
         Mangaka
       </Tab>
+      <MangakaFilterInput enabled={tab === "mangaka"} />
     </>
   );
 }

@@ -55,9 +55,47 @@ export function MangakaProvider({
   );
 }
 
-export function MangakaFilterInput() {
+const FILTER_HINT = "Seleccioná Mangaka para habilitar";
+
+/**
+ * Filtro de mangakas. Siempre visible en la barra: habilitado solo en el tab
+ * Mangaka; en el resto se ve deshabilitado y muestra un tooltip (hover en
+ * desktop, tap en mobile), igual que "Solo terminadas".
+ */
+export function MangakaFilterInput({ enabled }: { enabled: boolean }) {
   const ctx = useContext(Ctx);
-  if (!ctx) return null;
+  const [showTip, setShowTip] = useState(false);
+
+  if (!enabled || !ctx) {
+    return (
+      <span
+        className="group relative ml-1"
+        onClick={() => {
+          setShowTip(true);
+          setTimeout(() => setShowTip(false), 2500);
+        }}
+      >
+        <input
+          type="search"
+          readOnly
+          tabIndex={-1}
+          placeholder="Filtrar mangaka…"
+          title={FILTER_HINT}
+          aria-disabled="true"
+          className="pointer-events-none w-40 cursor-not-allowed rounded-lg border border-border bg-surface px-3 py-2 text-sm text-muted opacity-40 sm:w-52"
+        />
+        <span
+          role="tooltip"
+          className={`pointer-events-none absolute left-1/2 top-full z-20 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-surface-2 px-2 py-1 text-xs text-foreground shadow-lg group-hover:block ${
+            showTip ? "block" : "hidden"
+          }`}
+        >
+          {FILTER_HINT}
+        </span>
+      </span>
+    );
+  }
+
   return (
     <input
       type="search"
