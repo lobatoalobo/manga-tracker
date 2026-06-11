@@ -12,6 +12,9 @@ import {
   type IndexedEdition,
 } from "./catalog";
 import { buildEditions, type BuiltEditions, type LocalEdition } from "./editions";
+import { prisma } from "./prisma";
+
+const EDITIONS_CACHE_TTL = 1000 * 60 * 60 * 24 * 3; // 3 días
 
 /** Datos rápidos de AniList (1 request). Para el render inmediato del detalle. */
 export async function getMangaCore(id: number) {
@@ -19,6 +22,7 @@ export async function getMangaCore(id: number) {
 }
 
 interface AnilistLike {
+  id: number;
   status?: string | null;
   volumes?: number | null;
 }
@@ -35,6 +39,47 @@ const PUBLISHER_ID: Record<string, string> = {
  * MangaUpdates se consulta siempre en vivo (formatos).
  */
 export async function resolveEditions(
+  anilist: AnilistLike,
+  titles: string[],
+  knownSlug?: string | null,
+): Promise<BuiltEditions> {
+  // Caché por serie: la primera vez resuelve en vivo; después es instantáneo.
+  const cached = await getEditionsCache(anilist.id);
+  if (cached) return cached;
+
+  const built = await resolveEditionsLive(anilist, titles, knownSlug);
+  await saveEditionsCache(anilist.id, built);
+  return built;
+}
+
+async function getEditionsCache(
+  anilistId: number,
+): Promise<BuiltEditions | null> {
+  try {
+    const row = await prisma.editionsCache.findUnique({
+      where: { anilistId },
+    });
+    if (!row) return null;
+    if (Date.now() - row.updatedAt.getTime() > EDITIONS_CACHE_TTL) return null;
+    return row.data as unknown as BuiltEditions;
+  } catch {
+    return null;
+  }
+}
+
+async function saveEditionsCache(anilistId: number, built: BuiltEditions) {
+  try {
+    await prisma.editionsCache.upsert({
+      where: { anilistId },
+      update: { data: built as unknown as object },
+      create: { anilistId, data: built as unknown as object },
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
+async function resolveEditionsLive(
   anilist: AnilistLike,
   titles: string[],
   knownSlug?: string | null,

@@ -234,6 +234,14 @@ model OwnedVolume {
   @@unique([editionId, volume])
 }
 
+// Caché de las ediciones resueltas por serie (AniList id). Evita re-scrapear
+// editoriales + MangaUpdates en cada carga del detalle.
+model EditionsCache {
+  anilistId Int      @id
+  data      Json
+  updatedAt DateTime @updatedAt
+}
+
 // Índice de catálogos de las editoriales (poblado por scripts/crawl.ts).
 // Permite resolver ediciones con un lookup rápido en vez de scrapear en vivo.
 model PublisherEdition {
