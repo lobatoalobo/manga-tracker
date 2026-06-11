@@ -48,7 +48,7 @@ export default function CrumbPage() {
       </div>
 
       <p className="mt-8 text-sm text-muted">
-        Desde cualquier serie en Nakama vas a encontrar un botón{" "}
+        Desde cualquier serie nacional en Nakama vas a encontrar un botón{" "}
         <span className="text-accent">🛒 Comprar en Crumb</span> para buscarla
         directo en la tienda.
       </p>
