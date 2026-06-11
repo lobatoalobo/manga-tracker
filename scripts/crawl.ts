@@ -2,6 +2,7 @@ import * as cheerio from "cheerio";
 import { getIvreaDataBySlug } from "../lib/providers/ivrea";
 import { getPaniniEdition } from "../lib/providers/panini";
 import { upsertPublisherEdition } from "../lib/catalog";
+import { seedMangakaIndex } from "../lib/mangakas";
 
 const UA = { "User-Agent": "Mozilla/5.0" };
 
@@ -146,11 +147,18 @@ async function crawlOvni() {
   console.log(`  Ovni: ${saved} series indexadas.`);
 }
 
+async function crawlMangakas() {
+  console.log("\n=== Mangakas (índice alfabético) ===");
+  const inserted = await seedMangakaIndex();
+  console.log(`  Mangakas: ${inserted} autores nuevos indexados.`);
+}
+
 async function main() {
-  const which = process.argv[2]; // opcional: ivrea | panini | ovni
+  const which = process.argv[2]; // opcional: ivrea | panini | ovni | mangakas
   if (!which || which === "ovni") await crawlOvni();
   if (!which || which === "panini") await crawlPanini();
   if (!which || which === "ivrea") await crawlIvrea();
+  if (!which || which === "mangakas") await crawlMangakas();
   console.log("\nListo.");
 }
 

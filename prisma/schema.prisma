@@ -260,6 +260,26 @@ model EditionsCache {
   updatedAt DateTime @updatedAt
 }
 
+// Índice de mangakas (autores) para el listado alfabético global. Se deriva
+// escaneando los mangas más populares de AniList (su API no permite listar/
+// ordenar autores). Lo reconstruye un cron semanal (y `npm run crawl`).
+model Mangaka {
+  id        Int      @id // id de staff de AniList
+  name      String
+  normName  String // nombre normalizado, para ordenar/paginar alfabéticamente
+  updatedAt DateTime @updatedAt
+
+  @@index([normName])
+}
+
+// Estado interno key/value (p. ej. el cursor del scan de mangakas, para que el
+// cron retome el escaneo profundo de a poco sin pegarle de más a AniList).
+model AppState {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
 // Índice de catálogos de las editoriales (poblado por scripts/crawl.ts).
 // Permite resolver ediciones con un lookup rápido en vez de scrapear en vivo.
 model PublisherEdition {

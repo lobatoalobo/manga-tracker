@@ -8,6 +8,7 @@ import SearchBar from "@/components/SearchBar";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { displayTitle, isExactTitleMatch } from "@/lib/title";
+import { getMangakaPage } from "@/lib/mangakas";
 import Pager from "@/components/Pager";
 import Link from "next/link";
 
@@ -33,7 +34,8 @@ export default async function Home({
   const onlyFinished = params.finished === "1";
   const isList = tab === "az" || tab === "mangaka";
 
-  let mangas: any[];
+  let mangas: any[] = [];
+  let mangakas: { id: number; name: string }[] | null = null;
   let pageInfo: { hasNextPage: boolean; lastPage: number } | null = null;
 
   if (query) {
@@ -45,16 +47,20 @@ export default async function Home({
       : raw.filter(
           (m: any) => !m.isAdult || isExactTitleMatch(m.title, query),
         );
-  } else if (isList) {
+  } else if (tab === "mangaka") {
+    // Listado alfabético global de autores (índice propio; ver lib/mangakas).
+    // Si el índice todavía no existe/está vacío, degradamos a un aviso.
+    try {
+      const res = await getMangakaPage(page);
+      mangakas = res.mangakas;
+      pageInfo = { hasNextPage: page < res.lastPage, lastPage: res.lastPage };
+    } catch {
+      mangakas = [];
+    }
+  } else if (tab === "az") {
     const res = await getMangaPage(page, admin, onlyFinished);
     mangas = res.media;
     pageInfo = res.pageInfo;
-    if (tab === "mangaka") {
-      // AniList no permite ordenar por autor globalmente; ordenamos la página.
-      mangas = [...mangas].sort((a, b) =>
-        mangakaOf(a).localeCompare(mangakaOf(b)),
-      );
-    }
   } else {
     mangas = await getTrendingManga(admin);
   }
@@ -88,7 +94,7 @@ export default async function Home({
           <Tab href="/?tab=mangaka" active={tab === "mangaka"}>
             Mangaka
           </Tab>
-          {isList && (
+          {tab === "az" && (
             <Link
               href={onlyFinished ? `/?tab=${tab}` : `/?tab=${tab}&finished=1`}
               className={`ml-1 rounded-lg px-3 py-2 text-sm transition ${
@@ -103,6 +109,26 @@ export default async function Home({
         </div>
       )}
 
+      {mangakas ? (
+        mangakas.length === 0 ? (
+          <p className="mt-6 text-sm text-muted">
+            El índice de mangakas se está armando. Volvé en un rato.
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {mangakas.map((m) => (
+              <Link
+                key={m.id}
+                href={`/autor/${m.id}`}
+                className="truncate rounded-xl border border-border bg-surface px-4 py-3 text-sm font-medium transition hover:border-accent hover:text-accent"
+                title={m.name}
+              >
+                {m.name}
+              </Link>
+            ))}
+          </div>
+        )
+      ) : (
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {mangas.map((manga: any) => (
           <Link
@@ -137,6 +163,7 @@ export default async function Home({
           </Link>
         ))}
       </div>
+      )}
 
       {!query && isList && pageInfo && (
         <Pager basePath={listBase} page={page} lastPage={pageInfo.lastPage} />
