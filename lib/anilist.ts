@@ -145,6 +145,8 @@ export async function searchMangaList(
           staff(perPage: 1, sort: RELEVANCE) { nodes { name { full } } }
 
           status
+
+          isAdult
         }
       }
     }
@@ -220,7 +222,7 @@ export async function getStaffWorks(id: number) {
           nodes {
             id
             type
-            title { romaji native }
+            title { romaji english native }
             coverImage { large }
           }
         }

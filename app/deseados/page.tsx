@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { getWishlist } from "@/lib/wishlist";
+import { nationalEditionIds } from "@/lib/getMangaDetails";
 import { crumbSearch } from "@/lib/crumb";
 import RemoveWishButton from "@/components/RemoveWishButton";
 
@@ -12,6 +13,7 @@ export default async function DeseadosPage() {
   if (!session?.user?.id) redirect("/");
 
   const items = await getWishlist(session.user.id);
+  const nationalIds = await nationalEditionIds(items.map((w) => w.anilistId));
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-8">
@@ -51,14 +53,16 @@ export default async function DeseadosPage() {
                   </h3>
                 </div>
               </Link>
-              <a
-                href={crumbSearch(w.title)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block border-t border-border px-3 py-2 text-center text-xs text-accent transition hover:bg-accent/10"
-              >
-                🛒 Comprar en Crumb
-              </a>
+              {nationalIds.has(w.anilistId) && (
+                <a
+                  href={crumbSearch(w.title)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block border-t border-border px-3 py-2 text-center text-xs text-accent transition hover:bg-accent/10"
+                >
+                  🛒 Comprar en Crumb
+                </a>
+              )}
             </div>
           ))}
         </div>

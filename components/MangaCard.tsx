@@ -1,5 +1,6 @@
 import Link from "next/link";
 import RemoveEditionButton from "@/components/RemoveEditionButton";
+import { displayTitle } from "@/lib/title";
 import type { CollectionItem } from "@/lib/collection";
 
 export default function MangaCard({
@@ -12,6 +13,7 @@ export default function MangaCard({
   hrefBase?: string;
 }) {
   const { edition } = item;
+  const title = displayTitle(item.title);
   const owned = edition.ownedVolumes.length;
   const total = edition.totalVolumes;
   const pct = total > 0 ? Math.floor((owned / total) * 100) : 0;
@@ -33,14 +35,14 @@ export default function MangaCard({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={item.coverImage}
-            alt={item.title.romaji}
+            alt={title}
             className="h-full w-full object-cover transition group-hover:scale-105"
           />
         </div>
 
         <div className="p-3">
-          <h3 className="truncate text-sm font-semibold" title={item.title.romaji}>
-            {item.title.romaji}
+          <h3 className="truncate text-sm font-semibold" title={title}>
+            {title}
           </h3>
 
           <p className="mt-0.5 truncate text-xs text-accent">{edition.label}</p>

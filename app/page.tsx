@@ -7,6 +7,7 @@ import {
 import SearchBar from "@/components/SearchBar";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
+import { displayTitle, isExactTitleMatch } from "@/lib/title";
 import Link from "next/link";
 
 export default async function Home({
@@ -20,9 +21,8 @@ export default async function Home({
   }>;
 }) {
   const session = await auth();
-  // +18 en búsqueda: cualquier logueado.
-  const adultInSearch = !!session;
-  const adultInLists = isAdmin(session?.user?.email);
+  const loggedIn = !!session;
+  const admin = isAdmin(session?.user?.email);
 
   const params = await searchParams;
   const query = params.search?.trim();
@@ -36,9 +36,16 @@ export default async function Home({
   let pageInfo: { hasNextPage: boolean } | null = null;
 
   if (query) {
-    mangas = await searchMangaList(query, adultInSearch);
+    // Traemos +18 solo para logueados; y para no-admin, las series Hentai
+    // solo se muestran si el nombre coincide exactamente con la búsqueda.
+    const raw = await searchMangaList(query, loggedIn);
+    mangas = admin
+      ? raw
+      : raw.filter(
+          (m: any) => !m.isAdult || isExactTitleMatch(m.title, query),
+        );
   } else if (isList) {
-    const res = await getMangaPage(page, adultInLists, onlyFinished);
+    const res = await getMangaPage(page, admin, onlyFinished);
     mangas = res.media;
     pageInfo = res.pageInfo;
     if (tab === "mangaka") {
@@ -48,7 +55,7 @@ export default async function Home({
       );
     }
   } else {
-    mangas = await getTrendingManga(adultInLists);
+    mangas = await getTrendingManga(admin);
   }
 
   const hiatusSet = await getHiatusSet(mangas.map((m: any) => m.id));
@@ -111,13 +118,16 @@ export default async function Home({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={manga.coverImage.large}
-                alt={manga.title.romaji}
+                alt={displayTitle(manga.title)}
                 className="h-full w-full object-cover transition group-hover:scale-105"
               />
             </div>
             <div className="p-3">
-              <h3 className="truncate text-sm font-semibold" title={manga.title.romaji}>
-                {manga.title.romaji}
+              <h3
+                className="truncate text-sm font-semibold"
+                title={displayTitle(manga.title)}
+              >
+                {displayTitle(manga.title)}
               </h3>
               <p className="mt-1 truncate text-xs text-muted">
                 {mangakaOf(manga) || manga.title.native}

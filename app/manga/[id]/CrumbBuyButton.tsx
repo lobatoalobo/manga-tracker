@@ -1,5 +1,6 @@
 import { resolveEditions, titlesOf } from "@/lib/getMangaDetails";
 import { crumbSearch } from "@/lib/crumb";
+import { displayTitle } from "@/lib/title";
 
 /**
  * Botón "Comprar en Crumb": solo se muestra si la serie tiene edición
@@ -12,7 +13,7 @@ export default async function CrumbBuyButton({ anilist }: { anilist: any }) {
 
   return (
     <a
-      href={crumbSearch(anilist.title.romaji)}
+      href={crumbSearch(displayTitle(anilist.title))}
       target="_blank"
       rel="noopener noreferrer"
       className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"

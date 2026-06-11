@@ -53,6 +53,34 @@ export const resolveEditions = reactCache(async function resolveEditions(
   return built;
 });
 
+/**
+ * De un conjunto de series, cuáles tienen edición nacional (región AR) según
+ * la caché de ediciones. Best-effort: solo mira lo ya cacheado (no scrapea),
+ * así que una serie nunca visitada no aparece hasta que se resuelva su detalle.
+ */
+export async function nationalEditionIds(
+  anilistIds: number[],
+): Promise<Set<number>> {
+  if (anilistIds.length === 0) return new Set();
+  try {
+    const rows = await prisma.editionsCache.findMany({
+      where: { anilistId: { in: anilistIds } },
+      select: { anilistId: true, data: true },
+    });
+    return new Set(
+      rows
+        .filter((r) =>
+          ((r.data as unknown as BuiltEditions)?.editions ?? []).some(
+            (e) => e.region === "AR",
+          ),
+        )
+        .map((r) => r.anilistId),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
 async function getEditionsCache(
   anilistId: number,
 ): Promise<BuiltEditions | null> {

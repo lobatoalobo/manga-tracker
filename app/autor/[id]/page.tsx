@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getStaffWorks } from "@/lib/anilist";
+import { displayTitle } from "@/lib/title";
 
 export const metadata = { title: "Autor · Nakama" };
 
@@ -31,13 +32,16 @@ export default async function AutorPage({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={m.coverImage.large}
-                alt={m.title.romaji}
+                alt={displayTitle(m.title)}
                 className="h-full w-full object-cover transition group-hover:scale-105"
               />
             </div>
             <div className="p-3">
-              <h3 className="truncate text-sm font-semibold" title={m.title.romaji}>
-                {m.title.romaji}
+              <h3
+                className="truncate text-sm font-semibold"
+                title={displayTitle(m.title)}
+              >
+                {displayTitle(m.title)}
               </h3>
             </div>
           </Link>

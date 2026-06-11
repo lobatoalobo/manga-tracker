@@ -6,6 +6,7 @@ import { getMangaCore } from "@/lib/getMangaDetails";
 import { getHiatus } from "@/lib/anilist";
 import { isWished } from "@/lib/wishlist";
 import { getNote, getSeriesNotes } from "@/lib/notes";
+import { displayTitle } from "@/lib/title";
 import type { ReadingLink } from "@/lib/normalizeAnilist";
 import TrackingPanel from "@/components/TrackingPanel";
 import ReportButton from "@/components/ReportButton";
@@ -52,6 +53,7 @@ export default async function Page({
 
   const canTrack = !!userId;
   const trackedKeys = series?.editions.map((e) => e.key) ?? [];
+  const title = displayTitle(anilist.title);
 
   return (
     <main className="mx-auto max-w-4xl px-5 py-8">
@@ -59,19 +61,22 @@ export default async function Page({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={anilist.coverImage}
-          alt={anilist.title.romaji}
+          alt={title}
           className="h-72 w-48 shrink-0 self-start rounded-xl object-cover"
         />
 
         <div className="flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold">{anilist.title.romaji}</h1>
+            <h1 className="text-2xl font-bold">{title}</h1>
             {hiatus && (
               <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-300">
                 ⏸ En pausa
               </span>
             )}
           </div>
+          {anilist.title.romaji && anilist.title.romaji !== title && (
+            <p className="text-sm text-muted">{anilist.title.romaji}</p>
+          )}
           {anilist.title.native && (
             <p className="text-muted">{anilist.title.native}</p>
           )}
@@ -120,7 +125,7 @@ export default async function Page({
             {canTrack && (
               <WishButton
                 anilistId={mangaId}
-                title={anilist.title.romaji}
+                title={title}
                 coverImage={anilist.coverImage}
                 initialWished={wished}
               />
@@ -160,7 +165,7 @@ export default async function Page({
         <TrackingPanel
           key={trackedKeys.slice().sort().join("|")}
           anilistId={mangaId}
-          title={anilist.title.romaji}
+          title={title}
           editions={series.editions}
         />
       )}
@@ -242,7 +247,7 @@ export default async function Page({
         )}
       </section>
 
-      <ReportButton mangaId={mangaId} mangaTitle={anilist.title.romaji} />
+      <ReportButton mangaId={mangaId} mangaTitle={title} />
     </main>
   );
 }

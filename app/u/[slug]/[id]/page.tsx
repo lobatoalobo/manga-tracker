@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getPublicSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
+import { displayTitle } from "@/lib/title";
 import VolumeGrid from "@/components/VolumeGrid";
 
 export const metadata = { title: "Colección · Nakama" };
@@ -34,11 +35,11 @@ export default async function PublicSeriesPage({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={anilist.coverImage}
-          alt={anilist.title.romaji}
+          alt={displayTitle(anilist.title)}
           className="h-72 w-48 shrink-0 self-start rounded-xl object-cover"
         />
         <div className="flex-1">
-          <h1 className="text-2xl font-bold">{anilist.title.romaji}</h1>
+          <h1 className="text-2xl font-bold">{displayTitle(anilist.title)}</h1>
           {anilist.title.native && (
             <p className="text-muted">{anilist.title.native}</p>
           )}
