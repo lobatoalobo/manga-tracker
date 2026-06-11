@@ -1,3 +1,5 @@
+import { authorMatches } from "@/lib/authorMatch";
+
 const BASE = "https://www.ovnipress.net";
 const DAY = 60 * 60 * 24;
 
@@ -19,6 +21,7 @@ export interface OvniData {
  */
 export async function getOvniEdition(
   titles: string | string[],
+  authors: string[] = [],
 ): Promise<OvniData | null> {
   const titleList = (Array.isArray(titles) ? titles : [titles]).filter(Boolean);
   const slugs = await getProductSlugs();
@@ -30,13 +33,24 @@ export async function getOvniEdition(
 
     const re = new RegExp(`^${escapeRegex(target)}-vol-(\\d+)(?:-|$)`);
     const volumes = new Set<number>();
+    let sampleSlug: string | null = null;
 
     for (const slug of slugs) {
       const m = slug.match(re);
-      if (m) volumes.add(Number(m[1]));
+      if (m) {
+        volumes.add(Number(m[1]));
+        sampleSlug ??= slug;
+      }
     }
 
     if (volumes.size === 0) continue;
+
+    // Verificación por autor: descarta un homónimo de distinta autoría
+    // (el match es por slug, que solo refleja el título).
+    if (authors.length && sampleSlug) {
+      const author = await getOvniAuthor(sampleSlug);
+      if (author && !authorMatches(authors, author)) continue;
+    }
 
     const cleaned = dropOutliers([...volumes]);
 
@@ -52,6 +66,32 @@ export async function getOvniEdition(
 }
 
 // --- internals -------------------------------------------------------------
+
+/**
+ * Autor de un producto Ovni. La ficha (Tiendanube) lo expone en la meta
+ * description como "Autor: NOMBRE <sinopsis…>", sin separador con la sinopsis;
+ * tomamos las primeras palabras (el matching por tokens tolera el resto).
+ */
+async function getOvniAuthor(slug: string): Promise<string | null> {
+  try {
+    const r = await fetch(`${BASE}/productos/${slug}/`, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      next: { revalidate: DAY },
+    });
+    if (!r.ok) return null;
+
+    const html = await r.text();
+    const meta = html.match(
+      /<meta[^>]+name="description"[^>]+content="([^"]*)"/i,
+    )?.[1];
+    const m = meta?.match(/Autor(?:es)?:\s*(.+)/i);
+    if (!m) return null;
+
+    return m[1].split(/\s+/).slice(0, 6).join(" ");
+  } catch {
+    return null;
+  }
+}
 
 async function getProductSlugs(): Promise<string[]> {
   const r = await fetch(`${BASE}/sitemap.xml`, {

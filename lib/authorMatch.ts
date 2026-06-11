@@ -14,8 +14,9 @@ function tokenize(name: string): string[] {
  * (p. ej. "Real" de Takehiko Inoue vs. otra serie también llamada "Real").
  *
  * Conservador: si no se puede parsear autor de algún lado, NO bloquea (devuelve
- * true). Bloquea solo ante un desajuste claro: que menos de la mitad de los
- * tokens del autor de la editorial aparezcan entre los autores de la serie.
+ * true). Bloquea solo ante un desajuste claro. Es robusto a strings con ruido
+ * (algunas tiendas pegan la sinopsis al nombre del autor): compara por tokens
+ * "sustanciales" (apellido/nombre, len ≥ 4) en vez de exigir el string completo.
  */
 export function authorMatches(
   seriesAuthors: string[],
@@ -28,6 +29,15 @@ export function authorMatches(
   const series = new Set(seriesAuthors.flatMap(tokenize));
   if (series.size === 0) return true;
 
-  const hits = pub.filter((t) => series.has(t)).length;
-  return hits / pub.length >= 0.5;
+  // Señal fuerte: comparten algún token sustancial (apellido/nombre, len ≥ 4).
+  const pubSub = pub.filter((t) => t.length >= 4);
+  if (pubSub.some((t) => series.has(t))) return true;
+
+  // Si ambos lados tienen tokens sustanciales y ninguno coincide, son autores
+  // distintos → bloquea (caso homónimo).
+  const seriesHasSub = [...series].some((t) => t.length >= 4);
+  if (pubSub.length > 0 && seriesHasSub) return false;
+
+  // Nombres muy cortos (sin tokens sustanciales): basta un token compartido.
+  return pub.some((t) => series.has(t));
 }

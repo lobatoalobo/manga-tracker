@@ -19,7 +19,7 @@ import { prisma } from "./prisma";
 const EDITIONS_CACHE_TTL = 1000 * 60 * 60 * 24 * 3; // 3 días
 // Subir cuando cambie la lógica de resolución: invalida cachés viejas (p. ej.
 // para reaplicar la verificación de autor que evita mezclar obras homónimas).
-const EDITIONS_CACHE_VERSION = 2;
+const EDITIONS_CACHE_VERSION = 3;
 
 /** Lo que guardamos en EditionsCache.data: las ediciones + la versión de esquema. */
 type CachedEditions = BuiltEditions & { _v?: number };
@@ -133,9 +133,10 @@ async function resolveEditionsLive(
   const byPub = new Map<string, IndexedEdition>(
     indexed.map((e) => [e.publisher, e]),
   );
-  // El índice matchea solo por título; si la edición de Ivrea vino de ahí,
-  // la verificamos por autor para no mezclar obras homónimas (ver abajo).
+  // El índice matchea solo por título; si una edición vino de ahí la
+  // verificamos por autor para no mezclar obras homónimas (ver abajo).
   const ivreaFromIndex = byPub.has("Ivrea Argentina");
+  const ovniFromIndex = byPub.has("Ovni Press");
 
   // 2) Fallback en vivo (en paralelo) para editoriales faltantes + MU.
   const tasks: Promise<void>[] = [];
@@ -157,6 +158,8 @@ async function resolveEditionsLive(
         .catch(() => {}),
     );
   }
+  // Panini no expone el autor en su tienda (ni en atributos ni en JSON-LD),
+  // así que su match queda solo por título: no se puede verificar por autor.
   if (!byPub.has("Panini Argentina")) {
     tasks.push(
       getPaniniEdition(titles)
@@ -176,7 +179,7 @@ async function resolveEditionsLive(
   }
   if (!byPub.has("Ovni Press")) {
     tasks.push(
-      getOvniEdition(titles)
+      getOvniEdition(titles, authors)
         .then((d) => {
           if (d && d.totalVolumes > 0)
             cache(byPub, {
@@ -199,9 +202,10 @@ async function resolveEditionsLive(
   await Promise.all(tasks);
   const mu = await muPromise;
 
-  // Verificación por autor de la edición de Ivrea que vino del índice (el
-  // índice matchea solo por título). Releemos la ficha para conocer el autor
-  // y descartamos si no coincide con el de la serie (obras homónimas).
+  // Verificación por autor de las ediciones que vinieron del índice (que
+  // matchea solo por título). Para Ivrea releemos la ficha (su slug es real);
+  // para Ovni re-resolvemos en vivo (su slug en el índice es sintético).
+  // Descartamos si el autor no coincide con el de la serie (obras homónimas).
   if (ivreaFromIndex && authors.length) {
     const e = byPub.get("Ivrea Argentina");
     if (e) {
@@ -210,6 +214,10 @@ async function resolveEditionsLive(
         byPub.delete("Ivrea Argentina");
       }
     }
+  }
+  if (ovniFromIndex && authors.length) {
+    const live = await getOvniEdition(titles, authors).catch(() => null);
+    if (!live || live.totalVolumes <= 0) byPub.delete("Ovni Press");
   }
 
   // 3) Lista uniforme de ediciones locales.
