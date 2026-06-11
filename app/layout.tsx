@@ -22,7 +22,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Nakama",
-  description: "Seguí tu colección de mangas al estilo Whakoom.",
+  description: "Seguí y organizá tu colección de manga.",
 };
 
 export default async function RootLayout({
