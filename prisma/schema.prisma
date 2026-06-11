@@ -24,6 +24,68 @@ model User {
   purchases Purchase[]
   wishlist  WishlistItem[]
   notes     UserNote[]
+
+  friendsRequested  Friendship[]       @relation("requester")
+  friendsReceived   Friendship[]       @relation("addressee")
+  activities        Activity[]
+  activityComments  ActivityComment[]
+  activityReactions ActivityReaction[]
+}
+
+// Amistad entre dos usuarios (con solicitud + aceptación).
+model Friendship {
+  id          Int      @id @default(autoincrement())
+  requesterId String
+  addresseeId String
+  status      String   @default("PENDING") // PENDING | ACCEPTED
+  createdAt   DateTime @default(now())
+
+  requester User @relation("requester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("addressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId])
+}
+
+// Evento de actividad de un usuario (para el feed de amigos).
+model Activity {
+  id         Int      @id @default(autoincrement())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       String // ADDED_EDITION | MARKED_READ | COMPLETED
+  anilistId  Int?
+  title      String?
+  coverImage String?
+  detail     String? // ej. la edición
+  createdAt  DateTime @default(now())
+
+  reactions ActivityReaction[]
+  comments  ActivityComment[]
+
+  @@index([userId, createdAt])
+}
+
+model ActivityReaction {
+  id         Int    @id @default(autoincrement())
+  activityId Int
+  userId     String
+  emoji      String
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, userId])
+}
+
+model ActivityComment {
+  id         Int      @id @default(autoincrement())
+  activityId Int
+  userId     String
+  text       String
+  createdAt  DateTime @default(now())
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // Nota y puntaje personal de una serie (independiente de tenerla en la colección).

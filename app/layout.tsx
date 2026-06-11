@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { countPendingReports } from "@/lib/reports";
 import { countPendingStores } from "@/lib/stores";
+import { countPendingRequests } from "@/lib/social";
 import { SignIn, SignOut } from "@/components/AuthButtons";
 import "./globals.css";
 
@@ -36,6 +37,9 @@ export default async function RootLayout({
         countPendingStores().catch(() => 0),
       ])
     : [0, 0];
+  const pendingFriends = session?.user?.id
+    ? await countPendingRequests(session.user.id).catch(() => 0)
+    : 0;
 
   return (
     <html
@@ -69,6 +73,17 @@ export default async function RootLayout({
                   className="text-sm text-muted transition hover:text-foreground"
                 >
                   Mi colección
+                </Link>
+                <Link
+                  href="/amigos"
+                  className="flex items-center gap-1.5 text-sm text-muted transition hover:text-foreground"
+                >
+                  Amigos
+                  {pendingFriends > 0 && (
+                    <span className="rounded-full bg-accent px-1.5 py-0.5 text-xs font-semibold text-white">
+                      {pendingFriends}
+                    </span>
+                  )}
                 </Link>
                 <Link
                   href="/deseados"

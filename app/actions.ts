@@ -29,10 +29,27 @@ import {
 import { parseCsv } from "@/lib/csv";
 import { addWish, removeWish } from "@/lib/wishlist";
 import { setNote } from "@/lib/notes";
+import {
+  sendFriendRequest,
+  respondFriendRequest,
+  removeFriend,
+  logActivity,
+  toggleReaction,
+  addComment,
+  deleteComment,
+} from "@/lib/social";
+import { prisma } from "@/lib/prisma";
 
 export async function addEditionAction(input: AddEditionInput) {
   const userId = await requireUserId();
   await addEdition(userId, input);
+  await logActivity(userId, {
+    type: "ADDED_EDITION",
+    anilistId: input.anilistId,
+    title: input.title.romaji,
+    coverImage: input.coverImage,
+    detail: input.edition.label,
+  });
   revalidatePath("/collection");
   revalidatePath(`/manga/${input.anilistId}`);
 }
@@ -62,6 +79,16 @@ export async function setAllVolumesAction(
 ) {
   const userId = await requireUserId();
   await setAllVolumes(userId, anilistId, key, owned);
+  if (owned) {
+    const m = await mangaInfo(userId, anilistId);
+    if (m)
+      await logActivity(userId, {
+        type: "COMPLETED",
+        anilistId,
+        title: m.romajiTitle,
+        coverImage: m.coverImage,
+      });
+  }
   revalidatePath("/collection");
   revalidatePath(`/manga/${anilistId}`);
 }
@@ -74,8 +101,25 @@ export async function setReadingAction(
 ) {
   const userId = await requireUserId();
   await setReading(userId, anilistId, key, status, volume);
+  if (status === "READ") {
+    const m = await mangaInfo(userId, anilistId);
+    if (m)
+      await logActivity(userId, {
+        type: "MARKED_READ",
+        anilistId,
+        title: m.romajiTitle,
+        coverImage: m.coverImage,
+      });
+  }
   revalidatePath("/collection");
   revalidatePath(`/manga/${anilistId}`);
+}
+
+async function mangaInfo(userId: string, anilistId: number) {
+  return prisma.manga.findUnique({
+    where: { userId_anilistId: { userId, anilistId } },
+    select: { romajiTitle: true, coverImage: true },
+  });
 }
 
 export async function setSharingAction(enable: boolean) {
@@ -242,6 +286,52 @@ export async function setNoteAction(
     note: note?.trim() || null,
   });
   revalidatePath(`/manga/${anilistId}`);
+}
+
+// --- Social (amigos / actividad) ---
+
+export async function sendFriendRequestAction(_prev: unknown, formData: FormData) {
+  const userId = await requireUserId();
+  const email = ((formData.get("email") as string | null) ?? "").trim();
+  if (!email) return { ok: false as const, error: "Ingresá un email." };
+  const res = await sendFriendRequest(userId, email);
+  revalidatePath("/amigos");
+  return res.ok
+    ? { ok: true as const }
+    : { ok: false as const, error: res.error };
+}
+
+export async function respondFriendRequestAction(
+  friendshipId: number,
+  accept: boolean,
+) {
+  const userId = await requireUserId();
+  await respondFriendRequest(userId, friendshipId, accept);
+  revalidatePath("/amigos");
+}
+
+export async function removeFriendAction(otherId: string) {
+  const userId = await requireUserId();
+  await removeFriend(userId, otherId);
+  revalidatePath("/amigos");
+}
+
+export async function toggleReactionAction(activityId: number, emoji: string) {
+  const userId = await requireUserId();
+  await toggleReaction(userId, activityId, emoji);
+  revalidatePath("/amigos");
+}
+
+export async function addCommentAction(activityId: number, text: string) {
+  const userId = await requireUserId();
+  await addComment(userId, activityId, text);
+  revalidatePath("/amigos");
+}
+
+export async function deleteCommentAction(commentId: number) {
+  const userId = await requireUserId();
+  await deleteComment(userId, commentId);
+  revalidatePath("/amigos");
 }
 
 // --- Importar colección (CSV) ---
