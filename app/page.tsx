@@ -8,8 +8,14 @@ import SearchBar from "@/components/SearchBar";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { displayTitle, isExactTitleMatch } from "@/lib/title";
-import { getMangakaPage } from "@/lib/mangakas";
+import { getAllMangakas } from "@/lib/mangakas";
 import Pager from "@/components/Pager";
+import FinishedFilterButton from "@/components/FinishedFilterButton";
+import {
+  MangakaProvider,
+  MangakaFilterInput,
+  MangakaList,
+} from "@/components/MangakaBrowser";
 import Link from "next/link";
 
 export default async function Home({
@@ -32,10 +38,10 @@ export default async function Home({
     params.tab === "az" ? "az" : params.tab === "mangaka" ? "mangaka" : "hot";
   const page = Math.max(1, Number(params.page) || 1);
   const onlyFinished = params.finished === "1";
-  const isList = tab === "az" || tab === "mangaka";
+  const showMangaka = !query && tab === "mangaka";
 
   let mangas: any[] = [];
-  let mangakas: { id: number; name: string }[] | null = null;
+  let allMangakas: { id: number; name: string }[] = [];
   let pageInfo: { hasNextPage: boolean; lastPage: number } | null = null;
 
   if (query) {
@@ -49,13 +55,12 @@ export default async function Home({
         );
   } else if (tab === "mangaka") {
     // Listado alfabético global de autores (índice propio; ver lib/mangakas).
-    // Si el índice todavía no existe/está vacío, degradamos a un aviso.
+    // El filtrado/paginado es client-side. Si el índice todavía no existe o
+    // está vacío, la lista degrada a un aviso.
     try {
-      const res = await getMangakaPage(page);
-      mangakas = res.mangakas;
-      pageInfo = { hasNextPage: page < res.lastPage, lastPage: res.lastPage };
+      allMangakas = await getAllMangakas();
     } catch {
-      mangakas = [];
+      allMangakas = [];
     }
   } else if (tab === "az") {
     const res = await getMangaPage(page, admin, onlyFinished);
@@ -83,52 +88,21 @@ export default async function Home({
         <h2 className="mt-8 mb-4 text-lg font-semibold">
           Resultados para &quot;{query}&quot;
         </h2>
+      ) : showMangaka ? (
+        <MangakaProvider all={allMangakas}>
+          <div className="mt-8 mb-4 flex flex-wrap items-center gap-2">
+            <Tabs tab={tab} onlyFinished={onlyFinished} />
+            <MangakaFilterInput />
+          </div>
+          <MangakaList />
+        </MangakaProvider>
       ) : (
         <div className="mt-8 mb-4 flex flex-wrap items-center gap-2">
-          <Tab href="/?tab=hot" active={tab === "hot"}>
-            🔥 Hot esta semana
-          </Tab>
-          <Tab href="/?tab=az" active={tab === "az"}>
-            A-Z
-          </Tab>
-          <Tab href="/?tab=mangaka" active={tab === "mangaka"}>
-            Mangaka
-          </Tab>
-          {tab === "az" && (
-            <Link
-              href={onlyFinished ? `/?tab=${tab}` : `/?tab=${tab}&finished=1`}
-              className={`ml-1 rounded-lg px-3 py-2 text-sm transition ${
-                onlyFinished
-                  ? "bg-accent text-white"
-                  : "border border-border text-muted hover:text-foreground"
-              }`}
-            >
-              ✓ Solo terminadas
-            </Link>
-          )}
+          <Tabs tab={tab} onlyFinished={onlyFinished} />
         </div>
       )}
 
-      {mangakas ? (
-        mangakas.length === 0 ? (
-          <p className="mt-6 text-sm text-muted">
-            El índice de mangakas se está armando. Volvé en un rato.
-          </p>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {mangakas.map((m) => (
-              <Link
-                key={m.id}
-                href={`/autor/${m.id}`}
-                className="truncate rounded-xl border border-border bg-surface px-4 py-3 text-sm font-medium transition hover:border-accent hover:text-accent"
-                title={m.name}
-              >
-                {m.name}
-              </Link>
-            ))}
-          </div>
-        )
-      ) : (
+      {!showMangaka && (
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {mangas.map((manga: any) => (
           <Link
@@ -165,7 +139,7 @@ export default async function Home({
       </div>
       )}
 
-      {!query && isList && pageInfo && (
+      {tab === "az" && pageInfo && (
         <Pager basePath={listBase} page={page} lastPage={pageInfo.lastPage} />
       )}
     </main>
@@ -174,6 +148,24 @@ export default async function Home({
 
 function mangakaOf(manga: any): string {
   return manga?.staff?.nodes?.[0]?.name?.full ?? "";
+}
+
+/** Botones de tab + "Solo terminadas" (en el orden A-Z · Solo terminadas · Mangaka). */
+function Tabs({ tab, onlyFinished }: { tab: string; onlyFinished: boolean }) {
+  return (
+    <>
+      <Tab href="/?tab=hot" active={tab === "hot"}>
+        🔥 Hot esta semana
+      </Tab>
+      <Tab href="/?tab=az" active={tab === "az"}>
+        A-Z
+      </Tab>
+      <FinishedFilterButton enabled={tab === "az"} active={onlyFinished} />
+      <Tab href="/?tab=mangaka" active={tab === "mangaka"}>
+        Mangaka
+      </Tab>
+    </>
+  );
 }
 
 function Tab({

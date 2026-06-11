@@ -181,22 +181,15 @@ async function upsertMangakas(map: Map<number, string>): Promise<number> {
   return inserted;
 }
 
-/** Página del listado alfabético de mangakas. */
-export async function getMangakaPage(
-  page: number,
-  perPage = 30,
-): Promise<{ mangakas: { id: number; name: string }[]; lastPage: number }> {
-  const safePage = Math.max(1, page);
-  const [total, items] = await Promise.all([
-    prisma.mangaka.count(),
-    prisma.mangaka.findMany({
-      orderBy: { normName: "asc" },
-      skip: (safePage - 1) * perPage,
-      take: perPage,
-      select: { id: true, name: true },
-    }),
-  ]);
-  return { mangakas: items, lastPage: Math.max(1, Math.ceil(total / perPage)) };
+/**
+ * Todos los mangakas ordenados alfabéticamente. La lista (solo id + nombre) se
+ * manda al cliente para filtrar/paginar al instante mientras se tipea.
+ */
+export async function getAllMangakas(): Promise<{ id: number; name: string }[]> {
+  return prisma.mangaka.findMany({
+    orderBy: { normName: "asc" },
+    select: { id: true, name: true },
+  });
 }
 
 function sleep(ms: number): Promise<void> {
