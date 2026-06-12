@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { searchableTitle } from "@/lib/catalog";
 import { resolveEditionSeries } from "@/lib/resolveSeries";
 
 /**
@@ -39,7 +38,6 @@ export async function GET(
     return NextResponse.redirect(new URL(`/manga/${resolved}`, request.url));
   }
 
-  return NextResponse.redirect(
-    new URL(`/?search=${encodeURIComponent(searchableTitle(row.title))}`, request.url),
-  );
+  // No está en AniList: mostramos la página solo-nacional (con info de la editorial).
+  return NextResponse.redirect(new URL(`/nacional/${editionId}`, request.url));
 }

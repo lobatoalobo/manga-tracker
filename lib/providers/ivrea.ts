@@ -8,6 +8,8 @@ export interface IvreaData {
   /** "NOMBRE ORIGINAL" de la ficha (romaji) — matchea mucho mejor en AniList. */
   originalTitle: string | null;
   author: string | null;
+  coverImage: string | null;
+  synopsis: string | null;
   url: string;
   argentinaStatus: string;
   argentinaVolumes: number;
@@ -29,13 +31,29 @@ export async function getIvreaDataBySlug(
 ): Promise<IvreaData | null> {
   const url = `${BASE}/titulo/${slug}/`;
 
-  const response = await fetch(url);
+  const response = await fetch(url, { next: { revalidate: 60 * 60 * 24 } });
 
   if (!response.ok || !isTitlePage(response)) return null;
 
   const html = await response.text();
   const $ = cheerio.load(html);
   const text = $("body").text().replace(/\s+/g, " ");
+
+  const coverImage =
+    html.match(/<meta property="og:image" content="([^"]+)"/i)?.[1] ?? null;
+  const synIdx = text.search(/INFORMACI[ÓO]N SOBRE LA OBRA/i);
+  let synopsis: string | null = null;
+  if (synIdx >= 0) {
+    synopsis =
+      text
+        .slice(synIdx)
+        .replace(/INFORMACI[ÓO]N SOBRE LA OBRA/i, "")
+        .split(
+          /¿D[ÓO]NDE COMPRAR|PRODUCTOS RELACIONADOS|PREGUNTAS Y RESPUESTAS|COMPARTIR/i,
+        )[0]
+        .trim()
+        .slice(0, 1500) || null;
+  }
 
   const argentina = parseArgentina(text);
   const japan = matchEstado(text, "JAPÓN");
@@ -55,6 +73,8 @@ export async function getIvreaDataBySlug(
       .trim(),
     originalTitle: origMatch ? origMatch[1].trim() : null,
     author: authorMatch ? authorMatch[1].trim() : null,
+    coverImage,
+    synopsis,
     url,
     argentinaStatus: argentina.status,
     argentinaVolumes: argentina.volumes,
