@@ -59,16 +59,28 @@ export default async function EditionsSection({
               ) : null}
             </dl>
             {ed.note && <p className="mt-2 text-xs text-muted">{ed.note}</p>}
-            {ed.url && (
-              <a
-                href={ed.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 inline-block text-xs text-accent hover:underline"
-              >
-                Ver en {ed.publisher ?? ed.source} ↗
-              </a>
-            )}
+            {ed.url &&
+              (() => {
+                // El sitio de Panini está roto y no queremos links a Whakoom (la
+                // fuente del import): para esas ediciones linkeamos a AniList.
+                const fromWhakoom = ed.url.includes("whakoom.com");
+                const href = fromWhakoom
+                  ? `https://anilist.co/manga/${anilist.id}`
+                  : ed.url;
+                const label = fromWhakoom
+                  ? "AniList"
+                  : (ed.publisher ?? ed.source);
+                return (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-3 inline-block text-xs text-accent hover:underline"
+                  >
+                    Ver en {label} ↗
+                  </a>
+                );
+              })()}
             {canTrack && (
               <div className="mt-auto">
                 <AddEditionButton
