@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { auth } from "@/auth";
@@ -23,6 +23,13 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Nakama",
   description: "Seguí y organizá tu colección de manga.",
+  applicationName: "Nakama",
+  appleWebApp: { capable: true, title: "Nakama", statusBarStyle: "black-translucent" },
+  icons: { icon: "/icon.svg" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0d0d12",
 };
 
 export default async function RootLayout({
