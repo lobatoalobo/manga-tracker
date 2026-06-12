@@ -3,7 +3,6 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { getSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
-import { getHiatus } from "@/lib/anilist";
 import { isWished } from "@/lib/wishlist";
 import { getNote, getSeriesNotes } from "@/lib/notes";
 import { displayTitle } from "@/lib/title";
@@ -27,13 +26,12 @@ export default async function Page({
   const { id } = await params;
   const mangaId = Number(id);
 
-  const [anilist, series, wished, note, reviews, hiatus] = await Promise.all([
+  const [anilist, series, wished, note, reviews] = await Promise.all([
     getMangaCore(mangaId),
     userId ? getSeries(userId, mangaId) : Promise.resolve(null),
     userId ? isWished(userId, mangaId) : Promise.resolve(false),
     userId ? getNote(userId, mangaId) : Promise.resolve(null),
     getSeriesNotes(mangaId),
-    getHiatus(mangaId),
   ]);
 
   // Contenido +18 solo para usuarios logueados.
@@ -68,11 +66,6 @@ export default async function Page({
         <div className="flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold">{title}</h1>
-            {hiatus && (
-              <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-300">
-                ⏸ En pausa
-              </span>
-            )}
           </div>
           {anilist.title.romaji && anilist.title.romaji !== title && (
             <p className="text-sm text-muted">{anilist.title.romaji}</p>
@@ -116,7 +109,7 @@ export default async function Page({
             <Field label="Score" value={anilist.averageScore ? `${anilist.averageScore}/100` : "—"} />
             <Field
               label="Estado"
-              value={hiatus ? "En pausa" : translateStatus(anilist.status)}
+              value={translateStatus(anilist.status)}
             />
             <Field label="Popularidad" value={anilist.popularity ?? "—"} />
           </dl>

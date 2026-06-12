@@ -2,7 +2,6 @@ import {
   searchMangaList,
   getTrendingManga,
   getMangaPage,
-  getHiatusSet,
 } from "@/lib/anilist";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
@@ -89,10 +88,7 @@ export default async function Home({
     mangas = await getTrendingManga(admin);
   }
 
-  const [hiatusSet, nationalEditions] = await Promise.all([
-    getHiatusSet(mangas.map((m: any) => m.id)),
-    nationalEditionsByManga(mangas),
-  ]);
+  const nationalEditions = await nationalEditionsByManga(mangas);
 
   return (
     <main className="mx-auto max-w-6xl px-5 pb-12 pt-5">
@@ -101,27 +97,15 @@ export default async function Home({
           <h2 className="mb-4 text-lg font-semibold">
             Resultados para &quot;{query}&quot;
           </h2>
-          <MangaGrid
-            mangas={mangas}
-            hiatusSet={hiatusSet}
-            nationalEditions={nationalEditions}
-          />
+          <MangaGrid mangas={mangas} nationalEditions={nationalEditions} />
         </>
       ) : tab === "hot" ? (
-        <MangaGrid
-          mangas={mangas}
-          hiatusSet={hiatusSet}
-          nationalEditions={nationalEditions}
-        />
+        <MangaGrid mangas={mangas} nationalEditions={nationalEditions} />
       ) : tab === "az" ? (
         <>
           <FinishedFilterButton enabled active={onlyFinished} />
           <div className="mt-5">
-            <MangaGrid
-              mangas={mangas}
-              hiatusSet={hiatusSet}
-              nationalEditions={nationalEditions}
-            />
+            <MangaGrid mangas={mangas} nationalEditions={nationalEditions} />
           </div>
           {pageInfo && (
             <Pager
@@ -164,11 +148,9 @@ export default async function Home({
 
 function MangaGrid({
   mangas,
-  hiatusSet,
   nationalEditions,
 }: {
   mangas: any[];
-  hiatusSet: Set<number>;
   nationalEditions: Map<number, string[]>;
 }) {
   if (mangas.length === 0) {
@@ -187,11 +169,6 @@ function MangaGrid({
             }`}
           >
             <div className="relative aspect-2/3 w-full overflow-hidden bg-surface-2">
-              {hiatusSet.has(manga.id) && (
-                <span className="absolute left-2 top-2 z-10 rounded-full bg-amber-500/90 px-2 py-0.5 text-xs font-medium text-black">
-                  ⏸ En pausa
-                </span>
-              )}
               {national && (
                 <span
                   className="absolute right-2 top-2 z-10 rounded-full bg-sky-500/90 px-2 py-0.5 text-[10px] font-semibold text-white"
