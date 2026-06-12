@@ -3,6 +3,10 @@ import { getIvreaDataBySlug } from "../lib/providers/ivrea";
 import { getPaniniEdition } from "../lib/providers/panini";
 import { upsertPublisherEdition } from "../lib/catalog";
 import { seedMangakaIndex } from "../lib/mangakas";
+import { resolveEditionSeries } from "../lib/resolveSeries";
+import { prisma } from "../lib/prisma";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const UA = { "User-Agent": "Mozilla/5.0" };
 
@@ -153,8 +157,50 @@ async function crawlMangakas() {
   console.log(`  Mangakas: ${inserted} autores nuevos indexados.`);
 }
 
+/**
+ * Resuelve (verificado por autor) el anilistId de cada edición del catálogo, así
+ * el badge/links usan el mapeo correcto en vez de matchear por título.
+ * `npm run crawl resolve` resuelve las que faltan; `resolve reset` borra primero
+ * el mapeo (para re-resolver todo desde cero).
+ */
+async function crawlResolve(reset: boolean) {
+  console.log("\n=== Resolver ediciones → AniList (verificado por autor) ===");
+  if (reset) {
+    const r = await prisma.publisherEdition.updateMany({ data: { anilistId: null } });
+    console.log(`  Reset: ${r.count} mapeos borrados.`);
+  }
+
+  const rows = await prisma.publisherEdition.findMany({
+    where: { anilistId: null },
+    select: { id: true, publisher: true, slug: true, title: true },
+  });
+  console.log(`  ${rows.length} ediciones a resolver…`);
+
+  let done = 0;
+  let mapped = 0;
+  for (const row of rows) {
+    const anilistId = await resolveEditionSeries(row).catch(() => null);
+    if (anilistId) {
+      await prisma.publisherEdition
+        .update({ where: { id: row.id }, data: { anilistId } })
+        .catch(() => {});
+      mapped++;
+    }
+    done++;
+    if (done % 25 === 0)
+      console.log(`  ${done}/${rows.length} (mapeadas: ${mapped})`);
+    await sleep(700); // respetar rate-limit de AniList
+  }
+  console.log(`  Resueltas: ${mapped}/${rows.length}.`);
+}
+
 async function main() {
-  const which = process.argv[2]; // opcional: ivrea | panini | ovni | mangakas
+  const which = process.argv[2]; // ivrea | panini | ovni | mangakas | resolve
+  if (which === "resolve") {
+    await crawlResolve(process.argv[3] === "reset");
+    console.log("\nListo.");
+    return;
+  }
   if (!which || which === "ovni") await crawlOvni();
   if (!which || which === "panini") await crawlPanini();
   if (!which || which === "ivrea") await crawlIvrea();

@@ -17,7 +17,7 @@ import {
 } from "@/lib/catalog";
 import Pager from "@/components/Pager";
 import FinishedFilterButton from "@/components/FinishedFilterButton";
-import { MangakaFilterInput, MangakaList } from "@/components/MangakaBrowser";
+import { MangakaList } from "@/components/MangakaBrowser";
 import EditorialBrowser from "@/components/browse/EditorialBrowser";
 import Link from "next/link";
 
@@ -132,10 +132,7 @@ export default async function Home({
           )}
         </>
       ) : tab === "mangaka" ? (
-        <>
-          <MangakaFilterInput />
-          <MangakaList all={allMangakas} />
-        </>
+        <MangakaList all={allMangakas} />
       ) : (
         <>
           <div className="flex flex-wrap gap-2">

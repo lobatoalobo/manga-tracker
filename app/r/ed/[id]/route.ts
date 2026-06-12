@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { searchMangaList } from "@/lib/anilist";
 import { searchableTitle } from "@/lib/catalog";
+import { resolveEditionSeries } from "@/lib/resolveSeries";
 
 /**
- * Resuelve un título del catálogo de una editorial (PublisherEdition) a su ficha
- * de AniList y redirige. Si ya está mapeado, va directo; si no, busca con el
- * título limpio (sin decoraciones de la editorial), guarda el anilistId para la
- * próxima, y redirige a la serie. Si no la encuentra, cae a la búsqueda.
+ * Resuelve un título del catálogo de una editorial a su ficha de AniList y
+ * redirige. La resolución está verificada por autor (lib/resolveSeries) para no
+ * caer en homónimos. Guarda el anilistId para la próxima. Si no hay match
+ * confiable, cae a la búsqueda con el título limpio.
  */
 export async function GET(
   request: Request,
@@ -19,7 +19,7 @@ export async function GET(
   const row = await prisma.publisherEdition
     .findUnique({
       where: { id: editionId },
-      select: { anilistId: true, title: true },
+      select: { anilistId: true, publisher: true, slug: true, title: true },
     })
     .catch(() => null);
 
@@ -31,17 +31,15 @@ export async function GET(
     );
   }
 
-  const q = searchableTitle(row.title);
-  const hit = (await searchMangaList(q, true).catch(() => []))[0];
-
-  if (hit) {
+  const resolved = await resolveEditionSeries(row);
+  if (resolved) {
     await prisma.publisherEdition
-      .update({ where: { id: editionId }, data: { anilistId: hit.id } })
+      .update({ where: { id: editionId }, data: { anilistId: resolved } })
       .catch(() => {});
-    return NextResponse.redirect(new URL(`/manga/${hit.id}`, request.url));
+    return NextResponse.redirect(new URL(`/manga/${resolved}`, request.url));
   }
 
   return NextResponse.redirect(
-    new URL(`/?search=${encodeURIComponent(q)}`, request.url),
+    new URL(`/?search=${encodeURIComponent(searchableTitle(row.title))}`, request.url),
   );
 }
