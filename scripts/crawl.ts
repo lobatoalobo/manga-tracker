@@ -168,15 +168,21 @@ async function crawlMangakas() {
  * `npm run crawl resolve` resuelve las que faltan; `resolve reset` borra primero
  * el mapeo (para re-resolver todo desde cero).
  */
-async function crawlResolve(reset: boolean) {
+async function crawlResolve(reset: boolean, publisher?: string) {
   console.log("\n=== Resolver ediciones → AniList (verificado por autor) ===");
+  const pubWhere = publisher ? { publisher } : {};
   if (reset) {
-    const r = await prisma.publisherEdition.updateMany({ data: { anilistId: null } });
-    console.log(`  Reset: ${r.count} mapeos borrados.`);
+    const r = await prisma.publisherEdition.updateMany({
+      where: pubWhere,
+      data: { anilistId: null },
+    });
+    console.log(
+      `  Reset: ${r.count} mapeos borrados${publisher ? ` de ${publisher}` : ""}.`,
+    );
   }
 
   const rows = await prisma.publisherEdition.findMany({
-    where: { anilistId: null },
+    where: { ...pubWhere, anilistId: null },
     select: { id: true, publisher: true, slug: true, title: true },
   });
   console.log(`  ${rows.length} ediciones a resolver…`);
@@ -258,7 +264,10 @@ async function crawlWhakoomPublisher(allUrl: string, reset: boolean) {
 async function main() {
   const which = process.argv[2]; // ivrea|panini|ovni|mangakas|resolve|whakoom*
   if (which === "resolve") {
-    await crawlResolve(process.argv[3] === "reset");
+    // resolve [reset] [publisher]   ej: resolve reset "Ivrea Argentina"
+    const reset = process.argv[3] === "reset";
+    const publisher = reset ? process.argv[4] : process.argv[3];
+    await crawlResolve(reset, publisher || undefined);
     console.log("\nListo.");
     return;
   }

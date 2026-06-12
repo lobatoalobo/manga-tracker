@@ -9,9 +9,30 @@ interface EditionRow {
   title: string;
 }
 
+/** Candidato cuyo título normalizado coincide EXACTO con el término. */
+function byExactTitle(candidates: any[], term: string): number | null {
+  const nc = normalizeTitle(term);
+  const m = candidates.find(
+    (c) =>
+      normalizeTitle(c.title?.romaji ?? "") === nc ||
+      normalizeTitle(c.title?.english ?? "") === nc,
+  );
+  return m?.id ?? null;
+}
+
+/** Primer candidato cuyo autor coincide con `author`. */
+function byAuthor(candidates: any[], author: string): number | null {
+  const m = candidates.find((c) => {
+    const a = c.staff?.nodes?.[0]?.name?.full;
+    return a && authorMatches([a], author);
+  });
+  return m?.id ?? null;
+}
+
 /**
  * Resuelve un anilistId a partir de título + autor (p. ej. lo que da Whakoom).
- * Con autor: elige el candidato cuyo autor coincide. Sin autor: título exacto.
+ * Orden: título exacto (alta confianza) → autor entre los candidatos → búsqueda
+ * por autor (Staff) para títulos solo en español.
  */
 export async function resolveByTitleAuthor(
   title: string,
@@ -22,25 +43,18 @@ export async function resolveByTitleAuthor(
 
   const candidates: any[] = await searchMangaList(cleaned, true).catch(() => []);
 
+  // 1) Título exacto (evita agarrar el spin-off / la principal por error).
+  const exact = byExactTitle(candidates, cleaned);
+  if (exact) return exact;
+
+  // 2) Autor entre los candidatos de la búsqueda por título.
   if (author) {
-    const match = candidates.find((c) => {
-      const ca = c.staff?.nodes?.[0]?.name?.full;
-      return ca && authorMatches([ca], author);
-    });
-    if (match) return match.id;
+    const m = byAuthor(candidates, author);
+    if (m) return m;
   }
 
-  const nc = normalizeTitle(cleaned);
-  const exact = candidates.find(
-    (c) =>
-      normalizeTitle(c.title?.romaji ?? "") === nc ||
-      normalizeTitle(c.title?.english ?? "") === nc,
-  );
-  if (exact) return exact.id;
-
-  // Fallback: el título suele venir solo en español (no matchea). Buscamos por
-  // AUTOR (Staff de AniList) y elegimos su obra con más coincidencia de palabras
-  // con el título; si tiene una sola obra, esa.
+  // 3) Título solo en español (no matchea): buscamos por AUTOR (Staff) y
+  //    elegimos su obra con más coincidencia de palabras, o la única.
   if (author) {
     const works = await searchStaffManga(author).catch(() => []);
     if (works.length === 0) return null;
@@ -84,16 +98,14 @@ async function publisherInfo(
 }
 
 /**
- * Resuelve, **verificado por autor**, la serie de AniList para una edición del
- * catálogo de una editorial. Devuelve el anilistId o null.
+ * Resuelve la serie de AniList para una edición del catálogo de una editorial.
  *
- * - Prueba varios términos de búsqueda (título del crawl, título de la ficha y
- *   el slug), porque el título del crawl a veces viene sucio ("1-F (Fukushima 1)").
- * - Con autor de la editorial (Ivrea): elige el candidato cuyo autor coincide
- *   (evita homónimos, p. ej. "Aku no Hana" de Oshimi vs. el de Kamimura).
- * - Sin autor (Panini/Ovni): exige título EXACTO normalizado.
+ * Orden: **título exacto primero** (alta confianza; evita que un spin-off como
+ * "One Piece: Episode A" se mapee a la principal por compartir autor), y recién
+ * después match por autor. Prueba varios términos (título del crawl, título de
+ * la ficha, slug) porque el del crawl a veces viene sucio ("1-F (Fukushima 1)").
  *
- * Conservador: si no hay match confiable, devuelve null (no inventa el mapeo).
+ * Conservador: si no hay match confiable, devuelve null.
  */
 export async function resolveEditionSeries(
   row: EditionRow,
@@ -110,25 +122,22 @@ export async function resolveEditionSeries(
     ),
   ];
 
+  // 1) Título exacto, probando todos los términos.
+  const searches: { term: string; cands: any[] }[] = [];
   for (const term of terms) {
-    const candidates: any[] = await searchMangaList(term, true).catch(() => []);
-    if (candidates.length === 0) continue;
+    const cands = await searchMangaList(term, true).catch(() => []);
+    searches.push({ term, cands });
+    const exact = byExactTitle(cands, term);
+    if (exact) return exact;
+  }
 
-    if (info.author) {
-      const match = candidates.find((c) => {
-        const ca = c.staff?.nodes?.[0]?.name?.full;
-        return ca && authorMatches([ca], info.author!);
-      });
-      if (match) return match.id;
-    } else {
-      const nc = normalizeTitle(term);
-      const match = candidates.find(
-        (c) =>
-          normalizeTitle(c.title?.romaji ?? "") === nc ||
-          normalizeTitle(c.title?.english ?? "") === nc,
-      );
-      if (match) return match.id;
+  // 2) Autor (fallback) sobre los candidatos ya buscados.
+  if (info.author) {
+    for (const { cands } of searches) {
+      const m = byAuthor(cands, info.author);
+      if (m) return m;
     }
   }
+
   return null;
 }
