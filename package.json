@@ -9,6 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "migrate:staging": "node scripts/with-staging.mjs npx prisma migrate deploy",
+    "studio:staging": "node scripts/with-staging.mjs npx prisma studio",
     "crawl": "tsx scripts/crawl.ts",
     "postinstall": "prisma generate"
   },
