@@ -288,6 +288,7 @@ model PublisherEdition {
   slug      String // slug en el sitio de la editorial
   title     String // título tal como lo lista la editorial
   normTitle String // título normalizado, para matching
+  anilistId Int? // serie de AniList, backfilleada al resolver una ficha (link directo)
   volumes   Int
   status    String?
   url       String

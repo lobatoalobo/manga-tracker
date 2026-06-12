@@ -9,6 +9,7 @@ import { getMangaUpdatesData } from "./providers/mangaupdates";
 import {
   lookupEditions,
   upsertPublisherEdition,
+  linkPublisherEditions,
   slugifyTitle,
   PUBLISHERS,
   type IndexedEdition,
@@ -219,6 +220,13 @@ async function resolveEditionsLive(
     const live = await getOvniEdition(titles, authors).catch(() => null);
     if (!live || live.totalVolumes <= 0) byPub.delete("Ovni Press");
   }
+
+  // Backfill del anilistId en el índice (best-effort): las ediciones de byPub
+  // ya están verificadas por autor, así que el link editorial→ficha es correcto.
+  void linkPublisherEditions(
+    anilist.id,
+    [...byPub.values()].map((e) => ({ publisher: e.publisher, title: e.title })),
+  ).catch(() => {});
 
   // 3) Lista uniforme de ediciones locales.
   const local: LocalEdition[] = PUBLISHERS.filter((p) => byPub.has(p)).map(

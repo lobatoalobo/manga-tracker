@@ -6,6 +6,13 @@ export const PUBLISHERS = [
   "Ovni Press",
 ] as const;
 
+/** Editoriales para el browse: slug de URL ↔ nombre en el índice + label corto. */
+export const EDITORIALS = [
+  { slug: "ivrea", publisher: "Ivrea Argentina", label: "Ivrea" },
+  { slug: "panini", publisher: "Panini Argentina", label: "Panini" },
+  { slug: "ovni", publisher: "Ovni Press", label: "Ovni" },
+] as const;
+
 export interface IndexedEdition {
   publisher: string;
   slug: string;
@@ -136,4 +143,66 @@ export async function upsertPublisherEdition(e: {
       url: e.url,
     },
   });
+}
+
+/**
+ * Backfill del id de AniList en las filas del índice ya matcheadas (y verificadas
+ * por autor) para una serie. Permite linkear directo desde el browse por
+ * editorial a la ficha. Best-effort.
+ */
+export async function linkPublisherEditions(
+  anilistId: number,
+  matches: { publisher: string; title: string }[],
+): Promise<void> {
+  await Promise.all(
+    matches.map((m) =>
+      prisma.publisherEdition
+        .updateMany({
+          // Por título normalizado: los slugs en vivo de Panini/Ovni son
+          // sintéticos y no matchean los del crawl; el normTitle sí.
+          where: { publisher: m.publisher, normTitle: normalizeTitle(m.title) },
+          data: { anilistId },
+        })
+        .catch(() => {}),
+    ),
+  );
+}
+
+export interface EditorialWork {
+  id: number;
+  title: string;
+  anilistId: number | null;
+  volumes: number;
+  url: string;
+}
+
+/** Página del catálogo de una editorial (orden alfabético). */
+export async function getEditorialPage(
+  publisher: string,
+  page: number,
+  perPage = 24,
+): Promise<{ works: EditorialWork[]; lastPage: number }> {
+  const safePage = Math.max(1, page);
+  const [total, rows] = await Promise.all([
+    prisma.publisherEdition.count({ where: { publisher } }),
+    prisma.publisherEdition.findMany({
+      where: { publisher },
+      orderBy: { normTitle: "asc" },
+      skip: (safePage - 1) * perPage,
+      take: perPage,
+      select: { id: true, title: true, anilistId: true, volumes: true, url: true },
+    }),
+  ]);
+  return { works: rows, lastPage: Math.max(1, Math.ceil(total / perPage)) };
+}
+
+/** Cantidad de títulos por editorial (para los chips). */
+export async function editorialCounts(): Promise<Record<string, number>> {
+  const rows = await prisma.publisherEdition.groupBy({
+    by: ["publisher"],
+    _count: { _all: true },
+  });
+  const out: Record<string, number> = {};
+  for (const r of rows) out[r.publisher] = r._count._all;
+  return out;
 }
