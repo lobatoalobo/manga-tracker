@@ -211,6 +211,17 @@ export async function getEditorialPage(
   return { works: rows, lastPage: Math.max(1, Math.ceil(total / perPage)) };
 }
 
+/** Todo el catálogo de una editorial (para filtrar/paginar client-side). */
+export async function getEditorialAll(
+  publisher: string,
+): Promise<EditorialWork[]> {
+  return prisma.publisherEdition.findMany({
+    where: { publisher },
+    orderBy: { normTitle: "asc" },
+    select: { id: true, title: true, anilistId: true, volumes: true, url: true },
+  });
+}
+
 /** Cantidad de títulos por editorial (para los chips). */
 export async function editorialCounts(): Promise<Record<string, number>> {
   const rows = await prisma.publisherEdition.groupBy({

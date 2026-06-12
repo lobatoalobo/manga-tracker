@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useBrowse } from "@/components/browse/BrowseProvider";
 
 type Item = { id: number; name: string };
 
@@ -15,103 +16,32 @@ function norm(s: string): string {
     .trim();
 }
 
-const Ctx = createContext<{
-  q: string;
-  setQ: (v: string) => void;
-  filtered: Item[];
-  page: number;
-  setPage: (n: number) => void;
-} | null>(null);
-
-/**
- * Estado compartido del tab Mangaka: el input de filtro (en la barra de tabs)
- * y la lista (debajo) viven en componentes distintos pero comparten este
- * contexto, así el filtrado es instantáneo (client-side, sin recargar).
- */
-export function MangakaProvider({
-  all,
-  children,
-}: {
-  all: Item[];
-  children: React.ReactNode;
-}) {
-  const [q, setQRaw] = useState("");
-  const [page, setPage] = useState(1);
-
-  const filtered = useMemo(() => {
-    const nq = norm(q);
-    return nq ? all.filter((m) => norm(m.name).startsWith(nq)) : all;
-  }, [q, all]);
-
-  const setQ = (v: string) => {
-    setQRaw(v);
-    setPage(1); // al cambiar el filtro, volvemos a la primera página
-  };
-
-  return (
-    <Ctx.Provider value={{ q, setQ, filtered, page, setPage }}>
-      {children}
-    </Ctx.Provider>
-  );
-}
-
-const FILTER_HINT = "Seleccioná Mangaka para habilitar";
-
-/**
- * Filtro de mangakas. Siempre visible en la barra: habilitado solo en el tab
- * Mangaka; en el resto se ve deshabilitado y muestra un tooltip (hover en
- * desktop, tap en mobile), igual que "Solo terminadas".
- */
-export function MangakaFilterInput({ enabled }: { enabled: boolean }) {
-  const ctx = useContext(Ctx);
-  const [showTip, setShowTip] = useState(false);
-
-  if (!enabled || !ctx) {
-    return (
-      <span
-        className="group relative ml-1"
-        onClick={() => {
-          setShowTip(true);
-          setTimeout(() => setShowTip(false), 2500);
-        }}
-      >
-        <input
-          type="search"
-          readOnly
-          tabIndex={-1}
-          placeholder="Filtrar mangaka…"
-          title={FILTER_HINT}
-          aria-disabled="true"
-          className="pointer-events-none w-40 cursor-not-allowed rounded-lg border border-border bg-surface px-3 py-2 text-sm text-muted opacity-40 sm:w-52"
-        />
-        <span
-          role="tooltip"
-          className={`pointer-events-none absolute left-1/2 top-full z-20 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-surface-2 px-2 py-1 text-xs text-foreground shadow-lg group-hover:block ${
-            showTip ? "block" : "hidden"
-          }`}
-        >
-          {FILTER_HINT}
-        </span>
-      </span>
-    );
-  }
-
+/** Input de filtro de mangakas (sincronizado con el buscador de la barra). */
+export function MangakaFilterInput() {
+  const browse = useBrowse();
+  if (!browse) return null;
   return (
     <input
       type="search"
-      value={ctx.q}
-      onChange={(e) => ctx.setQ(e.target.value)}
+      value={browse.q}
+      onChange={(e) => browse.setQ(e.target.value)}
       placeholder="Filtrar mangaka…"
       aria-label="Filtrar mangaka"
-      className="ml-1 w-40 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none sm:w-52"
+      className="w-full max-w-xs rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
     />
   );
 }
 
-export function MangakaList() {
-  const ctx = useContext(Ctx);
-  if (!ctx) return null;
-  const { filtered, page, setPage, q } = ctx;
+/** Listado alfabético de mangakas, filtrado por el buscador compartido. */
+export function MangakaList({ all }: { all: Item[] }) {
+  const browse = useBrowse();
+  const q = browse?.q ?? "";
+  const [page, setPage] = useState(1);
+
+  const filtered = useMemo(() => {
+    const nq = norm(q);
+    return nq ? all.filter((m) => norm(m.name).includes(nq)) : all;
+  }, [q, all]);
 
   if (filtered.length === 0) {
     return (
@@ -146,7 +76,7 @@ export function MangakaList() {
   );
 }
 
-function ClientPager({
+export function ClientPager({
   page,
   lastPage,
   onPage,

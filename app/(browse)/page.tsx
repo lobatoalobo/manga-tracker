@@ -4,25 +4,21 @@ import {
   getMangaPage,
   getHiatusSet,
 } from "@/lib/anilist";
-import SearchBar from "@/components/SearchBar";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { displayTitle, isExactTitleMatch } from "@/lib/title";
 import { getAllMangakas } from "@/lib/mangakas";
 import {
   nationalEditionsByManga,
-  getEditorialPage,
+  getEditorialAll,
   editorialCounts,
   EDITORIALS,
   type EditorialWork,
 } from "@/lib/catalog";
 import Pager from "@/components/Pager";
 import FinishedFilterButton from "@/components/FinishedFilterButton";
-import {
-  MangakaProvider,
-  MangakaFilterInput,
-  MangakaList,
-} from "@/components/MangakaBrowser";
+import { MangakaFilterInput, MangakaList } from "@/components/MangakaBrowser";
+import EditorialBrowser from "@/components/browse/EditorialBrowser";
 import Link from "next/link";
 
 type Tab = "hot" | "az" | "mangaka" | "editoriales";
@@ -64,7 +60,6 @@ export default async function Home({
   let pageInfo: { lastPage: number } | null = null;
 
   if (query) {
-    // +18 solo para logueados; y para no-admin, Hentai solo con nombre exacto.
     const raw = await searchMangaList(query, loggedIn);
     mangas = admin
       ? raw
@@ -77,12 +72,11 @@ export default async function Home({
     }
   } else if (tab === "editoriales") {
     try {
-      const [res, counts] = await Promise.all([
-        getEditorialPage(editorial.publisher, page),
+      const [works, counts] = await Promise.all([
+        getEditorialAll(editorial.publisher),
         editorialCounts(),
       ]);
-      editorialWorks = res.works;
-      pageInfo = { lastPage: res.lastPage };
+      editorialWorks = works;
       edCounts = counts;
     } catch {
       editorialWorks = [];
@@ -100,21 +94,11 @@ export default async function Home({
     nationalEditionsByManga(mangas),
   ]);
 
-  const azBase = `/?tab=az` + (onlyFinished ? "&finished=1" : "");
-  const edBase = `/?tab=editoriales&ed=${editorial.slug}`;
-
   return (
-    <main className="mx-auto max-w-6xl px-5 py-8">
-      <h1 className="mb-1 text-2xl font-bold">📚 Nakama</h1>
-      <p className="mb-6 text-sm text-muted">
-        Buscá un manga y agregalo a tu colección.
-      </p>
-
-      <SearchBar />
-
+    <main className="mx-auto max-w-6xl px-5 pb-12 pt-5">
       {query ? (
         <>
-          <h2 className="mt-8 mb-4 text-lg font-semibold">
+          <h2 className="mb-4 text-lg font-semibold">
             Resultados para &quot;{query}&quot;
           </h2>
           <MangaGrid
@@ -123,76 +107,59 @@ export default async function Home({
             nationalEditions={nationalEditions}
           />
         </>
+      ) : tab === "hot" ? (
+        <MangaGrid
+          mangas={mangas}
+          hiatusSet={hiatusSet}
+          nationalEditions={nationalEditions}
+        />
+      ) : tab === "az" ? (
+        <>
+          <FinishedFilterButton enabled active={onlyFinished} />
+          <div className="mt-5">
+            <MangaGrid
+              mangas={mangas}
+              hiatusSet={hiatusSet}
+              nationalEditions={nationalEditions}
+            />
+          </div>
+          {pageInfo && (
+            <Pager
+              basePath={`/?tab=az` + (onlyFinished ? "&finished=1" : "")}
+              page={page}
+              lastPage={pageInfo.lastPage}
+            />
+          )}
+        </>
+      ) : tab === "mangaka" ? (
+        <>
+          <MangakaFilterInput />
+          <MangakaList all={allMangakas} />
+        </>
       ) : (
-        <div className="mt-8">
-          <ModeSwitch tab={tab} />
-
-          {tab === "hot" && (
-            <div className="mt-5">
-              <MangaGrid
-                mangas={mangas}
-                hiatusSet={hiatusSet}
-                nationalEditions={nationalEditions}
-              />
-            </div>
-          )}
-
-          {tab === "az" && (
-            <>
-              <div className="mt-3">
-                <FinishedFilterButton enabled active={onlyFinished} />
-              </div>
-              <div className="mt-5">
-                <MangaGrid
-                  mangas={mangas}
-                  hiatusSet={hiatusSet}
-                  nationalEditions={nationalEditions}
-                />
-              </div>
-              {pageInfo && (
-                <Pager basePath={azBase} page={page} lastPage={pageInfo.lastPage} />
-              )}
-            </>
-          )}
-
-          {tab === "mangaka" && (
-            <MangakaProvider all={allMangakas}>
-              <div className="mt-3">
-                <MangakaFilterInput enabled />
-              </div>
-              <MangakaList />
-            </MangakaProvider>
-          )}
-
-          {tab === "editoriales" && (
-            <>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {EDITORIALS.map((e) => (
-                  <Link
-                    key={e.slug}
-                    href={`/?tab=editoriales&ed=${e.slug}`}
-                    className={`rounded-full px-3 py-1.5 text-sm transition ${
-                      e.slug === editorial.slug
-                        ? "bg-accent text-white"
-                        : "border border-border text-muted hover:text-foreground"
-                    }`}
-                  >
-                    {e.label}
-                    {edCounts[e.publisher] ? (
-                      <span className="ml-1 opacity-70">
-                        {edCounts[e.publisher]}
-                      </span>
-                    ) : null}
-                  </Link>
-                ))}
-              </div>
-              <EditorialGrid works={editorialWorks} />
-              {pageInfo && (
-                <Pager basePath={edBase} page={page} lastPage={pageInfo.lastPage} />
-              )}
-            </>
-          )}
-        </div>
+        <>
+          <div className="flex flex-wrap gap-2">
+            {EDITORIALS.map((e) => (
+              <Link
+                key={e.slug}
+                href={`/?tab=editoriales&ed=${e.slug}`}
+                className={`rounded-full px-3 py-1.5 text-sm transition ${
+                  e.slug === editorial.slug
+                    ? "bg-accent text-white"
+                    : "border border-border text-muted hover:text-foreground"
+                }`}
+              >
+                {e.label}
+                {edCounts[e.publisher] ? (
+                  <span className="ml-1 opacity-70">
+                    {edCounts[e.publisher]}
+                  </span>
+                ) : null}
+              </Link>
+            ))}
+          </div>
+          <EditorialBrowser works={editorialWorks} />
+        </>
       )}
     </main>
   );
@@ -261,58 +228,6 @@ function MangaGrid({
   );
 }
 
-function EditorialGrid({ works }: { works: EditorialWork[] }) {
-  if (works.length === 0) {
-    return (
-      <p className="mt-5 text-sm text-muted">
-        No hay títulos indexados para esta editorial todavía.
-      </p>
-    );
-  }
-  return (
-    <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-      {works.map((w) => (
-        <Link
-          key={w.id}
-          href={w.anilistId ? `/manga/${w.anilistId}` : `/r/ed/${w.id}`}
-          title={w.title}
-          className="flex items-center justify-between gap-2 rounded-xl border border-border bg-surface px-4 py-3 transition hover:border-accent"
-        >
-          <span className="truncate text-sm font-medium">{w.title}</span>
-          <span className="shrink-0 text-xs text-muted">{w.volumes} tomos</span>
-        </Link>
-      ))}
-    </div>
-  );
-}
-
 function mangakaOf(manga: any): string {
   return manga?.staff?.nodes?.[0]?.name?.full ?? "";
-}
-
-/** Control segmentado de modos de descubrimiento. */
-function ModeSwitch({ tab }: { tab: Tab }) {
-  const modes: { key: Tab; href: string; label: string }[] = [
-    { key: "hot", href: "/?tab=hot", label: "🔥 Hot" },
-    { key: "az", href: "/?tab=az", label: "A-Z" },
-    { key: "mangaka", href: "/?tab=mangaka", label: "Mangakas" },
-    { key: "editoriales", href: "/?tab=editoriales", label: "Editoriales" },
-  ];
-  return (
-    <div className="inline-flex flex-wrap gap-1 rounded-xl border border-border bg-surface-2 p-1">
-      {modes.map((m) => (
-        <Link
-          key={m.key}
-          href={m.href}
-          className={`rounded-lg px-3.5 py-1.5 text-sm font-medium transition ${
-            tab === m.key
-              ? "bg-accent text-white"
-              : "text-muted hover:text-foreground"
-          }`}
-        >
-          {m.label}
-        </Link>
-      ))}
-    </div>
-  );
 }
