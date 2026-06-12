@@ -9,6 +9,37 @@ interface EditionRow {
   title: string;
 }
 
+/**
+ * Resuelve un anilistId a partir de título + autor (p. ej. lo que da Whakoom).
+ * Con autor: elige el candidato cuyo autor coincide. Sin autor: título exacto.
+ */
+export async function resolveByTitleAuthor(
+  title: string,
+  author: string | null,
+): Promise<number | null> {
+  const cleaned = searchableTitle(title);
+  if (!cleaned) return null;
+
+  const candidates: any[] = await searchMangaList(cleaned, true).catch(() => []);
+  if (candidates.length === 0) return null;
+
+  if (author) {
+    const match = candidates.find((c) => {
+      const ca = c.staff?.nodes?.[0]?.name?.full;
+      return ca && authorMatches([ca], author);
+    });
+    if (match) return match.id;
+  }
+
+  const nc = normalizeTitle(cleaned);
+  const exact = candidates.find(
+    (c) =>
+      normalizeTitle(c.title?.romaji ?? "") === nc ||
+      normalizeTitle(c.title?.english ?? "") === nc,
+  );
+  return exact?.id ?? null;
+}
+
 /** Autor + título que lista la editorial (cuando los expone). */
 async function publisherInfo(
   row: EditionRow,

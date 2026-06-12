@@ -4,7 +4,9 @@ import { getPaniniEdition } from "../lib/providers/panini";
 import { upsertPublisherEdition } from "../lib/catalog";
 import { seedMangakaIndex } from "../lib/mangakas";
 import { resolveEditionSeries } from "../lib/resolveSeries";
+import { importWhakoomUrls } from "../lib/whakoomImport";
 import { prisma } from "../lib/prisma";
+import { readFileSync } from "fs";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -194,10 +196,40 @@ async function crawlResolve(reset: boolean) {
   console.log(`  Resueltas: ${mapped}/${rows.length}.`);
 }
 
+async function crawlWhakoom(file: string) {
+  console.log("\n=== Importar ediciones desde Whakoom ===");
+  const urls = readFileSync(file, "utf8")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  console.log(`  ${urls.length} URLs en ${file}…`);
+  const res = await importWhakoomUrls(urls, {
+    onProgress: (p) => {
+      if (p.done % 10 === 0)
+        console.log(`  ${p.done}/${p.total} (mapeadas: ${p.mapped})`);
+    },
+  });
+  console.log(
+    `  Importadas: ${res.imported} · mapeadas: ${res.mapped} · salteadas: ${res.skipped.length}`,
+  );
+  if (res.skipped.length)
+    console.log("  Salteadas:\n   " + res.skipped.slice(0, 30).join("\n   "));
+}
+
 async function main() {
-  const which = process.argv[2]; // ivrea | panini | ovni | mangakas | resolve
+  const which = process.argv[2]; // ivrea|panini|ovni|mangakas|resolve|whakoom
   if (which === "resolve") {
     await crawlResolve(process.argv[3] === "reset");
+    console.log("\nListo.");
+    return;
+  }
+  if (which === "whakoom") {
+    const file = process.argv[3];
+    if (!file) {
+      console.error("Falta el archivo: npm run crawl whakoom urls.txt");
+      process.exit(1);
+    }
+    await crawlWhakoom(file);
     console.log("\nListo.");
     return;
   }
