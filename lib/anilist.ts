@@ -286,7 +286,7 @@ export async function getMangaPage(
     query ($page: Int) {
       Page(page: $page, perPage: 10) {
         pageInfo { currentPage hasNextPage lastPage }
-        media(type: MANGA, sort: TITLE_ROMAJI${filters}) {
+        media(type: MANGA, sort: TITLE_ENGLISH${filters}) {
           id
           title { romaji english native }
           coverImage { large }
