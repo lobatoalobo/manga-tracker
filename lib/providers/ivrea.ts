@@ -5,6 +5,8 @@ export interface IvreaData {
   publisher: string;
   slug: string;
   title: string;
+  /** "NOMBRE ORIGINAL" de la ficha (romaji) — matchea mucho mejor en AniList. */
+  originalTitle: string | null;
   author: string | null;
   url: string;
   argentinaStatus: string;
@@ -40,6 +42,8 @@ export async function getIvreaDataBySlug(
   const nextMatch = text.match(/PR[ÓO]XIMO TOMO A LA VENTA:\s*#?(\d+)/i);
   // La ficha lista el autor como "AUTOR: NOMBRE • ..." (separador • o salto).
   const authorMatch = text.match(/AUTOR(?:ES)?:\s*([^•·|\n]+)/i);
+  // "NOMBRE ORIGINAL JAPONÉS: TAKOPII NO GENZAI" (o "NOMBRE ORIGINAL: ...").
+  const origMatch = text.match(/NOMBRE ORIGINAL[^:]*:\s*([^•·|\n]+)/i);
 
   return {
     publisher: "Ivrea Argentina",
@@ -49,6 +53,7 @@ export async function getIvreaDataBySlug(
       .load($("h1").first().text() || "")("body")
       .text()
       .trim(),
+    originalTitle: origMatch ? origMatch[1].trim() : null,
     author: authorMatch ? authorMatch[1].trim() : null,
     url,
     argentinaStatus: argentina.status,

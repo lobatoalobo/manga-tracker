@@ -85,16 +85,22 @@ export async function resolveByTitleAuthor(
   return null;
 }
 
-/** Autor + título que lista la editorial (cuando los expone). */
-async function publisherInfo(
-  row: EditionRow,
-): Promise<{ author: string | null; title: string | null }> {
+/** Autor, título y título original que lista la editorial (cuando los expone). */
+async function publisherInfo(row: EditionRow): Promise<{
+  author: string | null;
+  title: string | null;
+  originalTitle: string | null;
+}> {
   if (row.publisher === "Ivrea Argentina") {
     const ficha = await getIvreaDataBySlug(row.slug).catch(() => null);
-    return { author: ficha?.author ?? null, title: ficha?.title ?? null };
+    return {
+      author: ficha?.author ?? null,
+      title: ficha?.title ?? null,
+      originalTitle: ficha?.originalTitle ?? null,
+    };
   }
   // Panini no expone autor; Ovni requeriría una ficha de producto (TODO).
-  return { author: null, title: null };
+  return { author: null, title: null, originalTitle: null };
 }
 
 /**
@@ -115,6 +121,8 @@ export async function resolveEditionSeries(
   const terms = [
     ...new Set(
       [
+        // El "NOMBRE ORIGINAL" (romaji) es el que mejor matchea en AniList.
+        info.originalTitle ? searchableTitle(info.originalTitle) : "",
         searchableTitle(row.title),
         info.title ? searchableTitle(info.title) : "",
         row.slug.replace(/-/g, " ").trim(),
