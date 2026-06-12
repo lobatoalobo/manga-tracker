@@ -274,12 +274,8 @@ function EditorialGrid({ works }: { works: EditorialWork[] }) {
       {works.map((w) => (
         <Link
           key={w.id}
-          href={
-            w.anilistId
-              ? `/manga/${w.anilistId}`
-              : `/?search=${encodeURIComponent(w.title)}`
-          }
-          title={w.anilistId ? w.title : `Buscar "${w.title}"`}
+          href={w.anilistId ? `/manga/${w.anilistId}` : `/r/ed/${w.id}`}
+          title={w.title}
           className="flex items-center justify-between gap-2 rounded-xl border border-border bg-surface px-4 py-3 transition hover:border-accent"
         >
           <span className="truncate text-sm font-medium">{w.title}</span>

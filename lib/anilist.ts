@@ -178,8 +178,8 @@ export async function searchMangaList(
   const json =
     await response.json();
 
-  return json.data.Page
-    .media;
+  // Defensa: si AniList devuelve error (rate-limit, etc.) data viene null.
+  return json?.data?.Page?.media ?? [];
 }
 
 /**

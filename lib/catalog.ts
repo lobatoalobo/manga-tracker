@@ -37,6 +37,21 @@ export function slugifyTitle(value: string): string {
 }
 
 /**
+ * Limpia el título de una editorial para buscarlo en AniList. Las editoriales
+ * agregan decoraciones que AniList no tiene (subtítulos entre guiones o
+ * paréntesis), p. ej. "Aku No Hana -Las Flores Del Mal-" → "Aku No Hana".
+ */
+export function searchableTitle(value: string): string {
+  return value
+    // Subtítulo " -Algo-" (con espacio antes; no toca guiones internos como
+    // en "Rent-A-Girlfriend" o "Living-Room Matsunaga-San").
+    .replace(/\s-[^-]+-(?=\s|$)/g, " ")
+    .replace(/\([^)]*\)/g, " ") // "(algo)"
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * Busca en el índice las mejores ediciones (una por editorial) que matcheen
  * cualquiera de los títulos dados. Match exacto por slug o título normalizado.
  */
