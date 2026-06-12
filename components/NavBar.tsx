@@ -56,6 +56,7 @@ export default function NavBar({
     { href: "/collection", label: "Mi colección" },
     { href: "/amigos", label: "Amigos", badge: badges.friends },
     { href: "/deseados", label: "Deseados" },
+    { href: "/faltantes", label: "Para comprar" },
     { href: "/compras", label: "Compras" },
   ];
 
