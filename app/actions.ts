@@ -46,7 +46,10 @@ import {
 } from "@/lib/purchases";
 import { searchMangaList } from "@/lib/anilist";
 import { setCrumbQuery, setOvniUrl } from "@/lib/storeLinks";
-import { invalidateEditionsCache } from "@/lib/getMangaDetails";
+import {
+  invalidateEditionsCache,
+  clearAllEditionsCache,
+} from "@/lib/getMangaDetails";
 import { parseCsv } from "@/lib/csv";
 import { addWish, removeWish } from "@/lib/wishlist";
 import { setNote } from "@/lib/notes";
@@ -311,6 +314,14 @@ export async function deleteEditionAction(id: number) {
 async function assertAdmin() {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) throw new Error("No autorizado");
+}
+
+/** Admin: vacía toda la caché de ediciones (sin redeploy). */
+export async function flushEditionsCacheAction() {
+  await assertAdmin();
+  const count = await clearAllEditionsCache();
+  revalidatePath("/admin/herramientas");
+  return { ok: true as const, count };
 }
 
 /** Admin: override del término de búsqueda de Crumb para una serie. */

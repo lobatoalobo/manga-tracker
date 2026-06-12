@@ -28,8 +28,19 @@ export async function getWhakoomEdition(
   }).catch(() => null);
   if (!r || !r.ok) return null;
 
-  const t = await r.text();
+  return parseWhakoomEdition(await r.text(), url);
+}
 
+/**
+ * Parsea el HTML de una página de edición de Whakoom (sin red). Separado de
+ * `getWhakoomEdition` para poder testearlo con fixtures: las páginas mezclan dos
+ * formatos (nombre directo en el <a> o anidado en <span itemprop>) y eso ya nos
+ * rompió el import una vez.
+ */
+export function parseWhakoomEdition(
+  t: string,
+  url: string,
+): WhakoomEdition | null {
   const title = (
     t.match(/<meta property="og:title" content="([^"]+)"/i)?.[1] ||
     t.match(/<h1[^>]*>([^<]+)<\/h1>/i)?.[1] ||

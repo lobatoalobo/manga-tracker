@@ -114,6 +114,12 @@ export async function invalidateEditionsCache(anilistId: number) {
     .catch(() => {});
 }
 
+/** Vacía toda la caché de ediciones (admin). Devuelve cuántas borró. */
+export async function clearAllEditionsCache(): Promise<number> {
+  const r = await prisma.editionsCache.deleteMany({});
+  return r.count;
+}
+
 async function saveEditionsCache(anilistId: number, built: BuiltEditions) {
   try {
     const data = { ...built, _v: EDITIONS_CACHE_VERSION } as unknown as object;

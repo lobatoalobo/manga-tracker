@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<!-- Fixture sintético: formato "texto directo" (nombre dentro del <a>, sin
+     <span itemprop>) + edición de varios tomos numerados. Reproduce el formato
+     que parseaba bien antes del bug del <span> anidado. -->
+<html>
+<head>
+  <meta property="og:title" content="Blue Period (Panini Comics Argentina)" />
+</head>
+<body>
+  <h1>Blue Period</h1>
+  <div itemprop="author"><a href="/autores/12345/tsubasa_yamaguchi">Tsubasa Yamaguchi</a></div>
+  <div itemprop="publisher"><a href="/publisher/20930/panini_comics_argentina">Panini Comics Argentina</a></div>
+  <ul class="issues">
+    <li><a href="/comics/aaa01/blue_period/1">Tomo 1</a></li>
+    <li><a href="/comics/aaa02/blue_period/2">Tomo 2</a></li>
+    <li><a href="/comics/aaa03/blue_period/3">Tomo 3</a></li>
+  </ul>
+</body>
+</html>
