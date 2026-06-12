@@ -4,7 +4,10 @@ import { getPaniniEdition } from "../lib/providers/panini";
 import { upsertPublisherEdition } from "../lib/catalog";
 import { seedMangakaIndex } from "../lib/mangakas";
 import { resolveEditionSeries } from "../lib/resolveSeries";
-import { importWhakoomUrls } from "../lib/whakoomImport";
+import {
+  importWhakoomUrls,
+  enumeratePublisherEditions,
+} from "../lib/whakoomImport";
 import { prisma } from "../lib/prisma";
 import { readFileSync } from "fs";
 
@@ -216,8 +219,28 @@ async function crawlWhakoom(file: string) {
     console.log("  Salteadas:\n   " + res.skipped.slice(0, 30).join("\n   "));
 }
 
+async function crawlWhakoomPublisher(allUrl: string) {
+  console.log("\n=== Importar editorial completa desde Whakoom ===");
+  console.log(`  Enumerando ediciones de ${allUrl}…`);
+  const urls = await enumeratePublisherEditions(allUrl, {
+    onPage: (p, total) => {
+      if (p % 5 === 0) console.log(`  página ${p}: ${total} ediciones`);
+    },
+  });
+  console.log(`  ${urls.length} ediciones encontradas. Importando + mapeando…`);
+  const res = await importWhakoomUrls(urls, {
+    onProgress: (pr) => {
+      if (pr.done % 20 === 0)
+        console.log(`  ${pr.done}/${pr.total} (mapeadas: ${pr.mapped})`);
+    },
+  });
+  console.log(
+    `  Importadas: ${res.imported} · mapeadas: ${res.mapped} · salteadas: ${res.skipped.length}`,
+  );
+}
+
 async function main() {
-  const which = process.argv[2]; // ivrea|panini|ovni|mangakas|resolve|whakoom
+  const which = process.argv[2]; // ivrea|panini|ovni|mangakas|resolve|whakoom*
   if (which === "resolve") {
     await crawlResolve(process.argv[3] === "reset");
     console.log("\nListo.");
@@ -230,6 +253,18 @@ async function main() {
       process.exit(1);
     }
     await crawlWhakoom(file);
+    console.log("\nListo.");
+    return;
+  }
+  if (which === "whakoom-pub") {
+    const url = process.argv[3];
+    if (!url) {
+      console.error(
+        'Falta la URL: npm run crawl whakoom-pub "https://www.whakoom.com/publisher/20930/panini_comics_argentina/all"',
+      );
+      process.exit(1);
+    }
+    await crawlWhakoomPublisher(url);
     console.log("\nListo.");
     return;
   }
