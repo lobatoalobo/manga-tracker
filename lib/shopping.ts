@@ -17,6 +17,26 @@ export interface ShoppingItem {
   storeLabel: string | null;
 }
 
+/** Conteo liviano para el badge/bar: series incompletas y tomos faltantes (AR). */
+export async function getShoppingCount(
+  userId: string,
+): Promise<{ series: number; tomos: number }> {
+  const eds = await prisma.trackedEdition.findMany({
+    where: { region: "AR", totalVolumes: { gt: 0 }, manga: { userId } },
+    select: { totalVolumes: true, _count: { select: { ownedVolumes: true } } },
+  });
+  let series = 0;
+  let tomos = 0;
+  for (const e of eds) {
+    const miss = e.totalVolumes - e._count.ownedVolumes;
+    if (miss > 0) {
+      series++;
+      tomos += miss;
+    }
+  }
+  return { series, tomos };
+}
+
 /**
  * Lista de compra: por cada edición nacional (AR) incompleta de la colección,
  * qué tomos faltan + a dónde comprarlos (Crumb + sitio de la editorial).
