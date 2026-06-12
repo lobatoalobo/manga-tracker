@@ -15,7 +15,7 @@ import {
   PURCHASE_STATUS_ORDER,
 } from "@/lib/purchaseStatus";
 import PurchaseForm from "@/components/PurchaseForm";
-import PurchaseActions from "@/components/PurchaseActions";
+import EditPurchaseButton from "@/components/EditPurchaseButton";
 import PurchaseItemStatus from "@/components/PurchaseItemStatus";
 import PeriodNav, { type Period } from "@/components/PeriodNav";
 import SpendChart from "@/components/SpendChart";
@@ -203,9 +203,23 @@ export default async function ComprasPage({
                     <p className="mt-3 text-sm text-muted">{p.note}</p>
                   )}
 
-                  <div className="mt-4 flex justify-end">
-                    <PurchaseActions id={p.id} />
-                  </div>
+                  <EditPurchaseButton
+                    purchase={{
+                      id: p.id,
+                      store: p.store ?? "",
+                      purchasedAt: p.purchasedAt.toISOString().slice(0, 10),
+                      note: p.note ?? "",
+                      items: p.items.map((it) => ({
+                        id: it.id,
+                        title: it.title,
+                        anilistId: it.anilistId,
+                        coverImage: it.coverImage,
+                        volume: it.volume,
+                        edition: it.edition,
+                        price: it.price,
+                      })),
+                    }}
+                  />
                 </div>
               </details>
             </li>

@@ -84,6 +84,81 @@ export async function addPurchase(userId: string, input: PurchaseInput) {
   });
 }
 
+export interface UpdatePurchaseItem extends PurchaseItemInput {
+  id?: number | null; // presente = tomo existente; ausente = tomo nuevo
+}
+
+export interface UpdatePurchaseInput {
+  store?: string | null;
+  note?: string | null;
+  purchasedAt?: Date | null;
+  items: UpdatePurchaseItem[];
+}
+
+/**
+ * Edita una compra: actualiza encabezado, modifica los tomos existentes (por
+ * id, preservando su estado), borra los que se quitaron y crea los nuevos.
+ * Devuelve los tomos nuevos (para, si corresponde, sumarlos a la colección).
+ */
+export async function updatePurchase(
+  userId: string,
+  id: number,
+  input: UpdatePurchaseInput,
+) {
+  const existing = await prisma.purchase.findFirst({
+    where: { id, userId },
+    select: { id: true },
+  });
+  if (!existing) return null;
+
+  const items = input.items.filter(
+    (i) => i.title.trim() && Number.isFinite(i.price),
+  );
+  const fields = (i: UpdatePurchaseItem) => ({
+    title: i.title.trim(),
+    anilistId: i.anilistId ?? null,
+    coverImage: clean(i.coverImage),
+    volume: i.volume ?? null,
+    edition: clean(i.edition),
+    price: i.price,
+  });
+
+  const keepIds = items.filter((i) => i.id).map((i) => i.id as number);
+  await prisma.purchaseItem.deleteMany({
+    where: { purchaseId: id, id: { notIn: keepIds.length ? keepIds : [-1] } },
+  });
+
+  for (const i of items.filter((i) => i.id)) {
+    await prisma.purchaseItem.update({
+      where: { id: i.id as number },
+      data: fields(i), // no toca status (se maneja por tomo)
+    });
+  }
+
+  const created = [];
+  for (const i of items.filter((i) => !i.id)) {
+    const c = await prisma.purchaseItem.create({
+      data: {
+        purchaseId: id,
+        ...fields(i),
+        status: normalizeStatus(i.status),
+      },
+    });
+    created.push(c);
+  }
+
+  await prisma.purchase.update({
+    where: { id },
+    data: {
+      store: clean(input.store),
+      note: clean(input.note),
+      ...(input.purchasedAt ? { purchasedAt: input.purchasedAt } : {}),
+    },
+  });
+
+  return { created };
+}
+
 /** Cambia el estado de un tomo (verifica que la compra sea del usuario). */
 export async function setPurchaseItemStatus(
   userId: string,

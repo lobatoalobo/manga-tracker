@@ -36,11 +36,13 @@ import { resolveEditionSeries } from "@/lib/resolveSeries";
 import { isAdmin } from "@/lib/admin";
 import {
   addPurchase,
+  updatePurchase,
   setPurchaseItemStatus,
   deletePurchase,
   normalizeStatus,
   type PurchaseStatus,
   type PurchaseItemInput,
+  type UpdatePurchaseItem,
 } from "@/lib/purchases";
 import { searchMangaList } from "@/lib/anilist";
 import { parseCsv } from "@/lib/csv";
@@ -359,6 +361,75 @@ export async function addPurchaseAction(input: AddPurchaseInput) {
   // Auto-agregar a colección los tomos linkeados a una serie (salvo cancelados).
   if (input.addToCollection) {
     for (const it of items) {
+      if (it.anilistId && it.status !== "CANCELLED") {
+        await addPurchaseItemToCollection(userId, {
+          anilistId: it.anilistId,
+          title: it.title,
+          coverImage: it.coverImage,
+          volume: it.volume,
+          edition: it.edition,
+        }).catch(() => {});
+      }
+    }
+    revalidatePath("/collection");
+  }
+
+  revalidatePath("/compras");
+  return { ok: true as const };
+}
+
+export interface EditPurchaseInput {
+  store?: string | null;
+  purchasedAt?: string | null;
+  note?: string | null;
+  addToCollection?: boolean;
+  items: {
+    id?: number | null;
+    title: string;
+    anilistId?: number | null;
+    coverImage?: string | null;
+    volume?: number | null;
+    edition?: string | null;
+    price: number;
+  }[];
+}
+
+export async function updatePurchaseAction(
+  id: number,
+  input: EditPurchaseInput,
+) {
+  const userId = await requireUserId();
+
+  const items: UpdatePurchaseItem[] = (input.items ?? [])
+    .map((i) => ({
+      id: i.id ?? null,
+      title: (i.title ?? "").trim(),
+      anilistId: i.anilistId ?? null,
+      coverImage: i.coverImage ?? null,
+      volume: i.volume ?? null,
+      edition: i.edition ?? null,
+      price: Number(i.price),
+    }))
+    .filter((i) => i.title && Number.isFinite(i.price));
+
+  if (items.length === 0) {
+    return { ok: false as const, error: "La compra necesita al menos un tomo." };
+  }
+
+  const res = await updatePurchase(userId, id, {
+    store: input.store ?? null,
+    note: input.note ?? null,
+    purchasedAt: input.purchasedAt ? new Date(input.purchasedAt) : null,
+    items,
+  });
+  if (!res) {
+    return { ok: false as const, error: "No se encontró la compra." };
+  }
+
+  // Sumar a colección solo los tomos nuevos linkeados (los existentes no se
+  // re-agregan para no pisar lo que el usuario haya tocado).
+  if (input.addToCollection) {
+    for (const it of res.created) {
       if (it.anilistId && it.status !== "CANCELLED") {
         await addPurchaseItemToCollection(userId, {
           anilistId: it.anilistId,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { addPurchaseAction } from "@/app/actions";
+import { addPurchaseAction, updatePurchaseAction } from "@/app/actions";
 import PurchaseSeriesPicker, {
   type SeriesValue,
 } from "@/components/PurchaseSeriesPicker";
@@ -23,7 +23,24 @@ const EDITORIAL_OPTIONS = [
   "Utopía",
 ];
 
+export interface InitialPurchase {
+  id: number;
+  store: string;
+  purchasedAt: string; // yyyy-mm-dd
+  note: string;
+  items: {
+    id: number;
+    title: string;
+    anilistId: number | null;
+    coverImage: string | null;
+    volume: number | null;
+    edition: string | null;
+    price: number;
+  }[];
+}
+
 interface ItemRow {
+  id?: number;
   series: SeriesValue;
   volume: string;
   edition: string;
@@ -43,13 +60,36 @@ const ars = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 0,
 });
 
-export default function PurchaseForm() {
-  const [open, setOpen] = useState(false);
-  const [store, setStore] = useState("");
+function rowsFrom(initial?: InitialPurchase): ItemRow[] {
+  if (!initial || initial.items.length === 0) return [emptyItem()];
+  return initial.items.map((i) => ({
+    id: i.id,
+    series: {
+      title: i.title,
+      anilistId: i.anilistId,
+      coverImage: i.coverImage,
+    },
+    volume: i.volume != null ? String(i.volume) : "",
+    edition: i.edition ?? "",
+    price: String(i.price),
+  }));
+}
+
+export default function PurchaseForm({
+  initial,
+  onClose,
+}: {
+  initial?: InitialPurchase;
+  onClose?: () => void;
+}) {
+  const editing = !!initial;
+  const [open, setOpen] = useState(editing);
+  const [store, setStore] = useState(initial?.store ?? "");
   const [status, setStatus] = useState("RECEIVED");
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(initial?.purchasedAt ?? "");
+  const [note, setNote] = useState(initial?.note ?? "");
   const [addToCollection, setAddToCollection] = useState(true);
-  const [items, setItems] = useState<ItemRow[]>([emptyItem()]);
+  const [items, setItems] = useState<ItemRow[]>(rowsFrom(initial));
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -57,6 +97,7 @@ export default function PurchaseForm() {
     setStore("");
     setStatus("RECEIVED");
     setDate("");
+    setNote("");
     setAddToCollection(true);
     setItems([emptyItem()]);
     setError(null);
@@ -70,31 +111,45 @@ export default function PurchaseForm() {
 
   function submit() {
     setError(null);
-    const payload = {
-      store,
-      status,
-      purchasedAt: date || null,
-      addToCollection,
-      items: items
-        .filter((it) => it.series.title.trim() && it.price !== "")
-        .map((it) => ({
-          title: it.series.title,
-          anilistId: it.series.anilistId,
-          coverImage: it.series.coverImage,
-          volume: it.volume ? Number(it.volume) : null,
-          edition: it.edition || null,
-          price: Number(it.price),
-        })),
-    };
-    if (payload.items.length === 0) {
+    const cleanItems = items
+      .filter((it) => it.series.title.trim() && it.price !== "")
+      .map((it) => ({
+        id: it.id,
+        title: it.series.title,
+        anilistId: it.series.anilistId,
+        coverImage: it.series.coverImage,
+        volume: it.volume ? Number(it.volume) : null,
+        edition: it.edition || null,
+        price: Number(it.price),
+      }));
+    if (cleanItems.length === 0) {
       setError("Agregá al menos un tomo con precio.");
       return;
     }
     startTransition(async () => {
-      const res = await addPurchaseAction(payload);
+      const res = editing
+        ? await updatePurchaseAction(initial!.id, {
+            store,
+            purchasedAt: date || null,
+            note,
+            addToCollection,
+            items: cleanItems,
+          })
+        : await addPurchaseAction({
+            store,
+            status,
+            purchasedAt: date || null,
+            note,
+            addToCollection,
+            items: cleanItems,
+          });
       if (res?.ok) {
-        reset();
-        setOpen(false);
+        if (editing) {
+          onClose?.();
+        } else {
+          reset();
+          setOpen(false);
+        }
       } else {
         setError(res?.error ?? "No se pudo guardar.");
       }
@@ -128,24 +183,33 @@ export default function PurchaseForm() {
           onChange={(e) => setDate(e.target.value)}
           className={input}
         />
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          className={input}
-        >
-          {PURCHASE_STATUS_ORDER.map((s) => (
-            <option key={s} value={s}>
-              {PURCHASE_STATUS_META[s].label}
-            </option>
-          ))}
-        </select>
+        {editing ? (
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Nota (opcional)"
+            className={input}
+          />
+        ) : (
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className={input}
+          >
+            {PURCHASE_STATUS_ORDER.map((s) => (
+              <option key={s} value={s}>
+                {PURCHASE_STATUS_META[s].label}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Tomos */}
       <div className="mt-4 space-y-3">
         {items.map((it, i) => (
           <div
-            key={i}
+            key={it.id ?? `new-${i}`}
             className="rounded-lg border border-border bg-surface-2/40 p-3"
           >
             <div className="flex items-start justify-between gap-2">
@@ -220,7 +284,9 @@ export default function PurchaseForm() {
           onChange={(e) => setAddToCollection(e.target.checked)}
           className="h-4 w-4 accent-accent"
         />
-        Agregar los tomos a mi colección
+        {editing
+          ? "Agregar los tomos nuevos a mi colección"
+          : "Agregar los tomos a mi colección"}
       </label>
 
       {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
@@ -238,17 +304,25 @@ export default function PurchaseForm() {
             disabled={pending}
             className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
           >
-            {pending ? "Guardando…" : "Guardar compra"}
+            {pending
+              ? "Guardando…"
+              : editing
+                ? "Guardar cambios"
+                : "Guardar compra"}
           </button>
           <button
             type="button"
             onClick={() => {
-              reset();
-              setOpen(false);
+              if (editing) {
+                onClose?.();
+              } else {
+                reset();
+                setOpen(false);
+              }
             }}
             className="rounded-lg border border-border px-4 py-1.5 text-sm text-muted transition hover:text-foreground"
           >
-            Cerrar
+            {editing ? "Cancelar" : "Cerrar"}
           </button>
         </div>
       </div>
