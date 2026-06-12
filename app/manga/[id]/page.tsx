@@ -217,6 +217,89 @@ export default async function Page({
         </section>
       )}
 
+      {anilist.relations?.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-3 text-lg font-semibold">Relacionados</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+            {[...anilist.relations]
+              // Mangas primero (son los navegables dentro de la app), después anime.
+              .sort(
+                (a: SeriesRelation, b: SeriesRelation) =>
+                  (a.mediaType === "MANGA" ? 0 : 1) -
+                  (b.mediaType === "MANGA" ? 0 : 1),
+              )
+              .slice(0, 12)
+              .map((r: SeriesRelation) => {
+              const rTitle = displayTitle(r.title);
+              const card = (
+                <>
+                  <div className="aspect-2/3 w-full overflow-hidden rounded-lg bg-surface-2">
+                    {r.coverImage && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={r.coverImage}
+                        alt={rTitle}
+                        className="h-full w-full object-cover transition group-hover:scale-105"
+                      />
+                    )}
+                  </div>
+                  <span className="mt-1 inline-block rounded-full bg-surface-2 px-2 py-0.5 text-[10px] font-medium text-accent">
+                    {relationLabel(r.relationType)}
+                    {r.mediaType === "ANIME" ? " · Anime" : ""}
+                  </span>
+                  <p className="truncate text-xs font-medium" title={rTitle}>
+                    {rTitle}
+                  </p>
+                </>
+              );
+              return r.mediaType === "MANGA" ? (
+                <Link
+                  key={`${r.mediaType}-${r.id}`}
+                  href={`/manga/${r.id}`}
+                  className="group block"
+                >
+                  {card}
+                </Link>
+              ) : (
+                <a
+                  key={`${r.mediaType}-${r.id}`}
+                  href={`https://anilist.co/anime/${r.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group block"
+                >
+                  {card}
+                </a>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {anilist.characters?.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-3 text-lg font-semibold">Personajes</h2>
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6">
+            {anilist.characters
+              .slice(0, 12)
+              .map((c: { name: string; image: string; role: string }, i: number) => (
+                <div key={i} className="text-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={c.image}
+                    alt={c.name}
+                    className="aspect-square w-full rounded-lg bg-surface-2 object-cover"
+                  />
+                  <p className="mt-1 truncate text-xs font-medium" title={c.name}>
+                    {c.name}
+                  </p>
+                  <p className="text-[10px] text-muted">{characterRole(c.role)}</p>
+                </div>
+              ))}
+          </div>
+        </section>
+      )}
+
       <section className="mt-6">
         <h2 className="mb-3 text-lg font-semibold">
           Opiniones {reviews.length > 0 && `(${reviews.length})`}
@@ -284,6 +367,46 @@ function EditionsSkeleton() {
       ))}
     </div>
   );
+}
+
+interface SeriesRelation {
+  relationType: string;
+  id: number;
+  mediaType: string;
+  format: string | null;
+  title: { romaji?: string | null; english?: string | null; native?: string | null };
+  coverImage: string | null;
+}
+
+const RELATION_LABELS: Record<string, string> = {
+  SEQUEL: "Secuela",
+  PREQUEL: "Precuela",
+  SIDE_STORY: "Historia paralela",
+  SPIN_OFF: "Spin-off",
+  PARENT: "Obra principal",
+  ADAPTATION: "Adaptación",
+  ALTERNATIVE: "Versión alternativa",
+  CHARACTER: "Personajes en común",
+  SUMMARY: "Resumen",
+  CONTAINS: "Incluye",
+  OTHER: "Relacionado",
+};
+
+function relationLabel(type: string): string {
+  return RELATION_LABELS[type] ?? "Relacionado";
+}
+
+function characterRole(role: string): string {
+  switch (role) {
+    case "MAIN":
+      return "Protagonista";
+    case "SUPPORTING":
+      return "Secundario";
+    case "BACKGROUND":
+      return "Secundario";
+    default:
+      return "";
+  }
 }
 
 function dedupeStaff(staff: { id: number; name: string }[]) {

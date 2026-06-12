@@ -389,6 +389,26 @@ export async function getMangaById(
           }
         }
 
+        relations {
+          edges {
+            relationType
+
+            node {
+              id
+              type
+              format
+              title {
+                romaji
+                english
+                native
+              }
+              coverImage {
+                large
+              }
+            }
+          }
+        }
+
         characters(
           sort: RELEVANCE
         ) {

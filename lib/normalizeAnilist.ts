@@ -67,6 +67,22 @@ export function normalizeAnilist(manga: any) {
 
       image: character.node.image.large,
     })),
+
+    // Obras relacionadas (secuelas, spin-offs, adaptación a anime, etc.).
+    relations: (manga.relations?.edges ?? [])
+      .map((e: any) => ({
+        relationType: e.relationType as string,
+        id: e.node.id as number,
+        mediaType: e.node.type as string, // MANGA | ANIME
+        format: e.node.format as string | null,
+        title: e.node.title as {
+          romaji?: string | null;
+          english?: string | null;
+          native?: string | null;
+        },
+        coverImage: e.node.coverImage?.large ?? null,
+      }))
+      .filter((r: any) => r.mediaType === "MANGA" || r.mediaType === "ANIME"),
   };
 }
 
