@@ -1,0 +1,47 @@
+name: Crawl
+
+# Corre los crawls/jobs pesados en un runner (sin el límite de 60s de Vercel).
+# Se dispara manualmente desde la pestaña Actions o con los botones del
+# dashboard admin (vía API). Corre contra la DB de producción (secret).
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Qué job correr"
+        required: true
+        type: choice
+        options:
+          - ivrea
+          - panini
+          - ovni
+          - mangakas
+          - resolve
+          - whakoom-ovni
+          - whakoom-panini
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Run job (${{ inputs.job }})
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          case "${{ inputs.job }}" in
+            ivrea)          npm run crawl ivrea ;;
+            panini)         npm run crawl panini ;;
+            ovni)           npm run crawl ovni ;;
+            mangakas)       npm run crawl mangakas ;;
+            resolve)        npm run crawl resolve ;;
+            whakoom-ovni)   npm run crawl whakoom-pub "https://www.whakoom.com/publisher/15389/ovni_press/all" ;;
+            whakoom-panini) npm run crawl whakoom-pub "https://www.whakoom.com/publisher/20930/panini_comics_argentina/all" ;;
+            *) echo "Job desconocido: ${{ inputs.job }}"; exit 1 ;;
+          esac

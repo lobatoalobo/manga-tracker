@@ -5,7 +5,9 @@ import { isAdmin } from "@/lib/admin";
 import { getCatalogIntegrity } from "@/lib/adminChecks";
 import { getMappingHealth } from "@/lib/mappingHealth";
 import { getJobRuns } from "@/lib/jobs";
+import { ACTIONS_URL } from "@/lib/github";
 import FlushCacheButton from "@/components/FlushCacheButton";
+import RunJobsPanel from "@/components/RunJobsPanel";
 
 export const metadata = { title: "Herramientas (admin) · Nakama" };
 
@@ -88,6 +90,10 @@ export default async function AdminToolsPage() {
           hint="Posible spin-off mal mapeado (ej. AoT: Before the Fall → AoT)."
           groups={health.overmerges}
         />
+      </section>
+
+      <section className="mb-8">
+        <RunJobsPanel actionsUrl={ACTIONS_URL} />
       </section>
 
       <section className="mb-8">
