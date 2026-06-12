@@ -282,11 +282,15 @@ export async function getMangaPage(
   const filters =
     (includeAdult ? "" : ", isAdult: false") +
     (onlyFinished ? ", status: FINISHED" : "");
+  // Ordenamos por TITLE_ROMAJI: AniList resuelve TITLE_ENGLISH pésimo (muchos
+  // mangas tienen english null → ordenar por ese campo con offset profundo se
+  // vuelve lento y devuelve vacío). En A-Z mostramos el romaji para que el
+  // orden coincida con la etiqueta.
   const query = `
     query ($page: Int) {
       Page(page: $page, perPage: 10) {
         pageInfo { currentPage hasNextPage lastPage }
-        media(type: MANGA, sort: TITLE_ENGLISH${filters}) {
+        media(type: MANGA, sort: TITLE_ROMAJI${filters}) {
           id
           title { romaji english native }
           coverImage { large }
@@ -296,22 +300,41 @@ export async function getMangaPage(
     }
   `;
 
-  const response = await fetch("https://graphql.anilist.co", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, variables: { page } }),
-    next: { revalidate: 60 * 60 * 24 },
-  });
-
-  const json = await response.json();
-  return {
-    media: json.data.Page.media,
-    pageInfo: json.data.Page.pageInfo as {
-      currentPage: number;
-      hasNextPage: boolean;
-      lastPage: number;
-    },
+  const body = JSON.stringify({ query, variables: { page } });
+  const fallback = {
+    media: [] as any[],
+    pageInfo: { currentPage: page, hasNextPage: false, lastPage: page },
   };
+
+  // Resiliente: reintenta ante 429 y nunca tira (peor caso, lista vacía).
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const response = await fetch("https://graphql.anilist.co", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      next: { revalidate: 60 * 60 * 24 },
+    }).catch(() => null);
+
+    if (!response) return fallback;
+    if (response.status === 429 && attempt < 2) {
+      const retryAfter = Number(response.headers.get("retry-after")) || 2;
+      await new Promise((r) => setTimeout(r, (retryAfter + 1) * 1000));
+      continue;
+    }
+
+    const json = await response.json().catch(() => null);
+    const Page = json?.data?.Page;
+    return {
+      media: Page?.media ?? [],
+      pageInfo: (Page?.pageInfo ?? fallback.pageInfo) as {
+        currentPage: number;
+        hasNextPage: boolean;
+        lastPage: number;
+      },
+    };
+  }
+
+  return fallback;
 }
 
 /**
