@@ -51,6 +51,8 @@ import {
   invalidateEditionsCache,
   clearAllEditionsCache,
 } from "@/lib/getMangaDetails";
+import { dispatchCrawl } from "@/lib/github";
+import { runAdminTask } from "@/lib/adminTasks";
 import { parseCsv } from "@/lib/csv";
 import { addWish, removeWish } from "@/lib/wishlist";
 import { setNote } from "@/lib/notes";
@@ -323,6 +325,24 @@ export async function setEditionNationalOnlyAction(id: number, value: boolean) {
 async function assertAdmin() {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) throw new Error("No autorizado");
+}
+
+/** Admin: dispara un crawl/job en GitHub Actions. */
+export async function runCrawlAction(job: string) {
+  await assertAdmin();
+  return dispatchCrawl(job);
+}
+
+/** Admin: corre una tarea de mantenimiento (dry-run = solo simula). */
+export async function runAdminTaskAction(id: string, dryRun: boolean) {
+  await assertAdmin();
+  try {
+    const res = await runAdminTask(id, dryRun);
+    if (!dryRun) revalidatePath("/admin/herramientas");
+    return { ok: true as const, dryRun, ...res };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "Error" };
+  }
 }
 
 /** Admin: vacía toda la caché de ediciones (sin redeploy). */

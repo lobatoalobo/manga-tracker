@@ -105,7 +105,11 @@ export default async function Home({
         <>
           <FinishedFilterButton enabled active={onlyFinished} />
           <div className="mt-5">
-            <MangaGrid mangas={mangas} nationalEditions={nationalEditions} />
+            <MangaGrid
+              mangas={mangas}
+              nationalEditions={nationalEditions}
+              byRomaji
+            />
           </div>
           {pageInfo && (
             <Pager
@@ -149,13 +153,19 @@ export default async function Home({
 function MangaGrid({
   mangas,
   nationalEditions,
+  byRomaji = false,
 }: {
   mangas: any[];
   nationalEditions: Map<number, string[]>;
+  byRomaji?: boolean;
 }) {
   if (mangas.length === 0) {
     return <p className="text-sm text-muted">No encontramos resultados.</p>;
   }
+  // En A-Z mostramos el romaji (es el campo por el que ordena AniList), así el
+  // orden alfabético coincide con lo que se ve.
+  const titleOf = (m: any) =>
+    byRomaji ? m.title.romaji || displayTitle(m.title) : displayTitle(m.title);
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
       {mangas.map((manga: any) => {
@@ -180,16 +190,16 @@ function MangaGrid({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={manga.coverImage.large}
-                alt={displayTitle(manga.title)}
+                alt={titleOf(manga)}
                 className="h-full w-full object-cover transition group-hover:scale-105"
               />
             </div>
             <div className="p-3">
               <h3
                 className="truncate text-sm font-semibold"
-                title={displayTitle(manga.title)}
+                title={titleOf(manga)}
               >
-                {displayTitle(manga.title)}
+                {titleOf(manga)}
               </h3>
               <p className="mt-1 truncate text-xs text-muted">
                 {mangakaOf(manga) || manga.title.native}

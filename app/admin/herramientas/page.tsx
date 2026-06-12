@@ -5,7 +5,11 @@ import { isAdmin } from "@/lib/admin";
 import { getCatalogIntegrity } from "@/lib/adminChecks";
 import { getMappingHealth } from "@/lib/mappingHealth";
 import { getJobRuns } from "@/lib/jobs";
+import { ACTIONS_URL } from "@/lib/github";
+import { ADMIN_TASKS } from "@/lib/adminTasks";
 import FlushCacheButton from "@/components/FlushCacheButton";
+import RunJobsPanel from "@/components/RunJobsPanel";
+import TaskRunner from "@/components/TaskRunner";
 
 export const metadata = { title: "Herramientas (admin) · Nakama" };
 
@@ -88,6 +92,19 @@ export default async function AdminToolsPage() {
           hint="Posible spin-off mal mapeado (ej. AoT: Before the Fall → AoT)."
           groups={health.overmerges}
         />
+      </section>
+
+      <section className="mb-8">
+        <RunJobsPanel actionsUrl={ACTIONS_URL} />
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-1 text-sm font-semibold">Tareas de mantenimiento</h2>
+        <p className="mb-3 text-xs text-muted">
+          <b>Simular</b> muestra qué cambiaría sin tocar nada; <b>Aplicar</b> lo
+          ejecuta sobre la base de este entorno y lo registra abajo.
+        </p>
+        <TaskRunner tasks={ADMIN_TASKS} />
       </section>
 
       <section className="mb-8">
