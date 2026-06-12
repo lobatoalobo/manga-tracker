@@ -319,10 +319,13 @@ model PublisherEdition {
   title     String // título tal como lo lista la editorial
   normTitle String // título normalizado, para matching
   anilistId Int? // serie de AniList, backfilleada al resolver una ficha (link directo)
-  volumes   Int
-  status    String?
-  url       String
-  updatedAt DateTime @updatedAt
+  // Obra solo-nacional (no existe en AniList): anilistId null a propósito, no
+  // cuenta como "sin mapear". P. ej. cómics occidentales que vende Ivrea.
+  nationalOnly Boolean @default(false)
+  volumes      Int
+  status       String?
+  url          String
+  updatedAt    DateTime @updatedAt
 
   @@unique([publisher, slug])
   @@index([normTitle])

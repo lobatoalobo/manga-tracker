@@ -1,29 +1,37 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { setCrumbQueryAction, setOvniUrlAction } from "@/app/actions";
+import { setCrumbQueryAction, setEditionUrlAction } from "@/app/actions";
 import { crumbSearch } from "@/lib/crumb";
 
 const input =
   "w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent";
 
+export interface EditionLinkRow {
+  id: number;
+  publisher: string;
+  url: string;
+}
+
 /**
- * Panel inline (solo admin) para tunear los links de tienda de la serie:
- * el término de búsqueda de Crumb y, si hay edición de Ovni, su link a
- * OvniPress. Con preview en vivo.
+ * Panel inline (solo admin) para tunear los links de tienda de la serie: el
+ * término de búsqueda de Crumb y la URL de cada edición (cualquier editorial),
+ * por si alguna se rompe. Con preview en vivo.
  */
 export default function AdminStoreLinks({
   anilistId,
   crumbInitial,
-  ovni,
+  editions,
 }: {
   anilistId: number;
   crumbInitial: string;
-  ovni: { id: number; url: string } | null;
+  editions: EditionLinkRow[];
 }) {
   const [open, setOpen] = useState(false);
   const [crumb, setCrumb] = useState(crumbInitial);
-  const [ovniUrl, setOvniUrl] = useState(ovni?.url ?? "");
+  const [urls, setUrls] = useState<Record<number, string>>(
+    Object.fromEntries(editions.map((e) => [e.id, e.url])),
+  );
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -87,24 +95,26 @@ export default function AdminStoreLinks({
         Probar búsqueda ↗
       </a>
 
-      {/* Ovni */}
-      {ovni && (
-        <>
-          <label className="mt-4 block text-xs text-muted">
-            Link a OvniPress
+      {/* Links de cada edición */}
+      {editions.map((ed) => (
+        <div key={ed.id} className="mt-4">
+          <label className="block text-xs text-muted">
+            Link · {ed.publisher}
           </label>
           <div className="mt-1 flex gap-2">
             <input
-              value={ovniUrl}
-              onChange={(e) => setOvniUrl(e.target.value)}
-              placeholder="https://www.ovnipress.net/…"
+              value={urls[ed.id] ?? ""}
+              onChange={(e) =>
+                setUrls((p) => ({ ...p, [ed.id]: e.target.value }))
+              }
+              placeholder="https://…"
               className={input}
             />
             <button
               onClick={() =>
                 save(
-                  () => setOvniUrlAction(anilistId, ovni.id, ovniUrl),
-                  "Ovni guardado",
+                  () => setEditionUrlAction(anilistId, ed.id, urls[ed.id] ?? ""),
+                  `${ed.publisher} guardado`,
                 )
               }
               disabled={pending}
@@ -113,9 +123,9 @@ export default function AdminStoreLinks({
               Guardar
             </button>
           </div>
-          {ovniUrl && (
+          {urls[ed.id] && (
             <a
-              href={ovniUrl}
+              href={urls[ed.id]}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-1 inline-block text-xs text-accent hover:underline"
@@ -123,12 +133,10 @@ export default function AdminStoreLinks({
               Probar link ↗
             </a>
           )}
-        </>
-      )}
+        </div>
+      ))}
 
-      {savedMsg && (
-        <p className="mt-3 text-xs text-emerald-400">✓ {savedMsg}</p>
-      )}
+      {savedMsg && <p className="mt-3 text-xs text-emerald-400">✓ {savedMsg}</p>}
     </div>
   );
 }

@@ -31,6 +31,7 @@ import {
   setEditionAnilistId,
   updatePublisherEditionFields,
   deletePublisherEdition,
+  setEditionNationalOnly,
 } from "@/lib/catalog";
 import { resolveEditionSeries } from "@/lib/resolveSeries";
 import { isAdmin } from "@/lib/admin";
@@ -45,7 +46,7 @@ import {
   type UpdatePurchaseItem,
 } from "@/lib/purchases";
 import { searchMangaList } from "@/lib/anilist";
-import { setCrumbQuery, setOvniUrl } from "@/lib/storeLinks";
+import { setCrumbQuery, setEditionUrl } from "@/lib/storeLinks";
 import {
   invalidateEditionsCache,
   clearAllEditionsCache,
@@ -311,6 +312,14 @@ export async function deleteEditionAction(id: number) {
   revalidatePath("/admin/mapeos");
 }
 
+/** Marca/desmarca una edición como solo-nacional (sin equivalente en AniList). */
+export async function setEditionNationalOnlyAction(id: number, value: boolean) {
+  await assertAdmin();
+  await setEditionNationalOnly(id, value);
+  revalidatePath("/admin/mapeos");
+  revalidatePath("/admin/herramientas");
+}
+
 async function assertAdmin() {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) throw new Error("No autorizado");
@@ -331,14 +340,14 @@ export async function setCrumbQueryAction(anilistId: number, query: string) {
   revalidatePath(`/manga/${anilistId}`);
 }
 
-/** Admin: corrige el link a OvniPress de una edición de Ovni. */
-export async function setOvniUrlAction(
+/** Admin: corrige el link de tienda de una edición (cualquier editorial). */
+export async function setEditionUrlAction(
   anilistId: number,
   editionId: number,
   url: string,
 ) {
   await assertAdmin();
-  await setOvniUrl(editionId, url);
+  await setEditionUrl(editionId, url);
   // El link sale de la caché de ediciones (no en vivo): hay que invalidarla.
   await invalidateEditionsCache(anilistId);
   revalidatePath(`/manga/${anilistId}`);
