@@ -336,6 +336,25 @@ model CrumbMapping {
   updatedAt DateTime @updatedAt
 }
 
+// Registro de corridas de jobs (imports, resolves, crons): para ver qué pasó
+// y, sobre todo, qué se salteó y por qué (visibilidad que nos faltó).
+model JobRun {
+  id         Int      @id @default(autoincrement())
+  kind       String // "whakoom-import" | "resolve" | "mangakas-cron" | …
+  label      String? // detalle (editorial, URL, etc.)
+  status     String   @default("OK") // OK | ERROR
+  processed  Int      @default(0)
+  imported   Int      @default(0)
+  mapped     Int      @default(0)
+  skipped    Int      @default(0)
+  summary    Json? // motivos de skip agrupados, etc.
+  error      String?
+  startedAt  DateTime
+  finishedAt DateTime @default(now())
+
+  @@index([kind])
+}
+
 // Comiquerías / tiendas locales. Curadas por el dueño o propuestas por usuarios.
 model Store {
   id          Int      @id @default(autoincrement())

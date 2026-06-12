@@ -8,6 +8,7 @@ import {
   importWhakoomUrls,
   enumeratePublisherEditions,
 } from "../lib/whakoomImport";
+import { logJobRun, groupSkipReasons } from "../lib/jobs";
 import { prisma } from "../lib/prisma";
 import { readFileSync } from "fs";
 
@@ -227,6 +228,7 @@ async function crawlWhakoom(file: string) {
 
 async function crawlWhakoomPublisher(allUrl: string, reset: boolean) {
   console.log("\n=== Importar editorial completa desde Whakoom ===");
+  const startedAt = new Date();
 
   if (reset) {
     const u = allUrl.toLowerCase();
@@ -259,6 +261,19 @@ async function crawlWhakoomPublisher(allUrl: string, reset: boolean) {
   console.log(
     `  Importadas: ${res.imported} · mapeadas: ${res.mapped} · salteadas: ${res.skipped.length}`,
   );
+
+  const reasons = groupSkipReasons(res.skipped);
+  await logJobRun({
+    kind: "whakoom-import",
+    label: allUrl,
+    processed: res.processed,
+    imported: res.imported,
+    mapped: res.mapped,
+    skipped: res.skipped.length,
+    summary: { reasons, found: urls.length },
+    startedAt,
+  });
+  console.log("  Motivos de skip:", reasons);
 }
 
 async function main() {
