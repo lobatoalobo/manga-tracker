@@ -315,6 +315,23 @@ model Store {
   @@index([status])
 }
 
+// Obra de un autor independiente/local, subida por un usuario y moderada por
+// el dueño (aprobar/rechazar), al estilo de las tiendas de la comunidad.
+model IndieWork {
+  id          Int      @id @default(autoincrement())
+  title       String
+  author      String
+  synopsis    String?
+  coverUrl    String? // URL de portada (MVP: link externo)
+  buyUrl      String? // dónde comprar/leer
+  social      String? // redes del autor
+  status      String   @default("PENDING") // PENDING | APPROVED
+  submittedBy String? // userId que la subió
+  createdAt   DateTime @default(now())
+
+  @@index([status])
+}
+
 // Reportes/correcciones de datos enviados por usuarios (revisión del dueño).
 model Report {
   id         Int      @id @default(autoincrement())

@@ -20,6 +20,12 @@ import {
   deleteStore,
   type StoreInput,
 } from "@/lib/stores";
+import {
+  createIndieWork,
+  setIndieWorkStatus,
+  deleteIndieWork,
+  type IndieWorkInput,
+} from "@/lib/indie";
 import { isAdmin } from "@/lib/admin";
 import {
   addPurchase,
@@ -199,6 +205,49 @@ export async function deleteStoreAction(id: number) {
   await deleteStore(id);
   revalidatePath("/admin/tiendas");
   revalidatePath("/tiendas");
+}
+
+// --- Autores independientes ---
+
+function readIndieWork(formData: FormData): IndieWorkInput {
+  const get = (k: string) => (formData.get(k) as string | null) ?? null;
+  return {
+    title: (get("title") ?? "").trim(),
+    author: (get("author") ?? "").trim(),
+    synopsis: get("synopsis"),
+    coverUrl: get("coverUrl"),
+    buyUrl: get("buyUrl"),
+    social: get("social"),
+  };
+}
+
+/** Un autor sube su obra: queda PENDING para que el dueño la apruebe. */
+export async function submitIndieWorkAction(
+  _prev: unknown,
+  formData: FormData,
+) {
+  const userId = await requireUserId();
+  const input = readIndieWork(formData);
+  if (!input.title || !input.author) {
+    return { ok: false as const, error: "Faltan título o autor." };
+  }
+  await createIndieWork(input, { status: "PENDING", submittedBy: userId });
+  revalidatePath("/admin/independientes");
+  return { ok: true as const };
+}
+
+export async function approveIndieWorkAction(id: number) {
+  await assertAdmin();
+  await setIndieWorkStatus(id, "APPROVED");
+  revalidatePath("/admin/independientes");
+  revalidatePath("/independientes");
+}
+
+export async function deleteIndieWorkAction(id: number) {
+  await assertAdmin();
+  await deleteIndieWork(id);
+  revalidatePath("/admin/independientes");
+  revalidatePath("/independientes");
 }
 
 async function assertAdmin() {

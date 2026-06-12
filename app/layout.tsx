@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { countPendingReports } from "@/lib/reports";
 import { countPendingStores } from "@/lib/stores";
+import { countPendingIndieWorks } from "@/lib/indie";
 import { countPendingRequests } from "@/lib/social";
 import { countUnread } from "@/lib/notifications";
 import { SignIn, SignOut } from "@/components/AuthButtons";
@@ -39,12 +40,13 @@ export default async function RootLayout({
 }>) {
   const session = await auth();
   const admin = isAdmin(session?.user?.email);
-  const [pendingReports, pendingStores] = admin
+  const [pendingReports, pendingStores, pendingIndie] = admin
     ? await Promise.all([
         countPendingReports().catch(() => 0),
         countPendingStores().catch(() => 0),
+        countPendingIndieWorks().catch(() => 0),
       ])
-    : [0, 0];
+    : [0, 0, 0];
   const [pendingFriends, unreadNotifs] = session?.user?.id
     ? await Promise.all([
         countPendingRequests(session.user.id).catch(() => 0),
@@ -75,6 +77,12 @@ export default async function RootLayout({
               className="text-sm text-muted transition hover:text-foreground"
             >
               Tiendas
+            </Link>
+            <Link
+              href="/independientes"
+              className="text-sm text-muted transition hover:text-foreground"
+            >
+              Indie
             </Link>
 
             {session && (
@@ -129,6 +137,17 @@ export default async function RootLayout({
                       {pendingStores > 0 && (
                         <span className="rounded-full bg-accent px-1.5 py-0.5 text-xs font-semibold text-white">
                           {pendingStores}
+                        </span>
+                      )}
+                    </Link>
+                    <Link
+                      href="/admin/independientes"
+                      className="flex items-center gap-1.5 text-sm text-muted transition hover:text-foreground"
+                    >
+                      Indie admin
+                      {pendingIndie > 0 && (
+                        <span className="rounded-full bg-accent px-1.5 py-0.5 text-xs font-semibold text-white">
+                          {pendingIndie}
                         </span>
                       )}
                     </Link>
