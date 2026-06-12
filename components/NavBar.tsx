@@ -151,9 +151,7 @@ export default function NavBar({
                     )}
 
                     <div className="my-1 border-t border-border" />
-                    <div className="px-2 py-1" onClick={close}>
-                      {signOut}
-                    </div>
+                    <div className="px-2 py-1">{signOut}</div>
                   </div>
                 )}
               </div>
