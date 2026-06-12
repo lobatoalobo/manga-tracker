@@ -328,6 +328,14 @@ model PublisherEdition {
   @@index([normTitle])
 }
 
+// Override manual del término de búsqueda de "Comprar en Crumb" por serie,
+// para cuando el título automático no encuentra el producto en Crumb.
+model CrumbMapping {
+  anilistId Int      @id // 1 override por serie
+  query     String // término de búsqueda a usar en Crumb
+  updatedAt DateTime @updatedAt
+}
+
 // Comiquerías / tiendas locales. Curadas por el dueño o propuestas por usuarios.
 model Store {
   id          Int      @id @default(autoincrement())

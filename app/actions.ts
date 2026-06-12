@@ -45,6 +45,7 @@ import {
   type UpdatePurchaseItem,
 } from "@/lib/purchases";
 import { searchMangaList } from "@/lib/anilist";
+import { setCrumbQuery, setOvniUrl } from "@/lib/storeLinks";
 import { parseCsv } from "@/lib/csv";
 import { addWish, removeWish } from "@/lib/wishlist";
 import { setNote } from "@/lib/notes";
@@ -309,6 +310,24 @@ export async function deleteEditionAction(id: number) {
 async function assertAdmin() {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) throw new Error("No autorizado");
+}
+
+/** Admin: override del término de búsqueda de Crumb para una serie. */
+export async function setCrumbQueryAction(anilistId: number, query: string) {
+  await assertAdmin();
+  await setCrumbQuery(anilistId, query);
+  revalidatePath(`/manga/${anilistId}`);
+}
+
+/** Admin: corrige el link a OvniPress de una edición de Ovni. */
+export async function setOvniUrlAction(
+  anilistId: number,
+  editionId: number,
+  url: string,
+) {
+  await assertAdmin();
+  await setOvniUrl(editionId, url);
+  revalidatePath(`/manga/${anilistId}`);
 }
 
 // --- Compras ---

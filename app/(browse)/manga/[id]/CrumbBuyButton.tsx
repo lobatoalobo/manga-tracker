@@ -1,22 +1,18 @@
-import { prisma } from "@/lib/prisma";
 import { crumbSearch } from "@/lib/crumb";
+import { getCrumbQuery, crumbDefaultTitle } from "@/lib/storeLinks";
 import { resolveEditions, titlesOf } from "@/lib/getMangaDetails";
 
 /**
  * Botón "Comprar en Crumb": solo se muestra si la serie tiene edición nacional.
- * Crumb lista cada edición con el nombre que usa su editorial (Ivrea→título
- * Ivrea, Ovni→título Ovni; en español/romaji, NUNCA el inglés de AniList).
- * Usamos el título de la edición nacional mapeada; si no está mapeada pero hay
- * edición en vivo, caemos al romaji (más cercano que el inglés).
+ * Crumb lista cada edición con el nombre que usa su editorial (en español/
+ * romaji, NUNCA el inglés de AniList). Usamos, en orden: el override manual del
+ * admin, el título de la edición nacional mapeada, o el romaji como último
+ * recurso.
  */
 export default async function CrumbBuyButton({ anilist }: { anilist: any }) {
-  const mapped = await prisma.publisherEdition.findFirst({
-    where: { anilistId: anilist.id },
-    select: { title: true },
-    orderBy: { volumes: "desc" },
-  });
+  const override = await getCrumbQuery(anilist.id);
+  let title = override ?? (await crumbDefaultTitle(anilist.id));
 
-  let title = mapped?.title ?? null;
   if (!title) {
     const { editions } = await resolveEditions(anilist, titlesOf(anilist));
     if (!editions.some((e) => e.region === "AR")) return null;

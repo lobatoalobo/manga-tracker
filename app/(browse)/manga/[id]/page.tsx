@@ -6,7 +6,14 @@ import { getMangaCore } from "@/lib/getMangaDetails";
 import { isWished } from "@/lib/wishlist";
 import { getNote, getSeriesNotes } from "@/lib/notes";
 import { displayTitle } from "@/lib/title";
+import { isAdmin } from "@/lib/admin";
+import {
+  getCrumbQuery,
+  crumbDefaultTitle,
+  getOvniEditionForSeries,
+} from "@/lib/storeLinks";
 import type { ReadingLink } from "@/lib/normalizeAnilist";
+import AdminStoreLinks from "@/components/AdminStoreLinks";
 import TrackingPanel from "@/components/TrackingPanel";
 import ReportButton from "@/components/ReportButton";
 import WishButton from "@/components/WishButton";
@@ -52,6 +59,19 @@ export default async function Page({
   const canTrack = !!userId;
   const trackedKeys = series?.editions.map((e) => e.key) ?? [];
   const title = displayTitle(anilist.title);
+
+  // Panel admin para tunear los links de tienda (Crumb / OvniPress).
+  const admin = isAdmin(session?.user?.email);
+  const adminStore = admin
+    ? await (async () => {
+        const [override, def, ovni] = await Promise.all([
+          getCrumbQuery(mangaId),
+          crumbDefaultTitle(mangaId),
+          getOvniEditionForSeries(mangaId),
+        ]);
+        return { crumbInitial: override ?? def ?? "", ovni };
+      })()
+    : null;
 
   return (
     <main className="mx-auto max-w-4xl px-5 py-8">
@@ -148,6 +168,16 @@ export default async function Page({
               <CrumbBuyButton anilist={anilist} />
             </Suspense>
           </div>
+
+          {adminStore && (
+            <div className="mt-3">
+              <AdminStoreLinks
+                anilistId={mangaId}
+                crumbInitial={adminStore.crumbInitial}
+                ovni={adminStore.ovni}
+              />
+            </div>
+          )}
         </div>
       </div>
 

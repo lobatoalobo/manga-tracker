@@ -1,4 +1,5 @@
 import { resolveEditions, titlesOf } from "@/lib/getMangaDetails";
+import { ovniSearchUrl, isOvniUrl } from "@/lib/ovni";
 import AddEditionButton from "@/components/AddEditionButton";
 import { SignIn } from "@/components/AuthButtons";
 
@@ -61,15 +62,22 @@ export default async function EditionsSection({
             {ed.note && <p className="mt-2 text-xs text-muted">{ed.note}</p>}
             {ed.url &&
               (() => {
-                // El sitio de Panini está roto y no queremos links a Whakoom (la
-                // fuente del import): para esas ediciones linkeamos a AniList.
+                // Ovni → OvniPress (link directo o búsqueda). Panini viene de
+                // Whakoom (no queremos linkear ahí) → AniList. El resto, su sitio.
+                const isOvni = ed.publisher === "Ovni Press";
                 const fromWhakoom = ed.url.includes("whakoom.com");
-                const href = fromWhakoom
-                  ? `https://anilist.co/manga/${anilist.id}`
-                  : ed.url;
-                const label = fromWhakoom
-                  ? "AniList"
-                  : (ed.publisher ?? ed.source);
+                const href = isOvni
+                  ? isOvniUrl(ed.url)
+                    ? ed.url
+                    : ovniSearchUrl(anilist.title?.romaji || ed.source)
+                  : fromWhakoom
+                    ? `https://anilist.co/manga/${anilist.id}`
+                    : ed.url;
+                const label = isOvni
+                  ? "OvniPress"
+                  : fromWhakoom
+                    ? "AniList"
+                    : (ed.publisher ?? ed.source);
                 return (
                   <a
                     href={href}

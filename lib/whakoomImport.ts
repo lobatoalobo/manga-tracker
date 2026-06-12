@@ -1,6 +1,7 @@
 import { getWhakoomEdition, mapWhakoomPublisher } from "./providers/whakoom";
 import { resolveByTitleAuthor } from "./resolveSeries";
 import { upsertPublisherEdition, slugifyTitle } from "./catalog";
+import { ovniSearchUrl } from "./ovni";
 import { prisma } from "./prisma";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -112,13 +113,17 @@ export async function importWhakoomUrls(
     }
 
     const slug = slugifyTitle(ed.title);
+    // Para Ovni guardamos un link a OvniPress (no a Whakoom, que es solo la
+    // fuente del import); para el resto, la URL de la edición.
+    const storeUrl =
+      publisher === "Ovni Press" ? ovniSearchUrl(ed.title) : url;
     await upsertPublisherEdition({
       publisher,
       slug,
       title: ed.title,
       volumes: ed.volumes,
       status: "EN CATÁLOGO",
-      url,
+      url: storeUrl,
     });
     await prisma.publisherEdition
       .updateMany({ where: { publisher, slug }, data: { anilistId } })
