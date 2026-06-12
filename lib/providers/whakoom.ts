@@ -39,20 +39,31 @@ export async function getWhakoomEdition(
     .trim();
   if (!title) return null;
 
-  const author =
-    [...t.matchAll(/href="\/autores\/[^"]+"[^>]*>([^<]+)</g)].map((m) =>
-      m[1].trim(),
-    )[0] ?? null;
+  // El nombre puede venir directo en el <a> o anidado en un <span itemprop>
+  // (Whakoom mezcla ambos formatos). Tomamos el contenido del <a> y le sacamos
+  // las etiquetas internas.
+  const linkText = (hrefPrefix: string): string | null => {
+    const m = t.match(
+      new RegExp(`href="${hrefPrefix}[^"]+"[^>]*>([\\s\\S]*?)</a>`, "i"),
+    );
+    if (!m) return null;
+    const txt = m[1].replace(/<[^>]+>/g, "").trim();
+    return txt || null;
+  };
 
-  const publisher =
-    [...t.matchAll(/href="\/publisher\/[^"]+"[^>]*>([^<]+)</g)].map((m) =>
-      m[1].trim(),
-    )[0] ?? "";
+  const author = linkText("/autores/");
+  const publisher = linkText("/publisher/") ?? "";
 
+  // Cada tomo es un link /comics/<id>/<slug>[/<n>]. Las ediciones de varios
+  // tomos numeran el último segmento; las de 1 tomo no lo tienen. Tomamos el
+  // número más alto, o contamos los comics distintos si no hay numeración.
   const issues = [
-    ...t.matchAll(/\/comics\/[A-Za-z0-9]+\/[^"/]+\/(\d+)"/g),
+    ...t.matchAll(/\/comics\/[A-Za-z0-9]+\/[^"/]+\/(\d+)/g),
   ].map((m) => Number(m[1]));
-  const volumes = issues.length ? Math.max(...issues) : 0;
+  const comicIds = new Set(
+    [...t.matchAll(/\/comics\/([A-Za-z0-9]+)\//g)].map((m) => m[1]),
+  );
+  const volumes = issues.length ? Math.max(...issues) : comicIds.size || 0;
 
   return { title, author, publisher, volumes, url };
 }
