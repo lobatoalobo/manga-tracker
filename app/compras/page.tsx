@@ -83,7 +83,7 @@ export default async function ComprasPage({
         <Stat label="Tomos" value={String(periodTomos)} />
         <Stat label="Compras" value={String(active.length)} />
         <Stat label="Promedio mensual" value={ars.format(stats.avgMonthly)} />
-        <Stat label="Gasto por tomo" value={ars.format(stats.avgPerVolume)} />
+        <Stat label="Gasto promedio por tomo" value={ars.format(stats.avgPerVolume)} />
         <Stat
           label="Total histórico"
           value={ars.format(stats.total)}
