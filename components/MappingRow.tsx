@@ -8,6 +8,7 @@ import {
   resolveEditionMappingAction,
   updateEditionAction,
   deleteEditionAction,
+  setEditionNationalOnlyAction,
 } from "@/app/actions";
 import type { EditionMapping } from "@/lib/catalog";
 
@@ -62,6 +63,8 @@ export default function MappingRow({ row }: { row: EditionMapping }) {
               >
                 serie #{row.anilistId} ↗
               </Link>
+            ) : row.nationalOnly ? (
+              <span className="text-sky-300">🇦🇷 nacional-only</span>
             ) : (
               <span className="text-amber-400">sin mapear</span>
             )}{" "}
@@ -97,6 +100,17 @@ export default function MappingRow({ row }: { row: EditionMapping }) {
           </Btn>
           <Btn onClick={() => setEditing((v) => !v)} disabled={pending}>
             {editing ? "Cerrar" : "Editar"}
+          </Btn>
+          <Btn
+            onClick={() =>
+              run(() =>
+                setEditionNationalOnlyAction(row.id, !row.nationalOnly),
+              )
+            }
+            disabled={pending}
+            title="Marcar como obra solo-nacional (no existe en AniList)"
+          >
+            {row.nationalOnly ? "Quitar nacional" : "Nacional-only"}
           </Btn>
           <Btn
             onClick={() => run(() => deleteEditionAction(row.id))}

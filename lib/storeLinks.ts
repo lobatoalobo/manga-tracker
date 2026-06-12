@@ -36,32 +36,38 @@ export async function crumbDefaultTitle(
   return mapped?.title ?? null;
 }
 
-export interface OvniEditionLink {
+export interface SeriesEditionLink {
   id: number;
+  publisher: string;
   title: string;
-  url: string; // link al sitio de Ovni (búsqueda o producto exacto)
+  url: string; // link guardado (editable por admin)
 }
 
-/** La edición de Ovni mapeada a la serie, con su link a OvniPress (o null). */
-export async function getOvniEditionForSeries(
+/** Todas las ediciones mapeadas a la serie, con su link de tienda editable. */
+export async function getEditionsForSeries(
   anilistId: number,
-): Promise<OvniEditionLink | null> {
-  const row = await prisma.publisherEdition.findFirst({
-    where: { anilistId, publisher: "Ovni Press" },
-    orderBy: { volumes: "desc" },
-    select: { id: true, title: true, url: true },
+): Promise<SeriesEditionLink[]> {
+  const rows = await prisma.publisherEdition.findMany({
+    where: { anilistId },
+    orderBy: [{ publisher: "asc" }, { volumes: "desc" }],
+    select: { id: true, publisher: true, title: true, url: true },
   });
-  if (!row) return null;
-  return {
-    id: row.id,
-    title: row.title,
-    url: isOvniUrl(row.url) ? row.url : ovniSearchUrl(row.title),
-  };
+  return rows.map((r) => ({
+    id: r.id,
+    publisher: r.publisher,
+    title: r.title,
+    // Para Ovni, si la URL no es de OvniPress, mostramos la búsqueda como base.
+    url:
+      r.publisher === "Ovni Press" && !isOvniUrl(r.url)
+        ? ovniSearchUrl(r.title)
+        : r.url,
+  }));
 }
 
-export async function setOvniUrl(editionId: number, url: string) {
+/** Corrige el link de tienda de una edición (cualquier editorial). */
+export async function setEditionUrl(editionId: number, url: string) {
   await prisma.publisherEdition.updateMany({
-    where: { id: editionId, publisher: "Ovni Press" },
+    where: { id: editionId },
     data: { url: url.trim() },
   });
 }

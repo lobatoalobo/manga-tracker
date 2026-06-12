@@ -6,7 +6,8 @@ export interface PublisherCount {
   label: string;
   total: number;
   mapped: number;
-  unmapped: number;
+  unmapped: number; // sin AniList y no marcadas como solo-nacional
+  national: number; // solo-nacional (sin AniList a propósito)
 }
 
 export interface SuspiciousGroup {
@@ -30,10 +31,13 @@ export async function getMappingHealth(): Promise<MappingHealth> {
   const [counts, rows] = await Promise.all([
     Promise.all(
       EDITORIALS.map(async (e) => {
-        const [total, mapped] = await Promise.all([
+        const [total, mapped, national] = await Promise.all([
           prisma.publisherEdition.count({ where: { publisher: e.publisher } }),
           prisma.publisherEdition.count({
             where: { publisher: e.publisher, anilistId: { not: null } },
+          }),
+          prisma.publisherEdition.count({
+            where: { publisher: e.publisher, nationalOnly: true },
           }),
         ]);
         return {
@@ -41,7 +45,8 @@ export async function getMappingHealth(): Promise<MappingHealth> {
           label: e.label,
           total,
           mapped,
-          unmapped: total - mapped,
+          national,
+          unmapped: total - mapped - national,
         };
       }),
     ),

@@ -10,7 +10,7 @@ import { isAdmin } from "@/lib/admin";
 import {
   getCrumbQuery,
   crumbDefaultTitle,
-  getOvniEditionForSeries,
+  getEditionsForSeries,
 } from "@/lib/storeLinks";
 import type { ReadingLink } from "@/lib/normalizeAnilist";
 import AdminStoreLinks from "@/components/AdminStoreLinks";
@@ -64,12 +64,12 @@ export default async function Page({
   const admin = isAdmin(session?.user?.email);
   const adminStore = admin
     ? await (async () => {
-        const [override, def, ovni] = await Promise.all([
+        const [override, def, editions] = await Promise.all([
           getCrumbQuery(mangaId),
           crumbDefaultTitle(mangaId),
-          getOvniEditionForSeries(mangaId),
+          getEditionsForSeries(mangaId),
         ]);
-        return { crumbInitial: override ?? def ?? "", ovni };
+        return { crumbInitial: override ?? def ?? "", editions };
       })()
     : null;
 
@@ -174,7 +174,7 @@ export default async function Page({
               <AdminStoreLinks
                 anilistId={mangaId}
                 crumbInitial={adminStore.crumbInitial}
-                ovni={adminStore.ovni}
+                editions={adminStore.editions}
               />
             </div>
           )}

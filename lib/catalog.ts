@@ -217,11 +217,12 @@ export interface EditionMapping {
   url: string;
   volumes: number;
   anilistId: number | null;
+  nationalOnly: boolean;
 }
 
 export async function getEditionMappings(opts: {
   publisher?: string;
-  state?: "mapped" | "unmapped";
+  state?: "mapped" | "unmapped" | "national";
   q?: string;
   page?: number;
   perPage?: number;
@@ -232,11 +233,17 @@ export async function getEditionMappings(opts: {
   const where: {
     publisher?: string;
     anilistId?: { not: null } | null;
+    nationalOnly?: boolean;
     normTitle?: { contains: string };
   } = {};
   if (opts.publisher) where.publisher = opts.publisher;
   if (opts.state === "mapped") where.anilistId = { not: null };
-  if (opts.state === "unmapped") where.anilistId = null;
+  // "Sin mapear" = sin AniList y que NO sea una obra solo-nacional a propósito.
+  if (opts.state === "unmapped") {
+    where.anilistId = null;
+    where.nationalOnly = false;
+  }
+  if (opts.state === "national") where.nationalOnly = true;
   if (opts.q) where.normTitle = { contains: normalizeTitle(opts.q) };
 
   const [total, rows] = await Promise.all([
@@ -254,6 +261,7 @@ export async function getEditionMappings(opts: {
         url: true,
         volumes: true,
         anilistId: true,
+        nationalOnly: true,
       },
     }),
   ]);
@@ -294,6 +302,14 @@ export async function updatePublisherEditionFields(
 
 export async function deletePublisherEdition(id: number) {
   await prisma.publisherEdition.deleteMany({ where: { id } });
+}
+
+/** Marca/desmarca una edición como solo-nacional (sin equivalente en AniList). */
+export async function setEditionNationalOnly(id: number, value: boolean) {
+  await prisma.publisherEdition.update({
+    where: { id },
+    data: { nationalOnly: value },
+  });
 }
 
 /** Cantidad de títulos por editorial (para los chips). */

@@ -23,7 +23,9 @@ export default async function AdminMapeosPage({
       ? "mapped"
       : params.estado === "unmapped"
         ? "unmapped"
-        : undefined;
+        : params.estado === "national"
+          ? "national"
+          : undefined;
   const q = params.q?.trim() || undefined;
   const page = Math.max(1, Number(params.page) || 1);
 
@@ -80,6 +82,12 @@ export default async function AdminMapeosPage({
           active={state === "mapped"}
         >
           Mapeadas
+        </Chip>
+        <Chip
+          href={`/admin/mapeos?estado=national${editorial ? `&ed=${editorial.slug}` : ""}`}
+          active={state === "national"}
+        >
+          Nacional-only
         </Chip>
       </div>
 

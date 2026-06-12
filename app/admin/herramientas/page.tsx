@@ -52,16 +52,28 @@ export default async function AdminToolsPage() {
                   / {p.total}
                 </span>
               </p>
-              {p.unmapped > 0 && (
-                <Link
-                  href={`/admin/mapeos?estado=unmapped&ed=${
-                    p.label.toLowerCase().split(" ")[0]
-                  }`}
-                  className="text-xs text-amber-400 hover:underline"
-                >
-                  {p.unmapped} sin mapear
-                </Link>
-              )}
+              <div className="mt-0.5 flex flex-col">
+                {p.unmapped > 0 && (
+                  <Link
+                    href={`/admin/mapeos?estado=unmapped&ed=${
+                      p.label.toLowerCase().split(" ")[0]
+                    }`}
+                    className="text-xs text-amber-400 hover:underline"
+                  >
+                    {p.unmapped} sin mapear
+                  </Link>
+                )}
+                {p.national > 0 && (
+                  <Link
+                    href={`/admin/mapeos?estado=national&ed=${
+                      p.label.toLowerCase().split(" ")[0]
+                    }`}
+                    className="text-xs text-sky-300 hover:underline"
+                  >
+                    {p.national} nacional-only
+                  </Link>
+                )}
+              </div>
             </div>
           ))}
         </div>
