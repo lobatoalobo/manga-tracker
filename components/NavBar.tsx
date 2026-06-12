@@ -64,6 +64,7 @@ export default function NavBar({
     { href: "/admin/reportes", label: "Reportes", badge: badges.reports },
     { href: "/admin/tiendas", label: "Tiendas", badge: badges.stores },
     { href: "/admin/independientes", label: "Indie", badge: badges.indie },
+    { href: "/admin/logins", label: "Logins" },
   ];
 
   return (

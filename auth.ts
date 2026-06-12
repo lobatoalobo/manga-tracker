@@ -13,6 +13,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session;
     },
   },
+  events: {
+    // Log de inicios de sesión para el panel admin.
+    async signIn({ user }) {
+      try {
+        await prisma.loginEvent.create({
+          data: {
+            userId: user.id ?? null,
+            name: user.name ?? null,
+            email: user.email ?? null,
+            image: user.image ?? null,
+          },
+        });
+      } catch {
+        /* best-effort: no romper el login si falla el log */
+      }
+    },
+  },
 });
 
 /** Devuelve el id del usuario logueado o lanza si no hay sesión. */

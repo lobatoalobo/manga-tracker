@@ -181,6 +181,18 @@ model Session {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+// Log de inicios de sesión (para el panel admin).
+model LoginEvent {
+  id        Int      @id @default(autoincrement())
+  userId    String?
+  name      String?
+  email     String?
+  image     String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 model VerificationToken {
   identifier String
   token      String
