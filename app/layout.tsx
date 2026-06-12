@@ -9,6 +9,8 @@ import { countPendingIndieWorks } from "@/lib/indie";
 import { countPendingRequests } from "@/lib/social";
 import { countUnread } from "@/lib/notifications";
 import { SignIn, SignOut } from "@/components/AuthButtons";
+import InstallPWA from "@/components/InstallPWA";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -191,7 +193,11 @@ export default async function RootLayout({
           </div>
         </nav>
 
+        <InstallPWA />
+
         {children}
+
+        <ServiceWorkerRegister />
 
         <footer className="mt-12 border-t border-border py-8 text-center text-sm text-muted">
           <p>Nakama · datos de AniList, MangaUpdates y editoriales locales.</p>
