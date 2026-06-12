@@ -18,6 +18,11 @@ export default function MangaCard({
   const total = edition.totalVolumes;
   const pct = total > 0 ? Math.floor((owned / total) * 100) : 0;
   const isComplete = edition.status === "COMPLETED";
+  // Las obras solo-nacionales (sin AniList) usan un id negativo y viven en /nacional.
+  const href =
+    item.anilistId < 0
+      ? `/nacional/${-item.anilistId}`
+      : `${hrefBase}/${item.anilistId}`;
 
   return (
     <div className="group relative w-full overflow-hidden rounded-xl border border-border bg-surface transition hover:border-accent">
@@ -30,7 +35,7 @@ export default function MangaCard({
         />
       )}
 
-      <Link href={`${hrefBase}/${item.anilistId}`} className="block">
+      <Link href={href} className="block">
         <div className="aspect-2/3 w-full overflow-hidden bg-surface-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img

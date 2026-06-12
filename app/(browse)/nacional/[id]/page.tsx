@@ -1,13 +1,20 @@
 import { notFound, redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getSeries } from "@/lib/collection";
 import { getIvreaDataBySlug } from "@/lib/providers/ivrea";
+import AddEditionButton from "@/components/AddEditionButton";
+import TrackingPanel from "@/components/TrackingPanel";
+import { SignIn } from "@/components/AuthButtons";
+import type { Edition } from "@/lib/editions";
 
 export const metadata = { title: "Edición nacional · Nakama" };
 
 /**
- * Página de una obra que existe en el catálogo nacional (Ivrea) pero NO en
- * AniList (cómics occidentales, novelas, etc.). Se arma con la info de la ficha
- * de la editorial. Si la edición ya tiene anilistId, redirige a la ficha normal.
+ * Página de una obra del catálogo nacional (Ivrea) que NO está en AniList
+ * (cómics occidentales, novelas, etc.). Usa un anilistId **negativo** (el id de
+ * la edición en negativo) para poder trackearla en la colección igual que el
+ * resto. Se arma con la info de la ficha de la editorial.
  */
 export default async function NacionalPage({
   params,
@@ -15,8 +22,10 @@ export default async function NacionalPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const editionId = Number(id);
+
   const row = await prisma.publisherEdition.findUnique({
-    where: { id: Number(id) },
+    where: { id: editionId },
   });
   if (!row) notFound();
   if (row.anilistId) redirect(`/manga/${row.anilistId}`);
@@ -32,6 +41,31 @@ export default async function NacionalPage({
   const synopsis = ficha?.synopsis ?? null;
   const volumes = ficha?.argentinaVolumes || row.volumes;
   const status = ficha?.argentinaStatus || null;
+
+  // Id propio (negativo) para la colección, sin chocar con ids de AniList.
+  const pseudoId = -editionId;
+  const session = await auth();
+  const userId = session?.user?.id ?? null;
+  const series = userId ? await getSeries(userId, pseudoId) : null;
+  const trackedKeys = series?.editions.map((e) => e.key) ?? [];
+
+  const anilist = {
+    id: pseudoId,
+    title: { romaji: title, english: null, native: null },
+    coverImage: cover ?? "",
+    volumes,
+  };
+  const edition: Edition = {
+    id: "ivrea",
+    source: row.publisher,
+    region: "AR",
+    publisher: row.publisher,
+    slug: row.slug,
+    status: status || "EN CATÁLOGO",
+    volumes,
+    nextVolume: null,
+    url: row.url,
+  };
 
   return (
     <main className="mx-auto max-w-4xl px-5 py-8">
@@ -59,11 +93,23 @@ export default async function NacionalPage({
             <Field label="Estado" value={status || "—"} />
           </dl>
 
+          <div className="mt-4 max-w-xs">
+            {userId ? (
+              <AddEditionButton
+                anilist={anilist}
+                edition={edition}
+                isTracked={trackedKeys.includes("ivrea")}
+              />
+            ) : (
+              <SignIn className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90" />
+            )}
+          </div>
+
           <a
             href={row.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-4 inline-block rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
+            className="mt-3 inline-block text-xs text-accent hover:underline"
           >
             Ver en {row.publisher} ↗
           </a>
@@ -74,6 +120,15 @@ export default async function NacionalPage({
         <p className="mt-6 whitespace-pre-wrap text-sm leading-relaxed text-muted">
           {synopsis}
         </p>
+      )}
+
+      {series && series.editions.length > 0 && (
+        <TrackingPanel
+          key={trackedKeys.slice().sort().join("|")}
+          anilistId={pseudoId}
+          title={title}
+          editions={series.editions}
+        />
       )}
 
       <p className="mt-8 text-xs text-muted">
