@@ -219,8 +219,24 @@ async function crawlWhakoom(file: string) {
     console.log("  Salteadas:\n   " + res.skipped.slice(0, 30).join("\n   "));
 }
 
-async function crawlWhakoomPublisher(allUrl: string) {
+async function crawlWhakoomPublisher(allUrl: string, reset: boolean) {
   console.log("\n=== Importar editorial completa desde Whakoom ===");
+
+  if (reset) {
+    const u = allUrl.toLowerCase();
+    const publisher = u.includes("panini")
+      ? "Panini Argentina"
+      : u.includes("ivrea")
+        ? "Ivrea Argentina"
+        : u.includes("ovni")
+          ? "Ovni Press"
+          : null;
+    if (publisher) {
+      const r = await prisma.publisherEdition.deleteMany({ where: { publisher } });
+      console.log(`  Reset: borradas ${r.count} entradas viejas de ${publisher}.`);
+    }
+  }
+
   console.log(`  Enumerando ediciones de ${allUrl}…`);
   const urls = await enumeratePublisherEditions(allUrl, {
     onPage: (p, total) => {
@@ -264,7 +280,7 @@ async function main() {
       );
       process.exit(1);
     }
-    await crawlWhakoomPublisher(url);
+    await crawlWhakoomPublisher(url, process.argv[4] === "reset");
     console.log("\nListo.");
     return;
   }
