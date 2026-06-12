@@ -9,6 +9,7 @@ import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { displayTitle, isExactTitleMatch } from "@/lib/title";
 import { getAllMangakas } from "@/lib/mangakas";
+import { nationalEditionsByManga } from "@/lib/catalog";
 import Pager from "@/components/Pager";
 import FinishedFilterButton from "@/components/FinishedFilterButton";
 import {
@@ -70,7 +71,10 @@ export default async function Home({
     mangas = await getTrendingManga(admin);
   }
 
-  const hiatusSet = await getHiatusSet(mangas.map((m: any) => m.id));
+  const [hiatusSet, nationalEditions] = await Promise.all([
+    getHiatusSet(mangas.map((m: any) => m.id)),
+    nationalEditionsByManga(mangas),
+  ]);
 
   const listBase =
     `/?tab=${tab}` + (onlyFinished ? "&finished=1" : "");
@@ -103,38 +107,51 @@ export default async function Home({
 
       {!showMangaka && (
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-        {mangas.map((manga: any) => (
-          <Link
-            key={manga.id}
-            href={`/manga/${manga.id}`}
-            className="group overflow-hidden rounded-xl border border-border bg-surface transition hover:border-accent"
-          >
-            <div className="relative aspect-2/3 w-full overflow-hidden bg-surface-2">
-              {hiatusSet.has(manga.id) && (
-                <span className="absolute left-2 top-2 z-10 rounded-full bg-amber-500/90 px-2 py-0.5 text-xs font-medium text-black">
-                  ⏸ En pausa
-                </span>
-              )}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={manga.coverImage.large}
-                alt={displayTitle(manga.title)}
-                className="h-full w-full object-cover transition group-hover:scale-105"
-              />
-            </div>
-            <div className="p-3">
-              <h3
-                className="truncate text-sm font-semibold"
-                title={displayTitle(manga.title)}
-              >
-                {displayTitle(manga.title)}
-              </h3>
-              <p className="mt-1 truncate text-xs text-muted">
-                {mangakaOf(manga) || manga.title.native}
-              </p>
-            </div>
-          </Link>
-        ))}
+        {mangas.map((manga: any) => {
+          const national = nationalEditions.get(manga.id);
+          return (
+            <Link
+              key={manga.id}
+              href={`/manga/${manga.id}`}
+              className={`group overflow-hidden rounded-xl border bg-surface transition hover:border-accent ${
+                national ? "border-accent/60" : "border-border"
+              }`}
+            >
+              <div className="relative aspect-2/3 w-full overflow-hidden bg-surface-2">
+                {hiatusSet.has(manga.id) && (
+                  <span className="absolute left-2 top-2 z-10 rounded-full bg-amber-500/90 px-2 py-0.5 text-xs font-medium text-black">
+                    ⏸ En pausa
+                  </span>
+                )}
+                {national && (
+                  <span
+                    className="absolute right-2 top-2 z-10 rounded-full bg-sky-500/90 px-2 py-0.5 text-[10px] font-semibold text-white"
+                    title={`Edición nacional: ${national.join(", ")}`}
+                  >
+                    🇦🇷 Nacional
+                  </span>
+                )}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={manga.coverImage.large}
+                  alt={displayTitle(manga.title)}
+                  className="h-full w-full object-cover transition group-hover:scale-105"
+                />
+              </div>
+              <div className="p-3">
+                <h3
+                  className="truncate text-sm font-semibold"
+                  title={displayTitle(manga.title)}
+                >
+                  {displayTitle(manga.title)}
+                </h3>
+                <p className="mt-1 truncate text-xs text-muted">
+                  {mangakaOf(manga) || manga.title.native}
+                </p>
+              </div>
+            </Link>
+          );
+        })}
       </div>
       )}
 

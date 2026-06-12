@@ -63,6 +63,52 @@ export async function lookupEditions(
   return [...best.values()];
 }
 
+interface TitledMedia {
+  id: number;
+  title: { romaji?: string | null; english?: string | null; native?: string | null };
+}
+
+/**
+ * De una lista de series (resultados de AniList), cuáles tienen edición nacional
+ * según el índice de editoriales (match por título normalizado). Devuelve, por
+ * id de serie, las editoriales que la publican. Una sola query indexada.
+ *
+ * Nota: el match es por título, así que puede haber algún falso positivo en
+ * títulos homónimos (mismo nombre, distinto autor). Para un badge es aceptable.
+ */
+export async function nationalEditionsByManga(
+  mangas: TitledMedia[],
+): Promise<Map<number, string[]>> {
+  const byNorm = new Map<string, number[]>(); // normTitle -> ids de series
+  for (const m of mangas) {
+    for (const t of [m.title.romaji, m.title.english]) {
+      const n = t ? normalizeTitle(t) : "";
+      if (!n) continue;
+      const ids = byNorm.get(n) ?? [];
+      if (!ids.includes(m.id)) ids.push(m.id);
+      byNorm.set(n, ids);
+    }
+  }
+
+  const result = new Map<number, string[]>();
+  const norms = [...byNorm.keys()];
+  if (norms.length === 0) return result;
+
+  const rows = await prisma.publisherEdition.findMany({
+    where: { normTitle: { in: norms } },
+    select: { normTitle: true, publisher: true },
+  });
+
+  for (const r of rows) {
+    for (const id of byNorm.get(r.normTitle) ?? []) {
+      const pubs = result.get(id) ?? [];
+      if (!pubs.includes(r.publisher)) pubs.push(r.publisher);
+      result.set(id, pubs);
+    }
+  }
+  return result;
+}
+
 export async function upsertPublisherEdition(e: {
   publisher: string;
   slug: string;
