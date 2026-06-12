@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   setEditionMappingAction,
@@ -14,6 +15,7 @@ const input =
   "rounded-lg border border-border bg-surface-2 px-2 py-1 text-sm outline-none focus:border-accent";
 
 export default function MappingRow({ row }: { row: EditionMapping }) {
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [anilist, setAnilist] = useState(row.anilistId?.toString() ?? "");
   const [title, setTitle] = useState(row.title);
@@ -21,13 +23,19 @@ export default function MappingRow({ row }: { row: EditionMapping }) {
   const [volumes, setVolumes] = useState(row.volumes.toString());
   const [pending, start] = useTransition();
 
+  const run = (action: () => Promise<void>) =>
+    start(async () => {
+      await action();
+      router.refresh();
+    });
+
   const saveMapping = () =>
-    start(() =>
+    run(() =>
       setEditionMappingAction(row.id, anilist.trim() ? Number(anilist) : null),
     );
 
   const saveAll = () =>
-    start(async () => {
+    run(async () => {
       await updateEditionAction(row.id, {
         title,
         url,
@@ -81,7 +89,7 @@ export default function MappingRow({ row }: { row: EditionMapping }) {
             Mapear
           </Btn>
           <Btn
-            onClick={() => start(() => resolveEditionMappingAction(row.id))}
+            onClick={() => run(() => resolveEditionMappingAction(row.id))}
             disabled={pending}
             title="Resolver automáticamente (verificado por autor)"
           >
@@ -91,7 +99,7 @@ export default function MappingRow({ row }: { row: EditionMapping }) {
             {editing ? "Cerrar" : "Editar"}
           </Btn>
           <Btn
-            onClick={() => start(() => deleteEditionAction(row.id))}
+            onClick={() => run(() => deleteEditionAction(row.id))}
             disabled={pending}
             variant="danger"
             title="Borrar esta entrada del catálogo"

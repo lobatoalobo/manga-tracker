@@ -293,7 +293,7 @@ export async function updatePublisherEditionFields(
 }
 
 export async function deletePublisherEdition(id: number) {
-  await prisma.publisherEdition.delete({ where: { id } });
+  await prisma.publisherEdition.deleteMany({ where: { id } });
 }
 
 /** Cantidad de títulos por editorial (para los chips). */

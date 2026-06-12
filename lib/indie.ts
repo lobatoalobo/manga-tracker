@@ -53,7 +53,8 @@ export async function setIndieWorkStatus(
 }
 
 export async function deleteIndieWork(id: number) {
-  await prisma.indieWork.delete({ where: { id } });
+  // deleteMany: idempotente (no tira error si ya no existe).
+  await prisma.indieWork.deleteMany({ where: { id } });
 }
 
 function clean(v: string | null | undefined): string | null {
