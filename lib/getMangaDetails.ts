@@ -107,6 +107,13 @@ async function getEditionsCache(
   }
 }
 
+/** Borra la caché de ediciones de una serie para forzar re-resolución. */
+export async function invalidateEditionsCache(anilistId: number) {
+  await prisma.editionsCache
+    .deleteMany({ where: { anilistId } })
+    .catch(() => {});
+}
+
 async function saveEditionsCache(anilistId: number, built: BuiltEditions) {
   try {
     const data = { ...built, _v: EDITIONS_CACHE_VERSION } as unknown as object;

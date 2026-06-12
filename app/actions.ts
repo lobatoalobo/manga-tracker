@@ -46,6 +46,7 @@ import {
 } from "@/lib/purchases";
 import { searchMangaList } from "@/lib/anilist";
 import { setCrumbQuery, setOvniUrl } from "@/lib/storeLinks";
+import { invalidateEditionsCache } from "@/lib/getMangaDetails";
 import { parseCsv } from "@/lib/csv";
 import { addWish, removeWish } from "@/lib/wishlist";
 import { setNote } from "@/lib/notes";
@@ -327,6 +328,8 @@ export async function setOvniUrlAction(
 ) {
   await assertAdmin();
   await setOvniUrl(editionId, url);
+  // El link sale de la caché de ediciones (no en vivo): hay que invalidarla.
+  await invalidateEditionsCache(anilistId);
   revalidatePath(`/manga/${anilistId}`);
 }
 
