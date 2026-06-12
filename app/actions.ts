@@ -318,6 +318,7 @@ export interface AddPurchaseInput {
   status?: string | null;
   purchasedAt?: string | null;
   note?: string | null;
+  discount?: number | null;
   addToCollection?: boolean;
   items: {
     title: string;
@@ -354,6 +355,7 @@ export async function addPurchaseAction(input: AddPurchaseInput) {
     store: input.store ?? null,
     status,
     note: input.note ?? null,
+    discount: input.discount ?? 0,
     purchasedAt: input.purchasedAt ? new Date(input.purchasedAt) : null,
     items,
   });
@@ -382,6 +384,7 @@ export interface EditPurchaseInput {
   store?: string | null;
   purchasedAt?: string | null;
   note?: string | null;
+  discount?: number | null;
   addToCollection?: boolean;
   items: {
     id?: number | null;
@@ -419,6 +422,7 @@ export async function updatePurchaseAction(
   const res = await updatePurchase(userId, id, {
     store: input.store ?? null,
     note: input.note ?? null,
+    discount: input.discount ?? 0,
     purchasedAt: input.purchasedAt ? new Date(input.purchasedAt) : null,
     items,
   });

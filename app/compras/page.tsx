@@ -67,11 +67,15 @@ export default async function ComprasPage({
   });
   const liveItems = (p: (typeof inPeriod)[number]) =>
     p.items.filter((i) => i.status !== "CANCELLED");
+  const liveGross = (p: (typeof inPeriod)[number]) =>
+    liveItems(p).reduce((a, i) => a + i.price, 0);
+  const liveNet = (p: (typeof inPeriod)[number]) =>
+    liveGross(p) * (1 - p.discount / 100);
+
   const purchasesInPeriod = inPeriod.filter((p) => liveItems(p).length > 0);
-  const periodTotal = inPeriod.reduce(
-    (s, p) => s + liveItems(p).reduce((a, i) => a + i.price, 0),
-    0,
-  );
+  const periodGross = inPeriod.reduce((s, p) => s + liveGross(p), 0);
+  const periodTotal = inPeriod.reduce((s, p) => s + liveNet(p), 0);
+  const periodSaved = periodGross - periodTotal;
   const periodTomos = inPeriod.reduce((s, p) => s + liveItems(p).length, 0);
   const periodLabel =
     mode === "all" ? "Total" : mode === "year" ? `Año ${year}` : "Este período";
@@ -88,7 +92,15 @@ export default async function ComprasPage({
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Stat label={periodLabel} value={ars.format(periodTotal)} />
+        <Stat
+          label={periodLabel}
+          value={ars.format(periodTotal)}
+          hint={
+            periodSaved > 0.5
+              ? `sin desc. ${ars.format(periodGross)} · ahorro ${ars.format(periodSaved)}`
+              : undefined
+          }
+        />
         <Stat label="Tomos" value={String(periodTomos)} />
         <Stat label="Compras" value={String(purchasesInPeriod.length)} />
         <Stat label="Promedio mensual" value={ars.format(stats.avgMonthly)} />
@@ -141,6 +153,17 @@ export default async function ComprasPage({
                       {p.items.length}{" "}
                       {p.items.length === 1 ? "tomo" : "tomos"} ·{" "}
                       {ars.format(p.total)}
+                      {p.discount > 0 && (
+                        <>
+                          {" "}
+                          <span className="text-sm text-muted line-through">
+                            {ars.format(p.subtotal)}
+                          </span>{" "}
+                          <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-xs font-medium text-emerald-300">
+                            −{p.discount}%
+                          </span>
+                        </>
+                      )}
                     </p>
                     <p className="mt-0.5 text-sm text-muted">
                       {p.purchasedAt.toLocaleDateString("es-AR")}
@@ -209,6 +232,7 @@ export default async function ComprasPage({
                       store: p.store ?? "",
                       purchasedAt: p.purchasedAt.toISOString().slice(0, 10),
                       note: p.note ?? "",
+                      discount: p.discount,
                       items: p.items.map((it) => ({
                         id: it.id,
                         title: it.title,

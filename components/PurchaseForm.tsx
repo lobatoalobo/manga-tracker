@@ -28,6 +28,7 @@ export interface InitialPurchase {
   store: string;
   purchasedAt: string; // yyyy-mm-dd
   note: string;
+  discount: number;
   items: {
     id: number;
     title: string;
@@ -88,6 +89,9 @@ export default function PurchaseForm({
   const [status, setStatus] = useState("RECEIVED");
   const [date, setDate] = useState(initial?.purchasedAt ?? "");
   const [note, setNote] = useState(initial?.note ?? "");
+  const [discount, setDiscount] = useState(
+    initial?.discount ? String(initial.discount) : "",
+  );
   const [addToCollection, setAddToCollection] = useState(true);
   const [items, setItems] = useState<ItemRow[]>(rowsFrom(initial));
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +102,7 @@ export default function PurchaseForm({
     setStatus("RECEIVED");
     setDate("");
     setNote("");
+    setDiscount("");
     setAddToCollection(true);
     setItems([emptyItem()]);
     setError(null);
@@ -107,7 +112,10 @@ export default function PurchaseForm({
     setItems((prev) => prev.map((it, j) => (j === i ? { ...it, ...patch } : it)));
   }
 
-  const total = items.reduce((s, it) => s + (Number(it.price) || 0), 0);
+  const subtotal = items.reduce((s, it) => s + (Number(it.price) || 0), 0);
+  const disc = Math.min(100, Math.max(0, Number(discount) || 0));
+  const total = subtotal * (1 - disc / 100);
+  const saved = subtotal - total;
 
   function submit() {
     setError(null);
@@ -127,11 +135,13 @@ export default function PurchaseForm({
       return;
     }
     startTransition(async () => {
+      const discountNum = discount ? Number(discount) : 0;
       const res = editing
         ? await updatePurchaseAction(initial!.id, {
             store,
             purchasedAt: date || null,
             note,
+            discount: discountNum,
             addToCollection,
             items: cleanItems,
           })
@@ -140,6 +150,7 @@ export default function PurchaseForm({
             status,
             purchasedAt: date || null,
             note,
+            discount: discountNum,
             addToCollection,
             items: cleanItems,
           });
@@ -170,7 +181,7 @@ export default function PurchaseForm({
   return (
     <div className="rounded-xl border border-border bg-surface p-4">
       {/* Datos generales */}
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <input
           value={store}
           onChange={(e) => setStore(e.target.value)}
@@ -183,6 +194,20 @@ export default function PurchaseForm({
           onChange={(e) => setDate(e.target.value)}
           className={input}
         />
+        <div className="relative">
+          <input
+            value={discount}
+            onChange={(e) => setDiscount(e.target.value)}
+            type="number"
+            min={0}
+            max={100}
+            placeholder="Descuento"
+            className={input}
+          />
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted">
+            %
+          </span>
+        </div>
         {editing ? (
           <input
             value={note}
@@ -293,10 +318,24 @@ export default function PurchaseForm({
 
       <div className="mt-4 flex items-center justify-between">
         <span className="text-sm text-muted">
-          Total:{" "}
-          <span className="font-semibold text-foreground">
-            {ars.format(total)}
-          </span>
+          {disc > 0 ? (
+            <>
+              <span className="line-through">{ars.format(subtotal)}</span> ·{" "}
+              <span className="font-semibold text-foreground">
+                {ars.format(total)}
+              </span>{" "}
+              <span className="text-emerald-400">
+                (−{ars.format(saved)})
+              </span>
+            </>
+          ) : (
+            <>
+              Total:{" "}
+              <span className="font-semibold text-foreground">
+                {ars.format(total)}
+              </span>
+            </>
+          )}
         </span>
         <div className="flex gap-2">
           <button

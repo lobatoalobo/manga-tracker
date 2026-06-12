@@ -139,9 +139,10 @@ model Purchase {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  store  String? // dónde lo compraste
-  status String  @default("RECEIVED") // PENDING | SHIPPED | RECEIVED | CANCELLED
-  note   String?
+  store    String? // dónde lo compraste
+  status   String  @default("RECEIVED") // PENDING | SHIPPED | DELAYED | RECEIVED | CANCELLED
+  note     String?
+  discount Float   @default(0) // % de descuento sobre el subtotal (ej. Crumb)
 
   purchasedAt DateTime  @default(now()) // fecha de compra/pedido
   receivedAt  DateTime?

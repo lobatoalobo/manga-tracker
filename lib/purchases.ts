@@ -21,6 +21,7 @@ export interface PurchaseInput {
   store?: string | null;
   status?: PurchaseStatus; // estado inicial aplicado a todos los tomos
   note?: string | null;
+  discount?: number | null; // % de descuento sobre el subtotal
   purchasedAt?: Date | null;
   items: PurchaseItemInput[];
 }
@@ -39,17 +40,28 @@ export function normalizeStatus(v: string | null | undefined): PurchaseStatus {
     : "RECEIVED";
 }
 
-/** Compras del usuario (con sus tomos y el total calculado), más nuevas primero. */
+/** % de descuento válido (0–100). */
+export function clampDiscount(v: number | null | undefined): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(100, Math.max(0, n));
+}
+
+const applyDiscount = (subtotal: number, discount: number) =>
+  subtotal * (1 - discount / 100);
+
+/** Compras del usuario (con subtotal, total con descuento y ahorro). */
 export async function getPurchases(userId: string) {
   const rows = await prisma.purchase.findMany({
     where: { userId },
     orderBy: { purchasedAt: "desc" },
     include: { items: true },
   });
-  return rows.map((p) => ({
-    ...p,
-    total: p.items.reduce((s, i) => s + i.price, 0),
-  }));
+  return rows.map((p) => {
+    const subtotal = p.items.reduce((s, i) => s + i.price, 0);
+    const total = applyDiscount(subtotal, p.discount);
+    return { ...p, subtotal, total, saved: subtotal - total };
+  });
 }
 
 export type PurchaseWithTotal = Awaited<
@@ -76,6 +88,7 @@ export async function addPurchase(userId: string, input: PurchaseInput) {
       store: clean(input.store),
       status,
       note: clean(input.note),
+      discount: clampDiscount(input.discount),
       purchasedAt: input.purchasedAt ?? new Date(),
       receivedAt: status === "RECEIVED" ? new Date() : null,
       items: { create: items },
@@ -91,6 +104,7 @@ export interface UpdatePurchaseItem extends PurchaseItemInput {
 export interface UpdatePurchaseInput {
   store?: string | null;
   note?: string | null;
+  discount?: number | null;
   purchasedAt?: Date | null;
   items: UpdatePurchaseItem[];
 }
@@ -152,6 +166,7 @@ export async function updatePurchase(
     data: {
       store: clean(input.store),
       note: clean(input.note),
+      discount: clampDiscount(input.discount),
       ...(input.purchasedAt ? { purchasedAt: input.purchasedAt } : {}),
     },
   });
@@ -181,19 +196,22 @@ export async function deletePurchase(userId: string, id: number) {
 }
 
 export interface PurchaseStats {
-  total: number; // total invertido (ARS), excluye canceladas
+  total: number; // total invertido (con descuento), excluye canceladas
+  grossTotal: number; // total sin descuento
+  saved: number; // ahorrado por descuentos
   count: number; // compras
   tomos: number; // ítems
   thisMonth: number;
   thisYear: number;
   avgMonthly: number; // promedio mensual (meses con actividad)
-  avgPerVolume: number; // gasto promedio por tomo
+  avgPerVolume: number; // gasto promedio por tomo (con descuento)
   pending: number; // pendientes/enviadas
   firstYear: number; // año de la primera compra (para el selector)
 }
 
 type StatItem = {
-  price: number;
+  price: number; // sin descuento
+  net: number; // con descuento de la compra aplicado
   edition: string | null;
   title: string;
   at: Date;
@@ -208,11 +226,12 @@ async function loadItems(userId: string): Promise<StatItem[]> {
       edition: true,
       title: true,
       status: true,
-      purchase: { select: { purchasedAt: true } },
+      purchase: { select: { purchasedAt: true, discount: true } },
     },
   });
   return rows.map((r) => ({
     price: r.price,
+    net: applyDiscount(r.price, r.purchase.discount),
     edition: r.edition,
     title: r.title,
     at: r.purchase.purchasedAt,
@@ -237,16 +256,18 @@ export async function getPurchaseStats(userId: string): Promise<PurchaseStats> {
   const m = now.getMonth();
 
   let total = 0;
+  let grossTotal = 0;
   let thisMonth = 0;
   let thisYear = 0;
   const months = new Set<string>();
 
   for (const it of items) {
-    total += it.price;
+    total += it.net;
+    grossTotal += it.price;
     months.add(`${it.at.getFullYear()}-${it.at.getMonth()}`);
     if (it.at.getFullYear() === y) {
-      thisYear += it.price;
-      if (it.at.getMonth() === m) thisMonth += it.price;
+      thisYear += it.net;
+      if (it.at.getMonth() === m) thisMonth += it.net;
     }
   }
 
@@ -256,6 +277,8 @@ export async function getPurchaseStats(userId: string): Promise<PurchaseStats> {
 
   return {
     total,
+    grossTotal,
+    saved: grossTotal - total,
     count: purchases,
     tomos: items.length,
     thisMonth,
@@ -276,7 +299,7 @@ export async function getMonthlySpend(
     (i) => i.status !== "CANCELLED" && i.at.getFullYear() === year,
   );
   const out = new Array(12).fill(0);
-  for (const it of items) out[it.at.getMonth()] += it.price;
+  for (const it of items) out[it.at.getMonth()] += it.net;
   return out;
 }
 
@@ -300,7 +323,7 @@ function groupSum(items: StatItem[], key: (i: StatItem) => string) {
   const map = new Map<string, number>();
   for (const it of items) {
     const k = key(it);
-    map.set(k, (map.get(k) ?? 0) + it.price);
+    map.set(k, (map.get(k) ?? 0) + it.net);
   }
   return [...map.entries()]
     .map(([label, total]) => ({ label, total }))
