@@ -47,10 +47,11 @@ export default function RunJobsPanel({ actionsUrl }: { actionsUrl: string }) {
           Ver progreso en Actions ↗
         </a>
       </div>
-      <p className="mb-3 text-xs text-muted">
-        Corren en GitHub Actions contra la DB de producción. El resultado
-        aparece abajo en &quot;Últimas corridas&quot; cuando terminan.
-      </p>
+      <div className="mb-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+        ⚠️ <b>Corre contra PRODUCCIÓN</b> — aunque lo dispares desde staging, el
+        crawl modifica la base de datos de prod (corre en GitHub Actions). El
+        resultado aparece en &quot;Últimas corridas&quot; cuando termina.
+      </div>
       <div className="flex flex-wrap gap-2">
         {JOBS.map((j) => (
           <button
