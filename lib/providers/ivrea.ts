@@ -37,6 +37,9 @@ export async function getIvreaDataBySlug(
 
   const html = await response.text();
   const $ = cheerio.load(html);
+  // Sacamos scripts/estilos: cheerio.text() incluye el contenido de <script>
+  // (p. ej. el JSON del widget de galería) y ensuciaba la sinopsis.
+  $("script, style, noscript").remove();
   const text = $("body").text().replace(/\s+/g, " ");
 
   const coverImage =
@@ -49,7 +52,7 @@ export async function getIvreaDataBySlug(
         .slice(synIdx)
         .replace(/INFORMACI[ÓO]N SOBRE LA OBRA/i, "")
         .split(
-          /¿D[ÓO]NDE COMPRAR|PRODUCTOS RELACIONADOS|PREGUNTAS Y RESPUESTAS|COMPARTIR/i,
+          /PORTADAS|GALER[ÍI]A|TOMOS PUBLICADOS|TAMBI[ÉE]N TE PUEDEN|MANGA RELEASES|HOME NUEVAS|CALENDARIO DE SALIDAS|¿D[ÓO]NDE COMPRAR|PRODUCTOS RELACIONADOS|PREGUNTAS Y RESPUESTAS|COMPARTIR/i,
         )[0]
         .trim()
         .slice(0, 1500) || null;
