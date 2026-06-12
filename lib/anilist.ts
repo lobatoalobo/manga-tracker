@@ -180,6 +180,41 @@ export async function searchMangaList(
  * Top de mangas "hot" del momento (trending de AniList).
  * Cacheado 1 semana: se refresca solo, sin cron.
  */
+/**
+ * Manga de un autor buscándolo por nombre (Staff). Sirve para mapear ediciones
+ * cuyo título está solo en español (no matchea la búsqueda por título), usando
+ * el autor que da Whakoom.
+ */
+export async function searchStaffManga(
+  name: string,
+): Promise<{ id: number; title: { romaji?: string | null; english?: string | null } }[]> {
+  const query = `
+    query ($s: String) {
+      Staff(search: $s) {
+        staffMedia(type: MANGA, sort: POPULARITY_DESC, perPage: 25) {
+          nodes { id title { romaji english } }
+        }
+      }
+    }
+  `;
+  const body = JSON.stringify({ query, variables: { s: name } });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const response = await fetch("https://graphql.anilist.co", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    if (response.status === 429 && attempt < 2) {
+      const retryAfter = Number(response.headers.get("retry-after")) || 2;
+      await new Promise((r) => setTimeout(r, (retryAfter + 1) * 1000));
+      continue;
+    }
+    const json = await response.json();
+    return json?.data?.Staff?.staffMedia?.nodes ?? [];
+  }
+  return [];
+}
+
 export async function getTrendingManga(includeAdult = true) {
   const query = `
     query {

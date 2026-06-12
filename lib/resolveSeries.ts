@@ -1,4 +1,4 @@
-import { searchMangaList } from "./anilist";
+import { searchMangaList, searchStaffManga } from "./anilist";
 import { getIvreaDataBySlug } from "./providers/ivrea";
 import { authorMatches } from "./authorMatch";
 import { searchableTitle, normalizeTitle } from "./catalog";
@@ -21,7 +21,6 @@ export async function resolveByTitleAuthor(
   if (!cleaned) return null;
 
   const candidates: any[] = await searchMangaList(cleaned, true).catch(() => []);
-  if (candidates.length === 0) return null;
 
   if (author) {
     const match = candidates.find((c) => {
@@ -37,7 +36,39 @@ export async function resolveByTitleAuthor(
       normalizeTitle(c.title?.romaji ?? "") === nc ||
       normalizeTitle(c.title?.english ?? "") === nc,
   );
-  return exact?.id ?? null;
+  if (exact) return exact.id;
+
+  // Fallback: el título suele venir solo en español (no matchea). Buscamos por
+  // AUTOR (Staff de AniList) y elegimos su obra con más coincidencia de palabras
+  // con el título; si tiene una sola obra, esa.
+  if (author) {
+    const works = await searchStaffManga(author).catch(() => []);
+    if (works.length === 0) return null;
+
+    const titleTokens = new Set(
+      normalizeTitle(cleaned)
+        .split(" ")
+        .filter((w) => w.length >= 3),
+    );
+    let best: { id: number } | null = null;
+    let bestScore = 0;
+    for (const w of works) {
+      const wt = `${normalizeTitle(w.title?.romaji ?? "")} ${normalizeTitle(
+        w.title?.english ?? "",
+      )}`
+        .split(" ")
+        .filter(Boolean);
+      const score = wt.filter((t) => titleTokens.has(t)).length;
+      if (score > bestScore) {
+        bestScore = score;
+        best = w;
+      }
+    }
+    if (best && bestScore > 0) return best.id;
+    if (works.length === 1) return works[0].id;
+  }
+
+  return null;
 }
 
 /** Autor + título que lista la editorial (cuando los expone). */
