@@ -18,7 +18,7 @@ import { prisma } from "./prisma";
 const EDITIONS_CACHE_TTL = 1000 * 60 * 60 * 24 * 3; // 3 días
 // Subir cuando cambie la lógica de resolución: invalida cachés viejas (p. ej.
 // para reaplicar la verificación de autor que evita mezclar obras homónimas).
-const EDITIONS_CACHE_VERSION = 5;
+const EDITIONS_CACHE_VERSION = 6;
 
 /** Lo que guardamos en EditionsCache.data: las ediciones + la versión de esquema. */
 type CachedEditions = BuiltEditions & { _v?: number };
