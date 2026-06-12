@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Link from "next/link";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { countPendingReports } from "@/lib/reports";
@@ -9,6 +8,7 @@ import { countPendingIndieWorks } from "@/lib/indie";
 import { countPendingRequests } from "@/lib/social";
 import { countUnread } from "@/lib/notifications";
 import { SignIn, SignOut } from "@/components/AuthButtons";
+import NavBar from "@/components/NavBar";
 import InstallPWA from "@/components/InstallPWA";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import "./globals.css";
@@ -62,136 +62,23 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body>
-        <nav className="sticky top-0 z-20 border-b border-border bg-surface/80 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl items-center gap-6 px-5 py-4">
-            <Link href="/" className="font-bold">
-              📚 Nakama
-            </Link>
-
-            <Link
-              href="/"
-              className="text-sm text-muted transition hover:text-foreground"
-            >
-              Buscar
-            </Link>
-            <Link
-              href="/tiendas"
-              className="text-sm text-muted transition hover:text-foreground"
-            >
-              Tiendas
-            </Link>
-            <Link
-              href="/independientes"
-              className="text-sm text-muted transition hover:text-foreground"
-            >
-              Indie
-            </Link>
-
-            {session && (
-              <>
-                <Link
-                  href="/collection"
-                  className="text-sm text-muted transition hover:text-foreground"
-                >
-                  Mi colección
-                </Link>
-                <Link
-                  href="/amigos"
-                  className="flex items-center gap-1.5 text-sm text-muted transition hover:text-foreground"
-                >
-                  Amigos
-                  {pendingFriends > 0 && (
-                    <span className="rounded-full bg-accent px-1.5 py-0.5 text-xs font-semibold text-white">
-                      {pendingFriends}
-                    </span>
-                  )}
-                </Link>
-                <Link
-                  href="/deseados"
-                  className="text-sm text-muted transition hover:text-foreground"
-                >
-                  Deseados
-                </Link>
-                <Link
-                  href="/compras"
-                  className="text-sm text-muted transition hover:text-foreground"
-                >
-                  Compras
-                </Link>
-                {admin && (
-                  <>
-                    <Link
-                      href="/admin/reportes"
-                      className="flex items-center gap-1.5 text-sm text-muted transition hover:text-foreground"
-                    >
-                      Reportes
-                      {pendingReports > 0 && (
-                        <span className="rounded-full bg-accent px-1.5 py-0.5 text-xs font-semibold text-white">
-                          {pendingReports}
-                        </span>
-                      )}
-                    </Link>
-                    <Link
-                      href="/admin/tiendas"
-                      className="flex items-center gap-1.5 text-sm text-muted transition hover:text-foreground"
-                    >
-                      Tiendas admin
-                      {pendingStores > 0 && (
-                        <span className="rounded-full bg-accent px-1.5 py-0.5 text-xs font-semibold text-white">
-                          {pendingStores}
-                        </span>
-                      )}
-                    </Link>
-                    <Link
-                      href="/admin/independientes"
-                      className="flex items-center gap-1.5 text-sm text-muted transition hover:text-foreground"
-                    >
-                      Indie admin
-                      {pendingIndie > 0 && (
-                        <span className="rounded-full bg-accent px-1.5 py-0.5 text-xs font-semibold text-white">
-                          {pendingIndie}
-                        </span>
-                      )}
-                    </Link>
-                  </>
-                )}
-              </>
-            )}
-
-            {session?.user ? (
-              <div className="ml-auto flex items-center gap-3">
-                <Link
-                  href="/notificaciones"
-                  className="relative text-lg"
-                  title="Notificaciones"
-                >
-                  🔔
-                  {unreadNotifs > 0 && (
-                    <span className="absolute -right-2 -top-1 rounded-full bg-accent px-1.5 text-xs font-semibold text-white">
-                      {unreadNotifs}
-                    </span>
-                  )}
-                </Link>
-                {session.user.image && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={session.user.image}
-                    alt={session.user.name ?? ""}
-                    className="h-7 w-7 rounded-full"
-                  />
-                )}
-                <span className="hidden text-sm text-muted sm:inline">
-                  {session.user.name}
-                </span>
-                <SignOut />
-              </div>
-            ) : (
-              <div className="ml-auto">
-                <SignIn className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90" />
-              </div>
-            )}
-          </div>
-        </nav>
+        <NavBar
+          loggedIn={!!session?.user}
+          admin={admin}
+          userName={session?.user?.name}
+          userImage={session?.user?.image}
+          badges={{
+            friends: pendingFriends,
+            reports: pendingReports,
+            stores: pendingStores,
+            indie: pendingIndie,
+            unread: unreadNotifs,
+          }}
+          signIn={
+            <SignIn className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90" />
+          }
+          signOut={<SignOut />}
+        />
 
         <InstallPWA />
 
