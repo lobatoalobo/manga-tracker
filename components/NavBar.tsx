@@ -9,6 +9,7 @@ interface Badges {
   stores: number;
   indie: number;
   unread: number;
+  faltantes: number;
 }
 
 interface MenuLink {
@@ -56,6 +57,7 @@ export default function NavBar({
     { href: "/collection", label: "Mi colección" },
     { href: "/amigos", label: "Amigos", badge: badges.friends },
     { href: "/deseados", label: "Deseados" },
+    { href: "/faltantes", label: "Para comprar", badge: badges.faltantes },
     { href: "/compras", label: "Compras" },
   ];
 

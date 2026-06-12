@@ -7,6 +7,7 @@ import { countPendingStores } from "@/lib/stores";
 import { countPendingIndieWorks } from "@/lib/indie";
 import { countPendingRequests } from "@/lib/social";
 import { countUnread } from "@/lib/notifications";
+import { getShoppingCount } from "@/lib/shopping";
 import { SignIn, SignOut } from "@/components/AuthButtons";
 import NavBar from "@/components/NavBar";
 import InstallPWA from "@/components/InstallPWA";
@@ -49,12 +50,13 @@ export default async function RootLayout({
         countPendingIndieWorks().catch(() => 0),
       ])
     : [0, 0, 0];
-  const [pendingFriends, unreadNotifs] = session?.user?.id
+  const [pendingFriends, unreadNotifs, shopping] = session?.user?.id
     ? await Promise.all([
         countPendingRequests(session.user.id).catch(() => 0),
         countUnread(session.user.id).catch(() => 0),
+        getShoppingCount(session.user.id).catch(() => ({ series: 0, tomos: 0 })),
       ])
-    : [0, 0];
+    : [0, 0, { series: 0, tomos: 0 }];
 
   return (
     <html
@@ -73,6 +75,7 @@ export default async function RootLayout({
             stores: pendingStores,
             indie: pendingIndie,
             unread: unreadNotifs,
+            faltantes: shopping.series,
           }}
           signIn={
             <SignIn className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-90" />

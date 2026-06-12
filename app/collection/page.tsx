@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { auth } from "@/auth";
 import { getCollectionItems, getShareSlug } from "@/lib/collection";
 import CollectionGrid from "@/components/CollectionGrid";
@@ -19,6 +20,17 @@ export default async function CollectionPage() {
     getShareSlug(session.user.id),
   ]);
   const stats = getCollectionStats(items);
+
+  const faltan = items.filter(
+    (i) =>
+      i.edition.region === "AR" &&
+      i.edition.totalVolumes > 0 &&
+      i.edition.ownedVolumes.length < i.edition.totalVolumes,
+  );
+  const tomosFaltan = faltan.reduce(
+    (s, i) => s + (i.edition.totalVolumes - i.edition.ownedVolumes.length),
+    0,
+  );
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-8">
@@ -45,6 +57,21 @@ export default async function CollectionPage() {
           </div>
         </div>
       </div>
+
+      {tomosFaltan > 0 && (
+        <Link
+          href="/faltantes"
+          className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm transition hover:border-accent"
+        >
+          <span>
+            🛒 Te faltan <b>{tomosFaltan}</b> tomos en <b>{faltan.length}</b>{" "}
+            series.
+          </span>
+          <span className="shrink-0 font-medium text-accent">
+            Para comprar →
+          </span>
+        </Link>
+      )}
 
       <CollectionGrid items={items} />
     </main>
