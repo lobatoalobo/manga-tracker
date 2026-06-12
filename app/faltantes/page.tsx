@@ -82,14 +82,22 @@ export default async function FaltantesPage() {
                     >
                       🛒 Crumb
                     </a>
-                    {i.storeUrl && (
+                    <a
+                      href={i.laRevisteriaUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-lg border border-border px-3 py-1 text-xs transition hover:border-accent"
+                    >
+                      🛒 La Revistería
+                    </a>
+                    {i.ovniUrl && (
                       <a
-                        href={i.storeUrl}
+                        href={i.ovniUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="rounded-lg border border-border px-3 py-1 text-xs transition hover:border-accent"
                       >
-                        Ver en {i.storeLabel} ↗
+                        Ver en OvniPress ↗
                       </a>
                     )}
                   </div>

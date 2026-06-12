@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getCollectionItems } from "@/lib/collection";
 import { displayTitle } from "@/lib/title";
 import { crumbSearch } from "@/lib/crumb";
+import { laRevisteriaSearch } from "@/lib/larevisteria";
 import { isOvniUrl, ovniSearchUrl } from "@/lib/ovni";
 
 export interface ShoppingItem {
@@ -12,9 +13,11 @@ export interface ShoppingItem {
   owned: number;
   total: number;
   missing: number[]; // tomos que faltan (1..total sin los que tenés)
+  // Retailers que venden todas las editoriales (búsqueda por título):
   crumbUrl: string;
-  storeUrl: string | null;
-  storeLabel: string | null;
+  laRevisteriaUrl: string;
+  // Sitio de la editorial solo cuando vende directo (Ovni). Ivrea/Panini no.
+  ovniUrl: string | null;
 }
 
 /** Conteo liviano para el badge/bar: series incompletas y tomos faltantes (AR). */
@@ -82,15 +85,17 @@ export async function getShoppingList(userId: string): Promise<ShoppingItem[]> {
       for (let v = 1; v <= total; v++) if (!owned.has(v)) missing.push(v);
 
       const pubs = pubBy.get(i.anilistId) ?? [];
-      const pubMatch =
-        pubs.find((p) => p.publisher === i.edition.publisher) ?? pubs[0] ?? null;
-      const storeUrl = pubMatch
-        ? pubMatch.publisher === "Ovni Press" && !isOvniUrl(pubMatch.url)
-          ? ovniSearchUrl(pubMatch.title)
-          : pubMatch.url
+      // Link directo solo para Ovni (Ivrea/Panini no venden por su sitio).
+      const ovni = pubs.find((p) => p.publisher === "Ovni Press");
+      const ovniUrl = ovni
+        ? isOvniUrl(ovni.url)
+          ? ovni.url
+          : ovniSearchUrl(ovni.title)
         : null;
+      // Término de búsqueda para los retailers: override de Crumb, o el título
+      // de la editorial con más tomos, o el romaji.
       const bestTitle = [...pubs].sort((a, b) => b.volumes - a.volumes)[0]?.title;
-      const crumbQuery = crumbBy.get(i.anilistId) ?? bestTitle ?? i.title.romaji;
+      const query = crumbBy.get(i.anilistId) ?? bestTitle ?? i.title.romaji;
 
       return {
         anilistId: i.anilistId,
@@ -100,13 +105,9 @@ export async function getShoppingList(userId: string): Promise<ShoppingItem[]> {
         owned: i.edition.ownedVolumes.length,
         total,
         missing,
-        crumbUrl: crumbSearch(crumbQuery),
-        storeUrl,
-        storeLabel: pubMatch
-          ? pubMatch.publisher === "Ovni Press"
-            ? "OvniPress"
-            : pubMatch.publisher
-          : null,
+        crumbUrl: crumbSearch(query),
+        laRevisteriaUrl: laRevisteriaSearch(query),
+        ovniUrl,
       };
     })
     .sort((a, b) => a.title.localeCompare(b.title));
