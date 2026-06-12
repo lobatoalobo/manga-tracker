@@ -165,6 +165,7 @@ model PurchaseItem {
   volume     Int? // tomo, opcional
   edition    String? // edición/editorial, opcional
   price      Float // precio pagado por este tomo (ARS)
+  status     String  @default("RECEIVED") // PENDING | SHIPPED | DELAYED | RECEIVED | CANCELLED (por tomo)
 
   @@index([purchaseId])
 }

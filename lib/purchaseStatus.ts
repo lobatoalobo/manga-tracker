@@ -15,6 +15,11 @@ export const PURCHASE_STATUS_META: Record<
     dot: "bg-sky-400",
     chip: "bg-sky-500/15 text-sky-300",
   },
+  DELAYED: {
+    label: "Retrasado",
+    dot: "bg-orange-400",
+    chip: "bg-orange-500/15 text-orange-300",
+  },
   RECEIVED: {
     label: "Recibido",
     dot: "bg-emerald-400",
@@ -30,6 +35,7 @@ export const PURCHASE_STATUS_META: Record<
 export const PURCHASE_STATUS_ORDER: PurchaseStatus[] = [
   "PENDING",
   "SHIPPED",
+  "DELAYED",
   "RECEIVED",
   "CANCELLED",
 ];

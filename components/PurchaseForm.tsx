@@ -13,6 +13,16 @@ import {
 const input =
   "w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent";
 
+// Editoriales argentinas frecuentes para el dropdown del tomo.
+const EDITORIAL_OPTIONS = [
+  "Ivrea",
+  "Panini",
+  "Ovni Press",
+  "Distrito Manga",
+  "Kemuri",
+  "Utopía",
+];
+
 interface ItemRow {
   series: SeriesValue;
   volume: string;
@@ -168,12 +178,18 @@ export default function PurchaseForm() {
                   placeholder="Tomo #"
                   className={input}
                 />
-                <input
+                <select
                   value={it.edition}
                   onChange={(e) => setItem(i, { edition: e.target.value })}
-                  placeholder="Editorial"
                   className={input}
-                />
+                >
+                  <option value="">Editorial…</option>
+                  {EDITORIAL_OPTIONS.map((e) => (
+                    <option key={e} value={e}>
+                      {e}
+                    </option>
+                  ))}
+                </select>
                 <input
                   value={it.price}
                   onChange={(e) => setItem(i, { price: e.target.value })}

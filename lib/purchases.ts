@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/prisma";
 
-export type PurchaseStatus = "PENDING" | "SHIPPED" | "RECEIVED" | "CANCELLED";
+export type PurchaseStatus =
+  | "PENDING"
+  | "SHIPPED"
+  | "DELAYED"
+  | "RECEIVED"
+  | "CANCELLED";
 
 export interface PurchaseItemInput {
   title: string;
@@ -9,11 +14,12 @@ export interface PurchaseItemInput {
   volume?: number | null;
   edition?: string | null;
   price: number;
+  status?: PurchaseStatus;
 }
 
 export interface PurchaseInput {
   store?: string | null;
-  status?: PurchaseStatus;
+  status?: PurchaseStatus; // estado inicial aplicado a todos los tomos
   note?: string | null;
   purchasedAt?: Date | null;
   items: PurchaseItemInput[];
@@ -22,6 +28,7 @@ export interface PurchaseInput {
 const STATUSES: PurchaseStatus[] = [
   "PENDING",
   "SHIPPED",
+  "DELAYED",
   "RECEIVED",
   "CANCELLED",
 ];
@@ -60,6 +67,7 @@ export async function addPurchase(userId: string, input: PurchaseInput) {
       volume: i.volume ?? null,
       edition: clean(i.edition),
       price: i.price,
+      status: normalizeStatus(i.status ?? status),
     }));
 
   return prisma.purchase.create({
@@ -76,14 +84,20 @@ export async function addPurchase(userId: string, input: PurchaseInput) {
   });
 }
 
-export async function setPurchaseStatus(
+/** Cambia el estado de un tomo (verifica que la compra sea del usuario). */
+export async function setPurchaseItemStatus(
   userId: string,
-  id: number,
+  itemId: number,
   status: PurchaseStatus,
 ) {
-  await prisma.purchase.updateMany({
-    where: { id, userId },
-    data: { status, receivedAt: status === "RECEIVED" ? new Date() : null },
+  const item = await prisma.purchaseItem.findFirst({
+    where: { id: itemId, purchase: { userId } },
+    select: { id: true },
+  });
+  if (!item) return;
+  await prisma.purchaseItem.update({
+    where: { id: itemId },
+    data: { status },
   });
 }
 
@@ -118,7 +132,8 @@ async function loadItems(userId: string): Promise<StatItem[]> {
       price: true,
       edition: true,
       title: true,
-      purchase: { select: { purchasedAt: true, status: true } },
+      status: true,
+      purchase: { select: { purchasedAt: true } },
     },
   });
   return rows.map((r) => ({
@@ -126,20 +141,21 @@ async function loadItems(userId: string): Promise<StatItem[]> {
     edition: r.edition,
     title: r.title,
     at: r.purchase.purchasedAt,
-    status: r.purchase.status,
+    status: r.status,
   }));
 }
 
 export async function getPurchaseStats(userId: string): Promise<PurchaseStats> {
-  const items = (await loadItems(userId)).filter(
-    (i) => i.status !== "CANCELLED",
-  );
+  const all = await loadItems(userId);
+  const items = all.filter((i) => i.status !== "CANCELLED");
+  // Compras con al menos un tomo no cancelado.
   const purchases = await prisma.purchase.count({
-    where: { userId, status: { not: "CANCELLED" } },
+    where: { userId, items: { some: { status: { not: "CANCELLED" } } } },
   });
-  const pending = await prisma.purchase.count({
-    where: { userId, status: { in: ["PENDING", "SHIPPED"] } },
-  });
+  // Tomos todavía en camino (no recibidos ni cancelados).
+  const pending = all.filter((i) =>
+    ["PENDING", "SHIPPED", "DELAYED"].includes(i.status),
+  ).length;
 
   const now = new Date();
   const y = now.getFullYear();

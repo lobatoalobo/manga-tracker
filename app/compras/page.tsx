@@ -10,9 +10,13 @@ import {
   type PurchaseStatus,
 } from "@/lib/purchases";
 import { seriesHref } from "@/lib/url";
-import { PURCHASE_STATUS_META } from "@/lib/purchaseStatus";
+import {
+  PURCHASE_STATUS_META,
+  PURCHASE_STATUS_ORDER,
+} from "@/lib/purchaseStatus";
 import PurchaseForm from "@/components/PurchaseForm";
 import PurchaseActions from "@/components/PurchaseActions";
+import PurchaseItemStatus from "@/components/PurchaseItemStatus";
 import PeriodNav, { type Period } from "@/components/PeriodNav";
 import SpendChart from "@/components/SpendChart";
 
@@ -61,9 +65,14 @@ export default async function ComprasPage({
     if (d.getFullYear() !== year) return false;
     return mode === "month" ? d.getMonth() === month : true;
   });
-  const active = inPeriod.filter((p) => p.status !== "CANCELLED");
-  const periodTotal = active.reduce((s, p) => s + p.total, 0);
-  const periodTomos = active.reduce((s, p) => s + p.items.length, 0);
+  const liveItems = (p: (typeof inPeriod)[number]) =>
+    p.items.filter((i) => i.status !== "CANCELLED");
+  const purchasesInPeriod = inPeriod.filter((p) => liveItems(p).length > 0);
+  const periodTotal = inPeriod.reduce(
+    (s, p) => s + liveItems(p).reduce((a, i) => a + i.price, 0),
+    0,
+  );
+  const periodTomos = inPeriod.reduce((s, p) => s + liveItems(p).length, 0);
   const periodLabel =
     mode === "all" ? "Total" : mode === "year" ? `Año ${year}` : "Este período";
 
@@ -81,7 +90,7 @@ export default async function ComprasPage({
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Stat label={periodLabel} value={ars.format(periodTotal)} />
         <Stat label="Tomos" value={String(periodTomos)} />
-        <Stat label="Compras" value={String(active.length)} />
+        <Stat label="Compras" value={String(purchasesInPeriod.length)} />
         <Stat label="Promedio mensual" value={ars.format(stats.avgMonthly)} />
         <Stat label="Gasto promedio por tomo" value={ars.format(stats.avgPerVolume)} />
         <Stat
@@ -138,7 +147,13 @@ export default async function ComprasPage({
                       {p.store ? ` · ${p.store}` : ""}
                     </p>
                   </div>
-                  <StatusChip status={p.status as PurchaseStatus} />
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                    {PURCHASE_STATUS_ORDER.filter((s) =>
+                      p.items.some((i) => i.status === s),
+                    ).map((s) => (
+                      <StatusChip key={s} status={s} />
+                    ))}
+                  </div>
                 </summary>
 
                 <div className="border-t border-border p-4">
@@ -176,6 +191,10 @@ export default async function ComprasPage({
                         <span className="shrink-0 text-sm text-muted">
                           {ars.format(it.price)}
                         </span>
+                        <PurchaseItemStatus
+                          itemId={it.id}
+                          status={it.status}
+                        />
                       </li>
                     ))}
                   </ul>
@@ -185,7 +204,7 @@ export default async function ComprasPage({
                   )}
 
                   <div className="mt-4 flex justify-end">
-                    <PurchaseActions id={p.id} status={p.status} />
+                    <PurchaseActions id={p.id} />
                   </div>
                 </div>
               </details>

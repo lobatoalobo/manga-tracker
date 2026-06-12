@@ -479,6 +479,9 @@ export async function addPurchaseItemToCollection(
     if (match) row = match;
   }
 
+  // El tomo comprado puede superar el conteo cacheado de la edición (catálogo
+  // desactualizado); en ese caso ampliamos el total para que el tomo se vea.
+  const vol = item.volume ?? 0;
   const edition = row
     ? {
         key: PURCHASE_PUBLISHER_KEY[row.publisher] ?? "ar",
@@ -486,7 +489,7 @@ export async function addPurchaseItemToCollection(
         publisher: row.publisher,
         slug: row.slug,
         region: "AR",
-        totalVolumes: row.volumes,
+        totalVolumes: Math.max(row.volumes, vol),
       }
     : {
         key: "ar",
@@ -494,7 +497,7 @@ export async function addPurchaseItemToCollection(
         publisher: item.edition || null,
         slug: null,
         region: "AR",
-        totalVolumes: item.volume ?? 0,
+        totalVolumes: vol,
       };
 
   await addEdition(userId, {

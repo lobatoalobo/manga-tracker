@@ -36,7 +36,7 @@ import { resolveEditionSeries } from "@/lib/resolveSeries";
 import { isAdmin } from "@/lib/admin";
 import {
   addPurchase,
-  setPurchaseStatus,
+  setPurchaseItemStatus,
   deletePurchase,
   normalizeStatus,
   type PurchaseStatus,
@@ -324,12 +324,14 @@ export interface AddPurchaseInput {
     volume?: number | null;
     edition?: string | null;
     price: number;
+    status?: string | null;
   }[];
 }
 
 export async function addPurchaseAction(input: AddPurchaseInput) {
   const userId = await requireUserId();
 
+  const status = normalizeStatus(input.status);
   const items: PurchaseItemInput[] = (input.items ?? [])
     .map((i) => ({
       title: (i.title ?? "").trim(),
@@ -338,6 +340,7 @@ export async function addPurchaseAction(input: AddPurchaseInput) {
       volume: i.volume ?? null,
       edition: i.edition ?? null,
       price: Number(i.price),
+      status: normalizeStatus(i.status ?? status),
     }))
     .filter((i) => i.title && Number.isFinite(i.price));
 
@@ -345,7 +348,6 @@ export async function addPurchaseAction(input: AddPurchaseInput) {
     return { ok: false as const, error: "Agregá al menos un tomo con precio." };
   }
 
-  const status = normalizeStatus(input.status);
   await addPurchase(userId, {
     store: input.store ?? null,
     status,
@@ -354,10 +356,10 @@ export async function addPurchaseAction(input: AddPurchaseInput) {
     items,
   });
 
-  // Auto-agregar a colección los tomos linkeados a una serie de AniList.
-  if (input.addToCollection && status !== "CANCELLED") {
+  // Auto-agregar a colección los tomos linkeados a una serie (salvo cancelados).
+  if (input.addToCollection) {
     for (const it of items) {
-      if (it.anilistId) {
+      if (it.anilistId && it.status !== "CANCELLED") {
         await addPurchaseItemToCollection(userId, {
           anilistId: it.anilistId,
           title: it.title,
@@ -374,9 +376,16 @@ export async function addPurchaseAction(input: AddPurchaseInput) {
   return { ok: true as const };
 }
 
-export async function setPurchaseStatusAction(id: number, status: string) {
+export async function setPurchaseItemStatusAction(
+  itemId: number,
+  status: string,
+) {
   const userId = await requireUserId();
-  await setPurchaseStatus(userId, id, normalizeStatus(status) as PurchaseStatus);
+  await setPurchaseItemStatus(
+    userId,
+    itemId,
+    normalizeStatus(status) as PurchaseStatus,
+  );
   revalidatePath("/compras");
 }
 
