@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { getFriends, getPendingRequests, getFriendsFeed } from "@/lib/social";
+import { seriesHref } from "@/lib/url";
 import AddFriend from "@/components/AddFriend";
 import { RequestActions, RemoveFriendButton } from "@/components/FriendActions";
 import { ReactionBar, CommentForm } from "@/components/ActivitySocial";
@@ -89,7 +90,7 @@ export default async function AmigosPage() {
               >
                 <div className="flex gap-3">
                   {a.coverImage && (
-                    <Link href={a.anilistId ? `/manga/${a.anilistId}` : "#"}>
+                    <Link href={a.anilistId ? seriesHref(a.anilistId) : "#"}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={a.coverImage}
@@ -104,7 +105,7 @@ export default async function AmigosPage() {
                       {ACTION_TEXT[a.type] ?? "actualizó"}{" "}
                       {a.anilistId ? (
                         <Link
-                          href={`/manga/${a.anilistId}`}
+                          href={seriesHref(a.anilistId)}
                           className="font-medium text-accent hover:underline"
                         >
                           {a.title}
