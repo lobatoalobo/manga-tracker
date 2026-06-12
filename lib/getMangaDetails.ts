@@ -1,13 +1,11 @@
 import { cache as reactCache } from "react";
 import { getMangaById } from "./anilist";
 import { normalizeAnilist } from "./normalizeAnilist";
-import { getIvreaEdition, getIvreaDataBySlug } from "./providers/ivrea";
-import { authorMatches } from "./authorMatch";
+import { getIvreaEdition } from "./providers/ivrea";
 import { getPaniniEdition } from "./providers/panini";
 import { getOvniEdition } from "./providers/ovni";
 import { getMangaUpdatesData } from "./providers/mangaupdates";
 import {
-  lookupEditions,
   upsertPublisherEdition,
   linkPublisherEditions,
   slugifyTitle,
@@ -20,7 +18,7 @@ import { prisma } from "./prisma";
 const EDITIONS_CACHE_TTL = 1000 * 60 * 60 * 24 * 3; // 3 días
 // Subir cuando cambie la lógica de resolución: invalida cachés viejas (p. ej.
 // para reaplicar la verificación de autor que evita mezclar obras homónimas).
-const EDITIONS_CACHE_VERSION = 3;
+const EDITIONS_CACHE_VERSION = 4;
 
 /** Lo que guardamos en EditionsCache.data: las ediciones + la versión de esquema. */
 type CachedEditions = BuiltEditions & { _v?: number };
@@ -129,17 +127,28 @@ async function resolveEditionsLive(
 ): Promise<BuiltEditions> {
   const authors = (anilist.staff ?? []).map((s) => s.name).filter(Boolean);
 
-  // 1) Índice.
-  const indexed = await lookupEditions(titles);
+  // 1) Ediciones nacionales desde el MAPEO VERIFICADO (anilistId), no por
+  //    título: así no se mezclan obras homónimas y es consistente con el badge.
+  const mappedRows = await prisma.publisherEdition.findMany({
+    where: { anilistId: anilist.id },
+  });
   const byPub = new Map<string, IndexedEdition>(
-    indexed.map((e) => [e.publisher, e]),
+    mappedRows
+      .filter((e) => e.volumes > 0)
+      .map((e) => [
+        e.publisher,
+        {
+          publisher: e.publisher,
+          slug: e.slug,
+          title: e.title,
+          volumes: e.volumes,
+          status: e.status,
+          url: e.url,
+        },
+      ]),
   );
-  // El índice matchea solo por título; si una edición vino de ahí la
-  // verificamos por autor para no mezclar obras homónimas (ver abajo).
-  const ivreaFromIndex = byPub.has("Ivrea Argentina");
-  const ovniFromIndex = byPub.has("Ovni Press");
 
-  // 2) Fallback en vivo (en paralelo) para editoriales faltantes + MU.
+  // 2) Fallback en vivo (verificado por autor) para editoriales SIN mapeo + MU.
   const tasks: Promise<void>[] = [];
 
   if (!byPub.has("Ivrea Argentina")) {
@@ -203,26 +212,8 @@ async function resolveEditionsLive(
   await Promise.all(tasks);
   const mu = await muPromise;
 
-  // Verificación por autor de las ediciones que vinieron del índice (que
-  // matchea solo por título). Para Ivrea releemos la ficha (su slug es real);
-  // para Ovni re-resolvemos en vivo (su slug en el índice es sintético).
-  // Descartamos si el autor no coincide con el de la serie (obras homónimas).
-  if (ivreaFromIndex && authors.length) {
-    const e = byPub.get("Ivrea Argentina");
-    if (e) {
-      const ficha = await getIvreaDataBySlug(e.slug).catch(() => null);
-      if (ficha && !authorMatches(authors, ficha.author)) {
-        byPub.delete("Ivrea Argentina");
-      }
-    }
-  }
-  if (ovniFromIndex && authors.length) {
-    const live = await getOvniEdition(titles, authors).catch(() => null);
-    if (!live || live.totalVolumes <= 0) byPub.delete("Ovni Press");
-  }
-
-  // Backfill del anilistId en el índice (best-effort): las ediciones de byPub
-  // ya están verificadas por autor, así que el link editorial→ficha es correcto.
+  // Backfill del anilistId para las que se resolvieron en vivo (verificadas por
+  // autor), así la próxima salen del mapeo y aparecen también en el badge/browse.
   void linkPublisherEditions(
     anilist.id,
     [...byPub.values()].map((e) => ({ publisher: e.publisher, title: e.title })),

@@ -152,34 +152,28 @@ export async function searchMangaList(
     }
   `;
 
-  const response =
-    await fetch(
-      "https://graphql.anilist.co",
-      {
-        method: "POST",
+  const body = JSON.stringify({ query, variables: { search } });
 
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
+  // Reintenta ante 429 (rate-limit de AniList), respetando Retry-After.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const response = await fetch("https://graphql.anilist.co", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
 
-        body: JSON.stringify(
-          {
-            query,
+    if (response.status === 429 && attempt < 2) {
+      const retryAfter = Number(response.headers.get("retry-after")) || 2;
+      await new Promise((r) => setTimeout(r, (retryAfter + 1) * 1000));
+      continue;
+    }
 
-            variables: {
-              search,
-            },
-          },
-        ),
-      },
-    );
+    const json = await response.json();
+    // Defensa: si AniList devuelve error data viene null.
+    return json?.data?.Page?.media ?? [];
+  }
 
-  const json =
-    await response.json();
-
-  // Defensa: si AniList devuelve error (rate-limit, etc.) data viene null.
-  return json?.data?.Page?.media ?? [];
+  return [];
 }
 
 /**

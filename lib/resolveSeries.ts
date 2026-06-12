@@ -9,50 +9,64 @@ interface EditionRow {
   title: string;
 }
 
-/** Autor que lista la editorial para una edición (cuando lo expone). */
-async function publisherAuthor(row: EditionRow): Promise<string | null> {
+/** Autor + título que lista la editorial (cuando los expone). */
+async function publisherInfo(
+  row: EditionRow,
+): Promise<{ author: string | null; title: string | null }> {
   if (row.publisher === "Ivrea Argentina") {
     const ficha = await getIvreaDataBySlug(row.slug).catch(() => null);
-    return ficha?.author ?? null;
+    return { author: ficha?.author ?? null, title: ficha?.title ?? null };
   }
   // Panini no expone autor; Ovni requeriría una ficha de producto (TODO).
-  return null;
+  return { author: null, title: null };
 }
 
 /**
- * Resuelve, **verificado por autor**, la serie de AniList que corresponde a una
- * edición del catálogo de una editorial. Devuelve el anilistId o null.
+ * Resuelve, **verificado por autor**, la serie de AniList para una edición del
+ * catálogo de una editorial. Devuelve el anilistId o null.
  *
+ * - Prueba varios términos de búsqueda (título del crawl, título de la ficha y
+ *   el slug), porque el título del crawl a veces viene sucio ("1-F (Fukushima 1)").
  * - Con autor de la editorial (Ivrea): elige el candidato cuyo autor coincide
- *   (evita homónimos de distinta autoría, p. ej. "Aku no Hana" de Oshimi vs. el
- *   de Kamimura).
- * - Sin autor (Panini/Ovni): exige coincidencia EXACTA de título normalizado.
+ *   (evita homónimos, p. ej. "Aku no Hana" de Oshimi vs. el de Kamimura).
+ * - Sin autor (Panini/Ovni): exige título EXACTO normalizado.
  *
  * Conservador: si no hay match confiable, devuelve null (no inventa el mapeo).
  */
 export async function resolveEditionSeries(
   row: EditionRow,
 ): Promise<number | null> {
-  const cleaned = searchableTitle(row.title);
-  if (!cleaned) return null;
+  const info = await publisherInfo(row);
 
-  const candidates: any[] = await searchMangaList(cleaned, true).catch(() => []);
-  if (candidates.length === 0) return null;
+  const terms = [
+    ...new Set(
+      [
+        searchableTitle(row.title),
+        info.title ? searchableTitle(info.title) : "",
+        row.slug.replace(/-/g, " ").trim(),
+      ].filter(Boolean),
+    ),
+  ];
 
-  const author = await publisherAuthor(row);
-  if (author) {
-    const match = candidates.find((c) => {
-      const ca = c.staff?.nodes?.[0]?.name?.full;
-      return ca && authorMatches([ca], author);
-    });
-    return match?.id ?? null;
+  for (const term of terms) {
+    const candidates: any[] = await searchMangaList(term, true).catch(() => []);
+    if (candidates.length === 0) continue;
+
+    if (info.author) {
+      const match = candidates.find((c) => {
+        const ca = c.staff?.nodes?.[0]?.name?.full;
+        return ca && authorMatches([ca], info.author!);
+      });
+      if (match) return match.id;
+    } else {
+      const nc = normalizeTitle(term);
+      const match = candidates.find(
+        (c) =>
+          normalizeTitle(c.title?.romaji ?? "") === nc ||
+          normalizeTitle(c.title?.english ?? "") === nc,
+      );
+      if (match) return match.id;
+    }
   }
-
-  const nc = normalizeTitle(cleaned);
-  const exact = candidates.find(
-    (c) =>
-      normalizeTitle(c.title?.romaji ?? "") === nc ||
-      normalizeTitle(c.title?.english ?? "") === nc,
-  );
-  return exact?.id ?? null;
+  return null;
 }

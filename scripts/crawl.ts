@@ -189,7 +189,7 @@ async function crawlResolve(reset: boolean) {
     done++;
     if (done % 25 === 0)
       console.log(`  ${done}/${rows.length} (mapeadas: ${mapped})`);
-    await sleep(700); // respetar rate-limit de AniList
+    await sleep(1000); // respetar rate-limit de AniList (varias búsquedas/fila)
   }
   console.log(`  Resueltas: ${mapped}/${rows.length}.`);
 }
