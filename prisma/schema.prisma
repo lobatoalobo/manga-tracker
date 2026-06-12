@@ -133,24 +133,40 @@ model WishlistItem {
 }
 
 // Historial de compras del usuario (lo que antes llevaba en un Excel).
+// Una compra = una transacción (fecha + tienda + estado) con uno o más tomos.
 model Purchase {
-  id        Int    @id @default(autoincrement())
-  userId    String
-  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     Int    @id @default(autoincrement())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  title     String // título del manga (texto libre)
-  anilistId Int? // link opcional a la serie
-  volume    Int? // tomo, opcional
-  edition   String? // edición/editorial, opcional
-  price     Float // precio pagado (ARS)
-  store     String? // dónde lo compraste
-  status    String   @default("ORDERED") // ORDERED (pedido) | RECEIVED (recibido/retirado)
+  store  String? // dónde lo compraste
+  status String  @default("RECEIVED") // PENDING | SHIPPED | RECEIVED | CANCELLED
+  note   String?
 
   purchasedAt DateTime  @default(now()) // fecha de compra/pedido
   receivedAt  DateTime?
   createdAt   DateTime  @default(now())
 
+  items PurchaseItem[]
+
   @@index([userId])
+}
+
+// Un tomo dentro de una compra. El precio vive acá (precio por tomo); el total
+// de la compra es la suma de sus ítems.
+model PurchaseItem {
+  id         Int      @id @default(autoincrement())
+  purchaseId Int
+  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  title      String // título del manga (display)
+  anilistId  Int? // link opcional a la serie
+  coverImage String? // portada, para mostrar y para auto-agregar a colección
+  volume     Int? // tomo, opcional
+  edition    String? // edición/editorial, opcional
+  price      Float // precio pagado por este tomo (ARS)
+
+  @@index([purchaseId])
 }
 
 model Account {

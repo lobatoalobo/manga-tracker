@@ -10,6 +10,7 @@ import {
   setReading,
   setSharing,
   importEdition,
+  addPurchaseItemToCollection,
   type AddEditionInput,
   type ReadingStatus,
 } from "@/lib/collection";
@@ -37,7 +38,11 @@ import {
   addPurchase,
   setPurchaseStatus,
   deletePurchase,
+  normalizeStatus,
+  type PurchaseStatus,
+  type PurchaseItemInput,
 } from "@/lib/purchases";
+import { searchMangaList } from "@/lib/anilist";
 import { parseCsv } from "@/lib/csv";
 import { addWish, removeWish } from "@/lib/wishlist";
 import { setNote } from "@/lib/notes";
@@ -306,38 +311,85 @@ async function assertAdmin() {
 
 // --- Compras ---
 
-export async function addPurchaseAction(_prev: unknown, formData: FormData) {
-  const userId = await requireUserId();
-  const get = (k: string) => ((formData.get(k) as string | null) ?? "").trim();
+export interface AddPurchaseInput {
+  store?: string | null;
+  status?: string | null;
+  purchasedAt?: string | null;
+  note?: string | null;
+  addToCollection?: boolean;
+  items: {
+    title: string;
+    anilistId?: number | null;
+    coverImage?: string | null;
+    volume?: number | null;
+    edition?: string | null;
+    price: number;
+  }[];
+}
 
-  const title = get("title");
-  const price = Number(get("price"));
-  if (!title || !Number.isFinite(price)) {
-    return { ok: false as const, error: "Faltan título o precio." };
+export async function addPurchaseAction(input: AddPurchaseInput) {
+  const userId = await requireUserId();
+
+  const items: PurchaseItemInput[] = (input.items ?? [])
+    .map((i) => ({
+      title: (i.title ?? "").trim(),
+      anilistId: i.anilistId ?? null,
+      coverImage: i.coverImage ?? null,
+      volume: i.volume ?? null,
+      edition: i.edition ?? null,
+      price: Number(i.price),
+    }))
+    .filter((i) => i.title && Number.isFinite(i.price));
+
+  if (items.length === 0) {
+    return { ok: false as const, error: "Agregá al menos un tomo con precio." };
   }
 
-  const dateStr = get("purchasedAt");
+  const status = normalizeStatus(input.status);
   await addPurchase(userId, {
-    title,
-    volume: get("volume") ? Number(get("volume")) : null,
-    edition: get("edition") || null,
-    price,
-    store: get("store") || null,
-    status: get("status") === "RECEIVED" ? "RECEIVED" : "ORDERED",
-    purchasedAt: dateStr ? new Date(dateStr) : null,
+    store: input.store ?? null,
+    status,
+    note: input.note ?? null,
+    purchasedAt: input.purchasedAt ? new Date(input.purchasedAt) : null,
+    items,
   });
+
+  // Auto-agregar a colección los tomos linkeados a una serie de AniList.
+  if (input.addToCollection && status !== "CANCELLED") {
+    for (const it of items) {
+      if (it.anilistId) {
+        await addPurchaseItemToCollection(userId, {
+          anilistId: it.anilistId,
+          title: it.title,
+          coverImage: it.coverImage,
+          volume: it.volume,
+          edition: it.edition,
+        }).catch(() => {});
+      }
+    }
+    revalidatePath("/collection");
+  }
 
   revalidatePath("/compras");
   return { ok: true as const };
 }
 
-export async function setPurchaseStatusAction(
-  id: number,
-  status: "ORDERED" | "RECEIVED",
-) {
+export async function setPurchaseStatusAction(id: number, status: string) {
   const userId = await requireUserId();
-  await setPurchaseStatus(userId, id, status);
+  await setPurchaseStatus(userId, id, normalizeStatus(status) as PurchaseStatus);
   revalidatePath("/compras");
+}
+
+/** Búsqueda liviana de series para el selector del form de compras. */
+export async function searchPurchaseSeriesAction(query: string) {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const raw = await searchMangaList(q, true).catch(() => []);
+  return raw.slice(0, 8).map((m: any) => ({
+    id: m.id as number,
+    title: (m.title?.english || m.title?.romaji || m.title?.native) as string,
+    coverImage: (m.coverImage?.large ?? null) as string | null,
+  }));
 }
 
 export async function deletePurchaseAction(id: number) {

@@ -440,3 +440,97 @@ export async function importEdition(
     },
   });
 }
+
+const PURCHASE_PUBLISHER_KEY: Record<string, string> = {
+  "Ivrea Argentina": "ivrea",
+  "Panini Argentina": "panini",
+  "Ovni Press": "ovni",
+};
+
+/**
+ * Suma un tomo comprado a la colección. Resuelve la edición nacional desde el
+ * mapeo (PublisherEdition) para que coincida con la que muestra la ficha; si la
+ * serie no tiene edición mapeada, usa una edición nacional genérica. Idempotente.
+ */
+export async function addPurchaseItemToCollection(
+  userId: string,
+  item: {
+    anilistId: number;
+    title: string;
+    coverImage?: string | null;
+    volume?: number | null;
+    edition?: string | null;
+  },
+): Promise<void> {
+  if (!item.anilistId || item.anilistId < 0) return;
+
+  const rows = await prisma.publisherEdition.findMany({
+    where: { anilistId: item.anilistId },
+    orderBy: { volumes: "desc" },
+  });
+
+  // Si la compra dice la editorial, preferimos esa edición; si no, la de más tomos.
+  let row = rows[0] ?? null;
+  if (item.edition && rows.length > 1) {
+    const want = item.edition.toLowerCase();
+    const match = rows.find((r) =>
+      r.publisher.toLowerCase().split(" ").some((w) => w.length > 2 && want.includes(w)),
+    );
+    if (match) row = match;
+  }
+
+  const edition = row
+    ? {
+        key: PURCHASE_PUBLISHER_KEY[row.publisher] ?? "ar",
+        label: row.publisher,
+        publisher: row.publisher,
+        slug: row.slug,
+        region: "AR",
+        totalVolumes: row.volumes,
+      }
+    : {
+        key: "ar",
+        label: item.edition || "Edición nacional",
+        publisher: item.edition || null,
+        slug: null,
+        region: "AR",
+        totalVolumes: item.volume ?? 0,
+      };
+
+  await addEdition(userId, {
+    anilistId: item.anilistId,
+    title: { romaji: item.title },
+    coverImage: item.coverImage ?? "",
+    edition,
+  });
+
+  if (!item.volume) return;
+
+  const manga = await prisma.manga.findUnique({
+    where: { userId_anilistId: { userId, anilistId: item.anilistId } },
+    select: { id: true },
+  });
+  if (!manga) return;
+  const ed = await prisma.trackedEdition.findUnique({
+    where: { mangaId_key: { mangaId: manga.id, key: edition.key } },
+    select: { id: true, totalVolumes: true },
+  });
+  if (!ed) return;
+
+  await prisma.ownedVolume
+    .create({ data: { editionId: ed.id, volume: item.volume } })
+    .catch(() => {}); // @@unique: ya lo tenía
+
+  const ownedCount = await prisma.ownedVolume.count({
+    where: { editionId: ed.id },
+  });
+  await prisma.trackedEdition.update({
+    where: { id: ed.id },
+    data: {
+      status:
+        ed.totalVolumes > 0 && ownedCount >= ed.totalVolumes
+          ? "COMPLETED"
+          : "IN_PROGRESS",
+    },
+  });
+}
