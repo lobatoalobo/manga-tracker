@@ -207,6 +207,95 @@ export async function getEditorialAll(
   });
 }
 
+// --- Curación admin de mapeos editorial ↔ serie ---
+
+export interface EditionMapping {
+  id: number;
+  publisher: string;
+  title: string;
+  slug: string;
+  url: string;
+  volumes: number;
+  anilistId: number | null;
+}
+
+export async function getEditionMappings(opts: {
+  publisher?: string;
+  state?: "mapped" | "unmapped";
+  q?: string;
+  page?: number;
+  perPage?: number;
+}): Promise<{ rows: EditionMapping[]; total: number; lastPage: number }> {
+  const perPage = opts.perPage ?? 40;
+  const page = Math.max(1, opts.page ?? 1);
+
+  const where: {
+    publisher?: string;
+    anilistId?: { not: null } | null;
+    normTitle?: { contains: string };
+  } = {};
+  if (opts.publisher) where.publisher = opts.publisher;
+  if (opts.state === "mapped") where.anilistId = { not: null };
+  if (opts.state === "unmapped") where.anilistId = null;
+  if (opts.q) where.normTitle = { contains: normalizeTitle(opts.q) };
+
+  const [total, rows] = await Promise.all([
+    prisma.publisherEdition.count({ where }),
+    prisma.publisherEdition.findMany({
+      where,
+      orderBy: { normTitle: "asc" },
+      skip: (page - 1) * perPage,
+      take: perPage,
+      select: {
+        id: true,
+        publisher: true,
+        title: true,
+        slug: true,
+        url: true,
+        volumes: true,
+        anilistId: true,
+      },
+    }),
+  ]);
+  return { rows, total, lastPage: Math.max(1, Math.ceil(total / perPage)) };
+}
+
+export async function setEditionAnilistId(id: number, anilistId: number | null) {
+  await prisma.publisherEdition.update({ where: { id }, data: { anilistId } });
+}
+
+/** Edición manual de cualquier campo de una entrada del catálogo. */
+export async function updatePublisherEditionFields(
+  id: number,
+  data: {
+    title?: string;
+    url?: string;
+    volumes?: number;
+    anilistId?: number | null;
+  },
+) {
+  const patch: {
+    title?: string;
+    normTitle?: string;
+    url?: string;
+    volumes?: number;
+    anilistId?: number | null;
+  } = {};
+  if (data.title !== undefined) {
+    patch.title = data.title.trim();
+    patch.normTitle = normalizeTitle(data.title);
+  }
+  if (data.url !== undefined) patch.url = data.url.trim();
+  if (data.volumes !== undefined && Number.isFinite(data.volumes))
+    patch.volumes = data.volumes;
+  if (data.anilistId !== undefined) patch.anilistId = data.anilistId;
+  await prisma.publisherEdition.update({ where: { id }, data: patch });
+}
+
+export async function deletePublisherEdition(id: number) {
+  await prisma.publisherEdition.delete({ where: { id } });
+}
+
 /** Cantidad de títulos por editorial (para los chips). */
 export async function editorialCounts(): Promise<Record<string, number>> {
   const rows = await prisma.publisherEdition.groupBy({

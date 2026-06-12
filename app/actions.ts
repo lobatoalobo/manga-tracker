@@ -26,6 +26,12 @@ import {
   deleteIndieWork,
   type IndieWorkInput,
 } from "@/lib/indie";
+import {
+  setEditionAnilistId,
+  updatePublisherEditionFields,
+  deletePublisherEdition,
+} from "@/lib/catalog";
+import { resolveEditionSeries } from "@/lib/resolveSeries";
 import { isAdmin } from "@/lib/admin";
 import {
   addPurchase,
@@ -248,6 +254,49 @@ export async function deleteIndieWorkAction(id: number) {
   await deleteIndieWork(id);
   revalidatePath("/admin/independientes");
   revalidatePath("/independientes");
+}
+
+// --- Curación de mapeos editorial ↔ serie ---
+
+/** Setea (o limpia con null) el anilistId de una edición del catálogo. */
+export async function setEditionMappingAction(
+  id: number,
+  anilistId: number | null,
+) {
+  await assertAdmin();
+  await setEditionAnilistId(id, anilistId);
+  revalidatePath("/admin/mapeos");
+}
+
+/** Resuelve automáticamente (verificado por autor) una edición. */
+export async function resolveEditionMappingAction(id: number) {
+  await assertAdmin();
+  const row = await prisma.publisherEdition.findUnique({
+    where: { id },
+    select: { publisher: true, slug: true, title: true },
+  });
+  if (row) {
+    const anilistId = await resolveEditionSeries(row).catch(() => null);
+    await setEditionAnilistId(id, anilistId);
+  }
+  revalidatePath("/admin/mapeos");
+}
+
+/** Edición manual de los campos de una entrada del catálogo. */
+export async function updateEditionAction(
+  id: number,
+  data: { title?: string; url?: string; volumes?: number; anilistId?: number | null },
+) {
+  await assertAdmin();
+  await updatePublisherEditionFields(id, data);
+  revalidatePath("/admin/mapeos");
+}
+
+/** Borra una entrada del catálogo (p. ej. una entrada fantasma de Panini). */
+export async function deleteEditionAction(id: number) {
+  await assertAdmin();
+  await deletePublisherEdition(id);
+  revalidatePath("/admin/mapeos");
 }
 
 async function assertAdmin() {
