@@ -11,7 +11,7 @@ export const PURCHASE_STATUS_META: Record<
     chip: "bg-amber-500/15 text-amber-300",
   },
   SHIPPED: {
-    label: "Enviado",
+    label: "Pagado",
     dot: "bg-sky-400",
     chip: "bg-sky-500/15 text-sky-300",
   },
