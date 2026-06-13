@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { filterNotifEnabled } from "@/lib/notificationPrefs";
 
 const PUB_KEY: Record<string, string> = {
   "Ivrea Argentina": "ivrea",
@@ -59,7 +60,8 @@ export async function detectAndNotifyNewVolumes(
       },
       select: { manga: { select: { userId: true } } },
     });
-    const userIds = [...new Set(tracked.map((t) => t.manga.userId))];
+    const allUsers = [...new Set(tracked.map((t) => t.manga.userId))];
+    const userIds = await filterNotifEnabled(allUsers, "NEW_VOLUME");
 
     if (userIds.length && samples.length < 20)
       samples.push(

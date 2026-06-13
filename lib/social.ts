@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { notifEnabled } from "@/lib/notificationPrefs";
 
 const USER_SEL = { id: true, name: true, image: true } as const;
 
@@ -63,17 +64,19 @@ export async function sendFriendRequest(
   await prisma.friendship.create({
     data: { requesterId: userId, addresseeId: target.id },
   });
-  const me = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { name: true },
-  });
-  await prisma.notification.create({
-    data: {
-      userId: target.id,
-      type: "FRIEND_REQUEST",
-      actorName: me?.name ?? "Alguien",
-    },
-  });
+  if (await notifEnabled(target.id, "FRIEND_REQUEST")) {
+    const me = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    await prisma.notification.create({
+      data: {
+        userId: target.id,
+        type: "FRIEND_REQUEST",
+        actorName: me?.name ?? "Alguien",
+      },
+    });
+  }
   return { ok: true };
 }
 
@@ -89,16 +92,19 @@ export async function respondFriendRequest(
       where: { id: friendshipId },
       data: { status: "ACCEPTED" },
     });
-    const me = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { name: true },
-    });
-    await prisma.notification.create({
-      data: {
-        userId: fr.requesterId,
-        type: "FRIEND_ACCEPTED",
-        actorName: me?.name ?? "Alguien",
-      },
+    const me =
+      (await notifEnabled(fr.requesterId, "FRIEND_ACCEPTED")) &&
+      (await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      }));
+    if (me)
+      await prisma.notification.create({
+        data: {
+          userId: fr.requesterId,
+          type: "FRIEND_ACCEPTED",
+          actorName: me?.name ?? "Alguien",
+        },
     });
   } else {
     await prisma.friendship.delete({ where: { id: friendshipId } });
@@ -234,6 +240,7 @@ async function notifyOwner(
     select: { userId: true, anilistId: true, title: true },
   });
   if (!act || act.userId === actorId) return;
+  if (!(await notifEnabled(act.userId, type))) return;
   const actor = await prisma.user.findUnique({
     where: { id: actorId },
     select: { name: true },

@@ -32,7 +32,15 @@ export default async function NotificacionesPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-5 py-8">
-      <h1 className="mb-6 text-2xl font-bold">Notificaciones</h1>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">Notificaciones</h1>
+        <Link
+          href="/ajustes"
+          className="text-sm text-muted hover:text-foreground"
+        >
+          ⚙️ Preferencias
+        </Link>
+      </div>
 
       {items.length === 0 ? (
         <p className="text-sm text-muted">No tenés notificaciones.</p>

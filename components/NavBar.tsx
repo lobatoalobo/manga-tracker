@@ -59,6 +59,7 @@ export default function NavBar({
     { href: "/deseados", label: "Deseados" },
     { href: "/faltantes", label: "Para comprar", badge: badges.faltantes },
     { href: "/compras", label: "Compras" },
+    { href: "/ajustes", label: "Ajustes" },
   ];
 
   const adminLinks: MenuLink[] = [
