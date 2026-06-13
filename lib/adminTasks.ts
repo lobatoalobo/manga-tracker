@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { ovniSearchUrl, isOvniUrl } from "@/lib/ovni";
 import { resolveEditionSeries } from "@/lib/resolveSeries";
+import { detectAndNotifyNewVolumes } from "@/lib/catalogNotify";
 import { logJobRun } from "@/lib/jobs";
 import {
   EDITIONS_CACHE_VERSION,
@@ -126,6 +127,21 @@ const tasks: AdminTask[] = [
           rows.length >= 80
             ? "Procesa hasta 80 por corrida; repetí si quedan."
             : undefined,
+      };
+    },
+  },
+  {
+    id: "notify-new-volumes",
+    title: "Notificar tomos nuevos",
+    description:
+      "Detecta ediciones que sumaron tomo desde la última corrida y notifica a quienes las coleccionan. Simular no crea notificaciones.",
+    async run(dryRun) {
+      const r = await detectAndNotifyNewVolumes(dryRun);
+      return {
+        scanned: r.scanned,
+        changed: r.changed,
+        samples: r.samples,
+        note: `${r.notifications} notificaciones${dryRun ? " (simuladas)" : ""}`,
       };
     },
   },

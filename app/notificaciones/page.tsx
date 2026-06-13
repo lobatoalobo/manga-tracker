@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { getNotifications, markAllRead } from "@/lib/notifications";
+import { seriesHref } from "@/lib/url";
 
 export const metadata = { title: "Notificaciones · Nakama" };
 
@@ -15,6 +16,8 @@ function text(n: { type: string; actorName: string; text: string | null }) {
       return `${n.actorName} te envió una solicitud de amistad`;
     case "FRIEND_ACCEPTED":
       return `${n.actorName} aceptó tu solicitud de amistad`;
+    case "NEW_VOLUME":
+      return `📖 Tomo nuevo de ${n.actorName}`;
     default:
       return n.actorName;
   }
@@ -29,7 +32,15 @@ export default async function NotificacionesPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-5 py-8">
-      <h1 className="mb-6 text-2xl font-bold">Notificaciones</h1>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">Notificaciones</h1>
+        <Link
+          href="/ajustes"
+          className="text-sm text-muted hover:text-foreground"
+        >
+          ⚙️ Preferencias
+        </Link>
+      </div>
 
       {items.length === 0 ? (
         <p className="text-sm text-muted">No tenés notificaciones.</p>
@@ -37,8 +48,8 @@ export default async function NotificacionesPage() {
         <ul className="space-y-2">
           {items.map((n) => {
             const href =
-              n.type === "FRIEND_REQUEST" || n.type === "FRIEND_ACCEPTED"
-                ? "/amigos"
+              n.type === "NEW_VOLUME" && n.anilistId
+                ? seriesHref(n.anilistId)
                 : "/amigos";
             return (
               <li

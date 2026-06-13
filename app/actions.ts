@@ -53,6 +53,13 @@ import {
 } from "@/lib/getMangaDetails";
 import { dispatchCrawl } from "@/lib/github";
 import { runAdminTask } from "@/lib/adminTasks";
+import { setNotifPref, type NotifCategory } from "@/lib/notificationPrefs";
+import {
+  saveSubscription,
+  deleteSubscription,
+  sendPushToUser,
+  type WebPushSub,
+} from "@/lib/push";
 import { parseCsv } from "@/lib/csv";
 import { addWish, removeWish } from "@/lib/wishlist";
 import { setNote } from "@/lib/notes";
@@ -542,6 +549,38 @@ export async function deletePurchaseAction(id: number) {
   const userId = await requireUserId();
   await deletePurchase(userId, id);
   revalidatePath("/compras");
+}
+
+/** Web Push: guarda la suscripción del navegador del usuario. */
+export async function subscribePushAction(sub: WebPushSub) {
+  const userId = await requireUserId();
+  await saveSubscription(userId, sub);
+  return { ok: true as const };
+}
+
+export async function unsubscribePushAction(endpoint: string) {
+  await requireUserId();
+  await deleteSubscription(endpoint);
+  return { ok: true as const };
+}
+
+/** Manda un push de prueba al propio usuario (para validar permisos). */
+export async function testPushAction() {
+  const userId = await requireUserId();
+  await sendPushToUser(userId, {
+    title: "Nakama",
+    body: "✅ Las notificaciones push están activadas.",
+    url: "/notificaciones",
+  });
+  return { ok: true as const };
+}
+
+/** Preferencias de notificación: activa/desactiva una categoría. */
+export async function setNotifPrefAction(key: string, value: boolean) {
+  const userId = await requireUserId();
+  if (key !== "newVolume" && key !== "social" && key !== "friends") return;
+  await setNotifPref(userId, key as NotifCategory, value);
+  revalidatePath("/ajustes");
 }
 
 // --- Wishlist ---

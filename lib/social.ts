@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { notifEnabled } from "@/lib/notificationPrefs";
+import { sendPushToUser } from "@/lib/push";
 
 const USER_SEL = { id: true, name: true, image: true } as const;
 
@@ -63,17 +65,24 @@ export async function sendFriendRequest(
   await prisma.friendship.create({
     data: { requesterId: userId, addresseeId: target.id },
   });
-  const me = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { name: true },
-  });
-  await prisma.notification.create({
-    data: {
-      userId: target.id,
-      type: "FRIEND_REQUEST",
-      actorName: me?.name ?? "Alguien",
-    },
-  });
+  if (await notifEnabled(target.id, "FRIEND_REQUEST")) {
+    const me = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    await prisma.notification.create({
+      data: {
+        userId: target.id,
+        type: "FRIEND_REQUEST",
+        actorName: me?.name ?? "Alguien",
+      },
+    });
+    await sendPushToUser(target.id, {
+      title: "Nueva solicitud de amistad",
+      body: `${me?.name ?? "Alguien"} te envió una solicitud`,
+      url: "/amigos",
+    });
+  }
   return { ok: true };
 }
 
@@ -89,17 +98,26 @@ export async function respondFriendRequest(
       where: { id: friendshipId },
       data: { status: "ACCEPTED" },
     });
-    const me = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { name: true },
-    });
-    await prisma.notification.create({
-      data: {
-        userId: fr.requesterId,
-        type: "FRIEND_ACCEPTED",
-        actorName: me?.name ?? "Alguien",
-      },
-    });
+    const me =
+      (await notifEnabled(fr.requesterId, "FRIEND_ACCEPTED")) &&
+      (await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      }));
+    if (me) {
+      await prisma.notification.create({
+        data: {
+          userId: fr.requesterId,
+          type: "FRIEND_ACCEPTED",
+          actorName: me?.name ?? "Alguien",
+        },
+      });
+      await sendPushToUser(fr.requesterId, {
+        title: "Solicitud aceptada",
+        body: `${me?.name ?? "Alguien"} aceptó tu solicitud`,
+        url: "/amigos",
+      });
+    }
   } else {
     await prisma.friendship.delete({ where: { id: friendshipId } });
   }
@@ -234,6 +252,7 @@ async function notifyOwner(
     select: { userId: true, anilistId: true, title: true },
   });
   if (!act || act.userId === actorId) return;
+  if (!(await notifEnabled(act.userId, type))) return;
   const actor = await prisma.user.findUnique({
     where: { id: actorId },
     select: { name: true },
@@ -247,6 +266,13 @@ async function notifyOwner(
       anilistId: act.anilistId,
       text: act.title ? `${text} · ${act.title}` : text,
     },
+  });
+  await sendPushToUser(act.userId, {
+    title: type === "REACTION" ? "Nueva reacción" : "Nuevo comentario",
+    body: `${actor?.name ?? "Alguien"} ${
+      type === "REACTION" ? "reaccionó en" : "comentó"
+    } tu actividad`,
+    url: act.anilistId ? `/manga/${act.anilistId}` : "/amigos",
   });
 }
 

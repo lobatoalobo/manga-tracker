@@ -31,6 +31,31 @@ model User {
   activityComments  ActivityComment[]
   activityReactions ActivityReaction[]
   notifications     Notification[]
+  notifPref         NotificationPref?
+  pushSubs          PushSubscription[]
+}
+
+// Suscripción Web Push (un dispositivo/navegador del usuario).
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Preferencias de notificación por usuario (un toggle por categoría).
+model NotificationPref {
+  userId    String  @id
+  newVolume Boolean @default(true) // "tomo nuevo" de tus series
+  social    Boolean @default(true) // reacciones y comentarios en tu actividad
+  friends   Boolean @default(true) // solicitudes / aceptaciones de amistad
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // Notificación in-app (reacción/comentario en tu actividad, etc.).
@@ -323,9 +348,12 @@ model PublisherEdition {
   // cuenta como "sin mapear". P. ej. cómics occidentales que vende Ivrea.
   nationalOnly Boolean @default(false)
   volumes      Int
-  status       String?
-  url          String
-  updatedAt    DateTime @updatedAt
+  // Último conteo de tomos por el que ya se notificó "tomo nuevo". 0 = sin
+  // baselinear (la primera vez se baselinea en silencio, sin notificar).
+  notifiedVolumes Int     @default(0)
+  status          String?
+  url             String
+  updatedAt       DateTime @updatedAt
 
   @@unique([publisher, slug])
   @@index([normTitle])
