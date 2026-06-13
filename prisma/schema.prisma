@@ -32,6 +32,21 @@ model User {
   activityReactions ActivityReaction[]
   notifications     Notification[]
   notifPref         NotificationPref?
+  pushSubs          PushSubscription[]
+}
+
+// Suscripción Web Push (un dispositivo/navegador del usuario).
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // Preferencias de notificación por usuario (un toggle por categoría).

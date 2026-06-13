@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getNotifPrefs } from "@/lib/notificationPrefs";
 import NotifPrefsToggles from "@/components/NotifPrefsToggles";
+import PushToggle from "@/components/PushToggle";
 
 export const metadata = { title: "Ajustes · Nakama" };
 
@@ -22,6 +23,10 @@ export default async function AjustesPage() {
         Notificaciones
       </h2>
       <NotifPrefsToggles initial={prefs} />
+
+      <div className="mt-4">
+        <PushToggle />
+      </div>
     </main>
   );
 }

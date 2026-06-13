@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notifEnabled } from "@/lib/notificationPrefs";
+import { sendPushToUser } from "@/lib/push";
 
 const USER_SEL = { id: true, name: true, image: true } as const;
 
@@ -76,6 +77,11 @@ export async function sendFriendRequest(
         actorName: me?.name ?? "Alguien",
       },
     });
+    await sendPushToUser(target.id, {
+      title: "Nueva solicitud de amistad",
+      body: `${me?.name ?? "Alguien"} te envió una solicitud`,
+      url: "/amigos",
+    });
   }
   return { ok: true };
 }
@@ -98,14 +104,20 @@ export async function respondFriendRequest(
         where: { id: userId },
         select: { name: true },
       }));
-    if (me)
+    if (me) {
       await prisma.notification.create({
         data: {
           userId: fr.requesterId,
           type: "FRIEND_ACCEPTED",
           actorName: me?.name ?? "Alguien",
         },
-    });
+      });
+      await sendPushToUser(fr.requesterId, {
+        title: "Solicitud aceptada",
+        body: `${me?.name ?? "Alguien"} aceptó tu solicitud`,
+        url: "/amigos",
+      });
+    }
   } else {
     await prisma.friendship.delete({ where: { id: friendshipId } });
   }
@@ -254,6 +266,13 @@ async function notifyOwner(
       anilistId: act.anilistId,
       text: act.title ? `${text} · ${act.title}` : text,
     },
+  });
+  await sendPushToUser(act.userId, {
+    title: type === "REACTION" ? "Nueva reacción" : "Nuevo comentario",
+    body: `${actor?.name ?? "Alguien"} ${
+      type === "REACTION" ? "reaccionó en" : "comentó"
+    } tu actividad`,
+    url: act.anilistId ? `/manga/${act.anilistId}` : "/amigos",
   });
 }
 

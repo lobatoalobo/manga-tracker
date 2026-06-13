@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { filterNotifEnabled } from "@/lib/notificationPrefs";
+import { sendPushToUsers } from "@/lib/push";
 
 const PUB_KEY: Record<string, string> = {
   "Ivrea Argentina": "ivrea",
@@ -70,7 +71,7 @@ export async function detectAndNotifyNewVolumes(
     notifications += userIds.length;
 
     if (!dryRun) {
-      if (userIds.length)
+      if (userIds.length) {
         await prisma.notification.createMany({
           data: userIds.map((userId) => ({
             userId,
@@ -80,6 +81,12 @@ export async function detectAndNotifyNewVolumes(
             text: `Tomo ${r.volumes} · ${r.publisher}`,
           })),
         });
+        await sendPushToUsers(userIds, {
+          title: "📖 Tomo nuevo",
+          body: `${r.title} — Tomo ${r.volumes} (${r.publisher})`,
+          url: `/manga/${anilistId}`,
+        });
+      }
       await prisma.publisherEdition.update({
         where: { id: r.id },
         data: { notifiedVolumes: r.volumes },
