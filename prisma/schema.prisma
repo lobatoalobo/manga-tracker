@@ -323,9 +323,12 @@ model PublisherEdition {
   // cuenta como "sin mapear". P. ej. cómics occidentales que vende Ivrea.
   nationalOnly Boolean @default(false)
   volumes      Int
-  status       String?
-  url          String
-  updatedAt    DateTime @updatedAt
+  // Último conteo de tomos por el que ya se notificó "tomo nuevo". 0 = sin
+  // baselinear (la primera vez se baselinea en silencio, sin notificar).
+  notifiedVolumes Int     @default(0)
+  status          String?
+  url             String
+  updatedAt       DateTime @updatedAt
 
   @@unique([publisher, slug])
   @@index([normTitle])

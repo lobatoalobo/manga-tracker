@@ -9,6 +9,7 @@ import {
   enumeratePublisherEditions,
 } from "../lib/whakoomImport";
 import { logJobRun, groupSkipReasons } from "../lib/jobs";
+import { detectAndNotifyNewVolumes } from "../lib/catalogNotify";
 import { prisma } from "../lib/prisma";
 import { readFileSync } from "fs";
 
@@ -274,6 +275,7 @@ async function crawlWhakoomPublisher(allUrl: string, reset: boolean) {
     startedAt,
   });
   console.log("  Motivos de skip:", reasons);
+  await notifyNewVolumes();
 }
 
 async function main() {
@@ -312,7 +314,16 @@ async function main() {
   if (!which || which === "panini") await crawlPanini();
   if (!which || which === "ivrea") await crawlIvrea();
   if (!which || which === "mangakas") await crawlMangakas();
+  await notifyNewVolumes();
   console.log("\nListo.");
+}
+
+/** Tras actualizar conteos, avisa "tomo nuevo" a los coleccionistas. */
+async function notifyNewVolumes() {
+  const nv = await detectAndNotifyNewVolumes();
+  console.log(
+    `  Tomos nuevos: ${nv.notifications} notificaciones en ${nv.changed} ediciones.`,
+  );
 }
 
 main()

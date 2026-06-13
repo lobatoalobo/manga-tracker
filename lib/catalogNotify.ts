@@ -1,0 +1,94 @@
+import { prisma } from "@/lib/prisma";
+
+const PUB_KEY: Record<string, string> = {
+  "Ivrea Argentina": "ivrea",
+  "Panini Argentina": "panini",
+  "Ovni Press": "ovni",
+};
+
+export interface NewVolumeResult {
+  scanned: number; // ediciones mapeadas chequeadas
+  changed: number; // ediciones con tomo nuevo (incluye baseline silencioso)
+  notifications: number; // notis creadas (o que se crearían en dry-run)
+  samples: string[];
+}
+
+/**
+ * Detecta ediciones mapeadas que sumaron tomos desde la última vez
+ * (`notifiedVolumes`) y notifica "tomo nuevo" a quienes coleccionan esa edición.
+ * La primera vez que ve una edición la baseliza en silencio (no notifica).
+ * Con `dryRun` no crea notis ni actualiza el baseline.
+ */
+export async function detectAndNotifyNewVolumes(
+  dryRun = false,
+): Promise<NewVolumeResult> {
+  const rows = await prisma.publisherEdition.findMany({
+    where: { anilistId: { not: null }, volumes: { gt: 0 } },
+    select: {
+      id: true,
+      anilistId: true,
+      publisher: true,
+      title: true,
+      volumes: true,
+      notifiedVolumes: true,
+    },
+  });
+
+  const increased = rows.filter((r) => r.volumes > r.notifiedVolumes);
+  let notifications = 0;
+  const samples: string[] = [];
+
+  for (const r of increased) {
+    const anilistId = r.anilistId as number;
+
+    // Primera vez que vemos la edición → baseline silencioso.
+    if (r.notifiedVolumes === 0) {
+      if (!dryRun)
+        await prisma.publisherEdition.update({
+          where: { id: r.id },
+          data: { notifiedVolumes: r.volumes },
+        });
+      continue;
+    }
+
+    const pubKey = PUB_KEY[r.publisher];
+    const tracked = await prisma.trackedEdition.findMany({
+      where: {
+        manga: { anilistId },
+        OR: [{ publisher: r.publisher }, ...(pubKey ? [{ key: pubKey }] : [])],
+      },
+      select: { manga: { select: { userId: true } } },
+    });
+    const userIds = [...new Set(tracked.map((t) => t.manga.userId))];
+
+    if (userIds.length && samples.length < 20)
+      samples.push(
+        `${r.title} (${r.publisher}): ${r.notifiedVolumes}→${r.volumes} → ${userIds.length} usuario(s)`,
+      );
+    notifications += userIds.length;
+
+    if (!dryRun) {
+      if (userIds.length)
+        await prisma.notification.createMany({
+          data: userIds.map((userId) => ({
+            userId,
+            type: "NEW_VOLUME",
+            actorName: r.title,
+            anilistId,
+            text: `Tomo ${r.volumes} · ${r.publisher}`,
+          })),
+        });
+      await prisma.publisherEdition.update({
+        where: { id: r.id },
+        data: { notifiedVolumes: r.volumes },
+      });
+    }
+  }
+
+  return {
+    scanned: rows.length,
+    changed: increased.length,
+    notifications,
+    samples,
+  };
+}
