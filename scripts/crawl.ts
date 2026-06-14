@@ -53,7 +53,22 @@ function dropOutliers(volumes: number[]): number[] {
 
 async function crawlIvrea() {
   console.log("\n=== Ivrea ===");
-  const html = await (await fetch("https://www.ivrea.com.ar/catalogo/", { headers: UA })).text();
+  // El fetch del catálogo va con retry: desde CI a veces falla la red/IP y un
+  // throw acá tira todo el crawl (exit 1).
+  let html = "";
+  for (let a = 0; a < 3 && !html; a++) {
+    try {
+      const r = await fetch("https://www.ivrea.com.ar/catalogo/", { headers: UA });
+      if (r.ok) html = await r.text();
+    } catch {
+      /* reintenta */
+    }
+    if (!html) await new Promise((res) => setTimeout(res, 2000));
+  }
+  if (!html) {
+    console.error("  No se pudo bajar el catálogo de Ivrea (red). Abortando Ivrea.");
+    return;
+  }
   const $ = cheerio.load(html);
 
   const titles = new Map<string, string>(); // slug -> title
@@ -320,10 +335,14 @@ async function main() {
 
 /** Tras actualizar conteos, avisa "tomo nuevo" a los coleccionistas. */
 async function notifyNewVolumes() {
-  const nv = await detectAndNotifyNewVolumes();
-  console.log(
-    `  Tomos nuevos: ${nv.notifications} notificaciones en ${nv.changed} ediciones.`,
-  );
+  try {
+    const nv = await detectAndNotifyNewVolumes();
+    console.log(
+      `  Tomos nuevos: ${nv.notifications} notificaciones en ${nv.changed} ediciones.`,
+    );
+  } catch (e) {
+    console.error("  notifyNewVolumes falló (no frena el crawl):", e);
+  }
 }
 
 main()
