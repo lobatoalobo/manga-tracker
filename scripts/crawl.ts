@@ -294,6 +294,18 @@ async function crawlWhakoomPublisher(allUrl: string, reset: boolean) {
 }
 
 async function main() {
+  // Falla rápido y claro si la DATABASE_URL no es válida (secret mal pegado en
+  // CI), en vez de un stack críptico de Prisma a mitad del crawl.
+  const dbUrl = process.env.DATABASE_URL ?? "";
+  if (!/^postgres(ql)?:\/\//.test(dbUrl)) {
+    console.error(
+      `DATABASE_URL inválida o ausente: debe empezar con "postgresql://". ` +
+        `(largo=${dbUrl.length}) — revisá el secret DATABASE_URL en GitHub: ` +
+        `pegá solo la connection string, sin "DATABASE_URL=" ni comillas.`,
+    );
+    process.exit(1);
+  }
+
   const which = process.argv[2]; // ivrea|panini|ovni|mangakas|resolve|whakoom*
   if (which === "resolve") {
     // resolve [reset] [publisher]   ej: resolve reset "Ivrea Argentina"
