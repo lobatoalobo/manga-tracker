@@ -156,6 +156,12 @@ export default function AdminStoreLinks({
               Desvincular ✕
             </button>
           </div>
+          {excludedPublishers.includes(ed.publisher) && (
+            <p className="mt-2 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-400">
+              ⚠️ {ed.publisher} está desvinculada de esta serie: esta edición no
+              aparece en público hasta que la re-vincules (botón abajo).
+            </p>
+          )}
           <div className="mt-2 flex flex-wrap gap-2">
             <input
               value={titles[ed.id] ?? ""}
