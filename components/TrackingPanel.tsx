@@ -6,8 +6,29 @@ import ReadingControl from "./ReadingControl";
 import {
   toggleVolumeAction,
   setAllVolumesAction,
+  setVolumesUpToAction,
   removeEditionAction,
 } from "@/app/actions";
+
+// Comprime [1,2,3,5,9,10] → "1–3, 5, 9–10" para no listar cientos de números.
+function toRanges(nums: number[]): string {
+  if (nums.length === 0) return "";
+  const parts: string[] = [];
+  let start = nums[0];
+  let prev = nums[0];
+  for (let i = 1; i < nums.length; i++) {
+    if (nums[i] === prev + 1) {
+      prev = nums[i];
+      continue;
+    }
+    parts.push(start === prev ? `${start}` : `${start}–${prev}`);
+    start = prev = nums[i];
+  }
+  parts.push(start === prev ? `${start}` : `${start}–${prev}`);
+  return parts.length > 30 ? parts.slice(0, 30).join(", ") + " …" : parts.join(", ");
+}
+
+const LONG_SERIES = 36; // a partir de acá el grid arranca colapsado
 import { crumbSearch } from "@/lib/crumb";
 import type { EditionView, ReadingStatus } from "@/lib/collection";
 
@@ -24,6 +45,8 @@ export default function TrackingPanel({
   const [selectedKey, setSelectedKey] = useState<string | undefined>(
     initial[0]?.key,
   );
+  const [upTo, setUpTo] = useState("");
+  const [showGrid, setShowGrid] = useState(false);
   const [, startTransition] = useTransition();
 
   const sel = editions.find((e) => e.key === selectedKey) ?? editions[0];
@@ -53,6 +76,17 @@ export default function TrackingPanel({
     startTransition(() => setAllVolumesAction(anilistId, sel.key, value));
   }
 
+  function markUpTo(n: number) {
+    if (!Number.isFinite(n) || n < 0) return;
+    const top = total > 0 ? Math.min(n, total) : n;
+    patch(sel.key, (e) => ({
+      ...e,
+      ownedVolumes: Array.from({ length: top }, (_, i) => i + 1),
+    }));
+    setUpTo("");
+    startTransition(() => setVolumesUpToAction(anilistId, sel.key, top));
+  }
+
   function onReading(status: ReadingStatus, volume: number | null) {
     patch(sel.key, (e) => ({ ...e, readingStatus: status, readingVolume: volume }));
   }
@@ -76,6 +110,7 @@ export default function TrackingPanel({
         )
       : [];
   const allOwned = total > 0 && owned >= total;
+  const gridVisible = total <= LONG_SERIES || showGrid;
 
   return (
     <section className="mt-6 rounded-xl border border-border bg-surface p-5">
@@ -132,9 +167,11 @@ export default function TrackingPanel({
         <span className="font-medium text-foreground">Faltan:</span>{" "}
         {total === 0
           ? "cantidad desconocida"
-          : missing.length > 0
-            ? missing.join(", ")
-            : "¡colección completa! 🎉"}
+          : missing.length === 0
+            ? "¡colección completa! 🎉"
+            : missing.length <= 8
+              ? missing.join(", ")
+              : `${missing.length} tomos · ${toRanges(missing)}`}
       </p>
 
       {missing.length > 0 && sel.region === "AR" && (
@@ -160,9 +197,50 @@ export default function TrackingPanel({
         )}
       </div>
 
-      <div className="mt-3">
-        <VolumeGrid totalVolumes={total} owned={sel.ownedVolumes} onToggle={toggle} />
-      </div>
+      {/* Atajo para series largas: marcar 1..N de una. */}
+      {total > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted">Tengo hasta el tomo</span>
+          <input
+            type="number"
+            min={0}
+            max={total || undefined}
+            value={upTo}
+            onChange={(e) => setUpTo(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && upTo) markUpTo(Number(upTo));
+            }}
+            placeholder="#"
+            className="w-20 rounded-lg border border-border bg-surface-2 px-2 py-1 outline-none focus:border-accent"
+          />
+          <button
+            onClick={() => upTo && markUpTo(Number(upTo))}
+            className="rounded-lg border border-accent px-3 py-1 text-accent transition hover:bg-accent hover:text-white"
+          >
+            Marcar
+          </button>
+        </div>
+      )}
+
+      {/* Grid tomo por tomo: colapsado por defecto en series largas. */}
+      {total > LONG_SERIES && (
+        <button
+          onClick={() => setShowGrid((v) => !v)}
+          className="mt-3 text-sm text-accent hover:underline"
+        >
+          {gridVisible ? "Ocultar tomos ▴" : `Marcar tomo por tomo (${total}) ▾`}
+        </button>
+      )}
+
+      {gridVisible && (
+        <div className="mt-3">
+          <VolumeGrid
+            totalVolumes={total}
+            owned={sel.ownedVolumes}
+            onToggle={toggle}
+          />
+        </div>
+      )}
 
       <ReadingControl
         anilistId={anilistId}

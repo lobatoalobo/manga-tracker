@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { auth } from "@/auth";
 import { BrowseProvider } from "@/components/browse/BrowseProvider";
 import DiscoveryBar from "@/components/browse/DiscoveryBar";
 
@@ -7,16 +8,17 @@ import DiscoveryBar from "@/components/browse/DiscoveryBar";
  * (buscador + modos) queda fija y no se desmonta al abrir una serie — solo
  * cambia el contenido de abajo.
  */
-export default function BrowseLayout({
+export default async function BrowseLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await auth();
   return (
     <BrowseProvider>
       <div className="mx-auto max-w-6xl px-5 pt-6">
         <Suspense fallback={null}>
-          <DiscoveryBar />
+          <DiscoveryBar loggedIn={!!session?.user} />
         </Suspense>
       </div>
       {children}

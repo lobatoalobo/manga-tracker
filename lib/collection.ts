@@ -316,6 +316,38 @@ export async function setAllVolumes(
   });
 }
 
+/** Marca como propios exactamente los tomos 1..n (atajo para series largas). */
+export async function setVolumesUpTo(
+  userId: string,
+  anilistId: number,
+  key: string,
+  n: number,
+): Promise<void> {
+  const ed = await findEdition(userId, anilistId, key);
+  if (!ed) return;
+
+  const top = ed.totalVolumes > 0 ? Math.min(n, ed.totalVolumes) : n;
+  await prisma.ownedVolume.deleteMany({ where: { editionId: ed.id } });
+  if (top > 0) {
+    await prisma.ownedVolume.createMany({
+      data: Array.from({ length: top }, (_, i) => ({
+        editionId: ed.id,
+        volume: i + 1,
+      })),
+    });
+  }
+
+  await prisma.trackedEdition.update({
+    where: { id: ed.id },
+    data: {
+      status:
+        ed.totalVolumes > 0 && top >= ed.totalVolumes
+          ? "COMPLETED"
+          : "IN_PROGRESS",
+    },
+  });
+}
+
 export async function setReading(
   userId: string,
   anilistId: number,

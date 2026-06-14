@@ -10,6 +10,7 @@ import { countUnread } from "@/lib/notifications";
 import { getShoppingCount } from "@/lib/shopping";
 import { SignIn, SignOut } from "@/components/AuthButtons";
 import NavBar from "@/components/NavBar";
+import BottomNav from "@/components/BottomNav";
 import InstallPWA from "@/components/InstallPWA";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import "./globals.css";
@@ -63,7 +64,7 @@ export default async function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body>
+      <body className={session?.user ? "pb-16 md:pb-0" : ""}>
         <NavBar
           loggedIn={!!session?.user}
           admin={admin}
@@ -88,6 +89,13 @@ export default async function RootLayout({
         {children}
 
         <ServiceWorkerRegister />
+
+        {session?.user && (
+          <BottomNav
+            faltantes={shopping.series}
+            perfil={pendingFriends + unreadNotifs}
+          />
+        )}
 
         <footer className="mt-12 border-t border-border py-8 text-center text-sm text-muted">
           <p>Nakama · datos de AniList, MangaUpdates y editoriales locales.</p>
