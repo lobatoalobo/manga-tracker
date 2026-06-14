@@ -51,6 +51,47 @@ export function searchableTitle(value: string): string {
     .trim();
 }
 
+export interface LocalCatalogHit {
+  id: number;
+  publisher: string;
+  title: string;
+  anilistId: number | null;
+}
+
+/**
+ * Busca en el catálogo local (PublisherEdition) por título — incluso en español
+ * y aunque no esté mapeado a AniList. Para encontrar ediciones argentinas por su
+ * nombre real (lo que AniList no conoce). Una entrada por (serie/edición).
+ */
+export async function searchPublisherEditions(
+  q: string,
+  limit = 16,
+): Promise<LocalCatalogHit[]> {
+  const norm = normalizeTitle(q);
+  if (norm.length < 2) return [];
+  // Cada palabra (≥2) debe estar en el título normalizado → tolera orden/huecos
+  // ("aroma cafe" matchea "historias con aroma a cafe").
+  const tokens = norm.split(" ").filter((t) => t.length >= 2);
+  if (tokens.length === 0) return [];
+  const rows = await prisma.publisherEdition.findMany({
+    where: { AND: tokens.map((t) => ({ normTitle: { contains: t } })) },
+    select: { id: true, publisher: true, title: true, anilistId: true },
+    orderBy: { volumes: "desc" },
+    take: 60,
+  });
+  // Dedupe: una fila por serie mapeada (anilistId) y por edición no mapeada.
+  const seen = new Set<string>();
+  const out: LocalCatalogHit[] = [];
+  for (const r of rows) {
+    const key = r.anilistId ? `a:${r.anilistId}` : `e:${r.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(r);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 /**
  * Busca en el índice las mejores ediciones (una por editorial) que matcheen
  * cualquiera de los títulos dados. Match exacto por slug o título normalizado.
