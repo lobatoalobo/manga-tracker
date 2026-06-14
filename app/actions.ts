@@ -409,7 +409,23 @@ export async function addSeriesEditionAction(
   await assertAdmin();
   if (!EDITORIALS.some((e) => e.publisher === publisher))
     return { ok: false as const, error: "Editorial inválida." };
-  const slug = slugifyTitle(title);
+
+  // Slug único por SERIE: si ya hay una edición de esta editorial mapeada a esta
+  // serie, la reusamos; si no, el slug base, y si ese slug ya es de OTRA serie
+  // (títulos que normalizan igual, ej. Citrus / Citrus+), lo desambiguamos.
+  const existing = await prisma.publisherEdition.findFirst({
+    where: { publisher, anilistId },
+    select: { slug: true },
+  });
+  let slug = existing?.slug ?? slugifyTitle(title);
+  if (!existing) {
+    const taken = await prisma.publisherEdition.findUnique({
+      where: { publisher_slug: { publisher, slug } },
+      select: { anilistId: true },
+    });
+    if (taken && taken.anilistId !== anilistId) slug = `${slug}-${anilistId}`;
+  }
+
   await upsertPublisherEdition({
     publisher,
     slug,
