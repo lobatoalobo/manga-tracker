@@ -7,6 +7,7 @@ import {
   removeEdition,
   toggleVolume,
   setAllVolumes,
+  setVolumesUpTo,
   setReading,
   setSharing,
   importEdition,
@@ -123,6 +124,17 @@ export async function setAllVolumesAction(
         coverImage: m.coverImage,
       });
   }
+  revalidatePath("/collection");
+  revalidatePath(`/manga/${anilistId}`);
+}
+
+export async function setVolumesUpToAction(
+  anilistId: number,
+  key: string,
+  n: number,
+) {
+  const userId = await requireUserId();
+  await setVolumesUpTo(userId, anilistId, key, n);
   revalidatePath("/collection");
   revalidatePath(`/manga/${anilistId}`);
 }

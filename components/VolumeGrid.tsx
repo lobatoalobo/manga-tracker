@@ -20,10 +20,10 @@ export default function VolumeGrid({
   }
 
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(48px,1fr))] gap-2">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(42px,1fr))] gap-1.5">
       {Array.from({ length: totalVolumes }, (_, i) => i + 1).map((volume) => {
         const isOwned = owned.includes(volume);
-        const cls = `aspect-square rounded-md border text-sm font-semibold ${
+        const cls = `aspect-square rounded-md border text-xs font-semibold ${
           isOwned
             ? "border-accent bg-accent text-white"
             : "border-border bg-surface-2 text-muted"
