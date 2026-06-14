@@ -382,6 +382,41 @@ export async function getHiatusSet(ids: number[]): Promise<Set<number>> {
   );
 }
 
+/** Portadas (medium) de varias series en una sola query. Para thumbnails. */
+export async function getMangaCovers(
+  ids: number[],
+): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  const unique = [...new Set(ids)].filter((n) => Number.isFinite(n));
+  if (unique.length === 0) return out;
+  const query = `
+    query ($ids: [Int]) {
+      Page(perPage: 50) {
+        media(id_in: $ids, type: MANGA) {
+          id
+          coverImage { medium large }
+        }
+      }
+    }
+  `;
+  try {
+    const response = await fetch("https://graphql.anilist.co", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, variables: { ids: unique.slice(0, 50) } }),
+      next: { revalidate: 60 * 60 * 24 },
+    });
+    const json = await response.json();
+    for (const m of json?.data?.Page?.media ?? []) {
+      const url = m.coverImage?.large || m.coverImage?.medium;
+      if (url) out.set(m.id, url);
+    }
+  } catch {
+    /* best-effort */
+  }
+  return out;
+}
+
 export async function getMangaById(
   id: number,
 ) {
