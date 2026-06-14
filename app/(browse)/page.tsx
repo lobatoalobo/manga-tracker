@@ -1,8 +1,9 @@
 import {
-  searchMangaList,
+  searchMangaPage,
   getTrendingManga,
   getMangaPage,
   getMangaCovers,
+  type SearchPage,
 } from "@/lib/anilist";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
@@ -63,6 +64,7 @@ export default async function Home({
     EDITORIALS.find((e) => e.slug === params.ed) ?? EDITORIALS[0];
 
   let mangas: any[] = [];
+  let searchInfo: SearchPage["pageInfo"] | null = null;
   let localHits: LocalCatalogHit[] = [];
   let localCovers = new Map<number, string>();
   let allMangakas: { id: number; name: string }[] = [];
@@ -71,13 +73,16 @@ export default async function Home({
   let pageInfo: { lastPage: number } | null = null;
 
   if (query) {
-    const [raw, local] = await Promise.all([
-      searchMangaList(query, loggedIn),
+    const [res, local] = await Promise.all([
+      searchMangaPage(query, loggedIn, page),
       searchPublisherEditions(query).catch(() => [] as LocalCatalogHit[]),
     ]);
+    searchInfo = res.pageInfo;
     mangas = admin
-      ? raw
-      : raw.filter((m: any) => !m.isAdult || isExactTitleMatch(m.title, query));
+      ? res.media
+      : res.media.filter(
+          (m: any) => !m.isAdult || isExactTitleMatch(m.title, query),
+        );
     // Catálogo local: lo que AniList no encuentra por título en español. Saca
     // los que ya aparecen en los resultados de AniList.
     const anilistIds = new Set(mangas.map((m: any) => m.id));
@@ -121,13 +126,29 @@ export default async function Home({
     <main className="mx-auto max-w-6xl px-5 pb-12 pt-5">
       {query ? (
         <>
-          <h2 className="mb-4 text-lg font-semibold">
+          <h2 className="mb-1 text-lg font-semibold">
             Resultados para &quot;{query}&quot;
           </h2>
+          {searchInfo && searchInfo.total > 0 && (
+            <p className="mb-4 text-sm text-muted">
+              {searchInfo.total} resultado{searchInfo.total === 1 ? "" : "s"}
+              {searchInfo.lastPage > 1
+                ? ` · página ${searchInfo.currentPage} de ${searchInfo.lastPage}`
+                : ""}
+            </p>
+          )}
           {mangas.length === 0 && localHits.length === 0 ? (
             <p className="text-sm text-muted">No encontramos resultados.</p>
           ) : (
             <MangaGrid mangas={mangas} nationalEditions={nationalEditions} />
+          )}
+
+          {searchInfo && searchInfo.lastPage > 1 && (
+            <Pager
+              basePath={`/?search=${encodeURIComponent(query)}`}
+              page={searchInfo.currentPage}
+              lastPage={searchInfo.lastPage}
+            />
           )}
 
           {localHits.length > 0 && (

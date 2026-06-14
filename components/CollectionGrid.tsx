@@ -32,7 +32,7 @@ export default function CollectionGrid({
   const [publisher, setPublisher] = useState("all");
   const [reading, setReading] = useState("all");
   const [sort, setSort] = useState<SortKey>("title");
-  const [view, setView] = useState<View>("grid");
+  const [view, setView] = useState<View>("list");
 
   // La vista elegida se recuerda por dispositivo.
   useEffect(() => {
