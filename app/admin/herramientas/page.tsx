@@ -10,6 +10,7 @@ import { ADMIN_TASKS } from "@/lib/adminTasks";
 import FlushCacheButton from "@/components/FlushCacheButton";
 import RunJobsPanel from "@/components/RunJobsPanel";
 import TaskRunner from "@/components/TaskRunner";
+import WhakoomImportForm from "@/components/WhakoomImportForm";
 
 export const metadata = { title: "Herramientas (admin) · Nakama" };
 
@@ -92,6 +93,10 @@ export default async function AdminToolsPage() {
           hint="Posible spin-off mal mapeado (ej. AoT: Before the Fall → AoT)."
           groups={health.overmerges}
         />
+      </section>
+
+      <section className="mb-8">
+        <WhakoomImportForm />
       </section>
 
       <section className="mb-8">
