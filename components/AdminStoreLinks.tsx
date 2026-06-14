@@ -7,6 +7,7 @@ import {
   setEditionUrlAction,
   addSeriesEditionAction,
   unlinkEditionAction,
+  relinkEditionAction,
 } from "@/app/actions";
 import { crumbSearch } from "@/lib/crumb";
 
@@ -31,12 +32,14 @@ export default function AdminStoreLinks({
   seriesTitle,
   crumbInitial,
   editions,
+  excludedPublishers = [],
   defaultVolumes = 0,
 }: {
   anilistId: number;
   seriesTitle: string;
   crumbInitial: string;
   editions: EditionLinkRow[];
+  excludedPublishers?: string[];
   defaultVolumes?: number;
 }) {
   const router = useRouter();
@@ -176,6 +179,33 @@ export default function AdminStoreLinks({
           )}
         </div>
       ))}
+
+      {/* Editoriales desvinculadas: re-vincular (vuelve a permitir el matcheo). */}
+      {excludedPublishers.length > 0 && (
+        <div className="mt-4 border-t border-border pt-3">
+          <p className="mb-2 text-xs text-muted">Desvinculadas de esta serie</p>
+          <div className="flex flex-wrap gap-2">
+            {excludedPublishers.map((p) => (
+              <button
+                key={p}
+                onClick={() =>
+                  save(
+                    () =>
+                      relinkEditionAction(anilistId, p).then(() => {
+                        router.refresh();
+                      }),
+                    `${p} re-vinculada`,
+                  )
+                }
+                disabled={pending}
+                className="rounded-full border border-border px-3 py-1 text-xs text-muted transition hover:border-accent hover:text-accent disabled:opacity-50"
+              >
+                ↩ Re-vincular {p}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Agregar una edición que el catálogo no trajo (mapea directo a la serie). */}
       <div className="mt-4 border-t border-border pt-3">
