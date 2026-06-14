@@ -1,11 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import MangaCard from "./MangaCard";
+import RemoveEditionButton from "./RemoveEditionButton";
+import { displayTitle } from "@/lib/title";
 import type { CollectionItem } from "@/lib/collection";
 
 type SortKey = "title" | "progress" | "volumes";
+type View = "grid" | "list";
+const VIEW_KEY = "nakama:collectionView";
 
 // Editoriales que siempre aparecen en el filtro, aunque no tengas series.
 const KNOWN_PUBLISHERS = ["Ivrea Argentina", "Panini Argentina", "Ovni Press"];
@@ -28,6 +32,17 @@ export default function CollectionGrid({
   const [publisher, setPublisher] = useState("all");
   const [reading, setReading] = useState("all");
   const [sort, setSort] = useState<SortKey>("title");
+  const [view, setView] = useState<View>("grid");
+
+  // La vista elegida se recuerda por dispositivo.
+  useEffect(() => {
+    const saved = localStorage.getItem(VIEW_KEY);
+    if (saved === "grid" || saved === "list") setView(saved);
+  }, []);
+  function changeView(v: View) {
+    setView(v);
+    localStorage.setItem(VIEW_KEY, v);
+  }
 
   const publishers = useMemo(() => {
     const present = items.map((i) => i.edition.label);
@@ -101,6 +116,15 @@ export default function CollectionGrid({
           <option value="progress">Orden: % completado</option>
           <option value="volumes">Orden: tomos</option>
         </Select>
+
+        <div className="flex overflow-hidden rounded-lg border border-border">
+          <ViewBtn active={view === "grid"} onClick={() => changeView("grid")} label="Vista de tarjetas">
+            ▦
+          </ViewBtn>
+          <ViewBtn active={view === "list"} onClick={() => changeView("list")} label="Vista de lista">
+            ☰
+          </ViewBtn>
+        </div>
       </div>
 
       <p className="mb-4 text-sm text-muted">{filtered.length} ediciones</p>
@@ -111,7 +135,7 @@ export default function CollectionGrid({
             ? `No tenés series de ${publisher}.`
             : "Ninguna serie coincide con los filtros."}
         </p>
-      ) : (
+      ) : view === "grid" ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {filtered.map((i) => (
             <MangaCard
@@ -122,8 +146,101 @@ export default function CollectionGrid({
             />
           ))}
         </div>
+      ) : (
+        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
+          {filtered.map((i) => (
+            <CollectionRow
+              key={`${i.anilistId}-${i.edition.key}`}
+              item={i}
+              readOnly={readOnly}
+              hrefBase={hrefBase}
+            />
+          ))}
+        </ul>
       )}
     </>
+  );
+}
+
+function CollectionRow({
+  item,
+  readOnly,
+  hrefBase,
+}: {
+  item: CollectionItem;
+  readOnly: boolean;
+  hrefBase: string;
+}) {
+  const { edition } = item;
+  const owned = edition.ownedVolumes.length;
+  const total = edition.totalVolumes;
+  const pct = total > 0 ? Math.floor((owned / total) * 100) : 0;
+  const href =
+    item.anilistId < 0
+      ? `/nacional/${-item.anilistId}`
+      : `${hrefBase}/${item.anilistId}`;
+
+  return (
+    <li className="flex items-center gap-3 px-3 py-2 transition hover:bg-surface-2">
+      <Link href={href} className="flex min-w-0 flex-1 items-center gap-3">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={item.coverImage}
+          alt=""
+          className="h-12 w-9 shrink-0 rounded object-cover"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">
+            {displayTitle(item.title)}
+          </p>
+          <p className="mt-0.5 truncate text-xs text-muted">
+            {edition.label}
+            {edition.readingStatus === "READING" && " · 📖 Leyendo"}
+            {edition.readingStatus === "READ" && " · ✅ Leído"}
+          </p>
+        </div>
+        <div className="shrink-0 text-right text-xs text-muted">
+          <span className="tabular-nums">
+            {owned}/{total || "?"}
+          </span>
+          <span className="ml-2 tabular-nums">{pct}%</span>
+        </div>
+      </Link>
+      {!readOnly && (
+        <RemoveEditionButton
+          anilistId={item.anilistId}
+          editionKey={edition.key}
+          label="✕"
+          className="shrink-0 rounded-md px-2 py-1 text-xs text-muted transition hover:text-red-400"
+        />
+      )}
+    </li>
+  );
+}
+
+function ViewBtn({
+  active,
+  onClick,
+  label,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={active}
+      className={`px-3 py-2 text-sm transition ${
+        active ? "bg-accent text-white" : "text-muted hover:text-foreground"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
