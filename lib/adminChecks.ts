@@ -48,7 +48,13 @@ export async function getCatalogIntegrity(): Promise<IntegrityCheck[]> {
     }),
     // 4) Posibles duplicados: misma editorial + mismo normTitle.
     prisma.publisherEdition.findMany({
-      select: { id: true, publisher: true, normTitle: true, title: true },
+      select: {
+        id: true,
+        publisher: true,
+        normTitle: true,
+        title: true,
+        anilistId: true,
+      },
     }),
   ]);
 
@@ -68,7 +74,15 @@ export async function getCatalogIntegrity(): Promise<IntegrityCheck[]> {
     arr.push(r);
     byKey.set(k, arr);
   }
-  const dupes = [...byKey.values()].filter((g) => g.length > 1);
+  // Duplicado real solo si NO son series distintas con nombre parecido (ej.
+  // "Citrus" #97832 vs "Citrus+" #103884 normalizan igual pero son 2 obras).
+  const dupes = [...byKey.values()].filter((g) => {
+    if (g.length < 2) return false;
+    const series = new Set(
+      g.filter((r) => r.anilistId != null).map((r) => r.anilistId),
+    );
+    return series.size < 2;
+  });
 
   const ovniBad = ovniBadUrl.filter((r) => !isOvniUrl(r.url));
 
