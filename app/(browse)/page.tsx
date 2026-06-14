@@ -2,6 +2,7 @@ import {
   searchMangaList,
   getTrendingManga,
   getMangaPage,
+  getMangaCovers,
 } from "@/lib/anilist";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
@@ -63,6 +64,7 @@ export default async function Home({
 
   let mangas: any[] = [];
   let localHits: LocalCatalogHit[] = [];
+  let localCovers = new Map<number, string>();
   let allMangakas: { id: number; name: string }[] = [];
   let editorialWorks: EditorialWork[] = [];
   let edCounts: Record<string, number> = {};
@@ -81,6 +83,10 @@ export default async function Home({
     const anilistIds = new Set(mangas.map((m: any) => m.id));
     localHits = local.filter(
       (h) => !(h.anilistId && anilistIds.has(h.anilistId)),
+    );
+    // Portadas (de AniList) para los hits mapeados, en una sola query.
+    localCovers = await getMangaCovers(
+      localHits.flatMap((h) => (h.anilistId ? [h.anilistId] : [])),
     );
   } else if (tab === "mangaka") {
     try {
@@ -133,20 +139,35 @@ export default async function Home({
                 Ediciones del catálogo local que matchean tu búsqueda.
               </p>
               <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
-                {localHits.map((h) => (
-                  <li key={h.anilistId ? `a${h.anilistId}` : `e${h.id}`}>
-                    <Link
-                      href={h.anilistId ? seriesHref(h.anilistId) : `/nacional/${h.id}`}
-                      className="flex items-center justify-between gap-3 px-4 py-3 text-sm transition hover:bg-surface-2"
-                    >
-                      <span className="min-w-0 truncate">{h.title}</span>
-                      <span className="shrink-0 text-xs text-muted">
-                        {h.publisher.replace(" Argentina", "")}
-                        {!h.anilistId && " · 🇦🇷"}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
+                {localHits.map((h) => {
+                  const cover = h.anilistId ? localCovers.get(h.anilistId) : null;
+                  return (
+                    <li key={h.anilistId ? `a${h.anilistId}` : `e${h.id}`}>
+                      <Link
+                        href={h.anilistId ? seriesHref(h.anilistId) : `/nacional/${h.id}`}
+                        className="flex items-center gap-3 px-3 py-2.5 text-sm transition hover:bg-surface-2"
+                      >
+                        <span className="flex h-14 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-2">
+                          {cover ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={cover}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-base">📕</span>
+                          )}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{h.title}</span>
+                        <span className="shrink-0 text-xs text-muted">
+                          {h.publisher.replace(" Argentina", "")}
+                          {!h.anilistId && " · 🇦🇷"}
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           )}
