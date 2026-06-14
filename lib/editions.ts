@@ -19,8 +19,9 @@ export interface Edition {
 
 /** Edición local (editorial argentina) ya resuelta, lista para mostrar. */
 export interface LocalEdition {
-  id: string; // "ivrea" | "panini" | "ovni"
+  id: string; // "ivrea" | "panini" | "ovni" | "ivrea__<slug>" (variantes deluxe)
   publisher: string;
+  label?: string; // nombre a mostrar (publisher, o "publisher · título" si hay varias)
   slug: string | null;
   volumes: number;
   status: string;
@@ -50,7 +51,7 @@ export function buildEditions(
     if (le.volumes <= 0) continue;
     editions.push({
       id: le.id,
-      source: le.publisher,
+      source: le.label ?? le.publisher,
       region: "AR",
       publisher: le.publisher,
       slug: le.slug,

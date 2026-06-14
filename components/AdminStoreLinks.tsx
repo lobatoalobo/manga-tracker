@@ -49,6 +49,7 @@ export default function AdminStoreLinks({
 
   // Form para agregar una edición que el catálogo no trajo.
   const [addPub, setAddPub] = useState(PUBLISHERS[0]);
+  const [addTitle, setAddTitle] = useState(seriesTitle);
   const [addUrl, setAddUrl] = useState("");
   const [addVol, setAddVol] = useState(defaultVolumes ? String(defaultVolumes) : "");
 
@@ -179,6 +180,12 @@ export default function AdminStoreLinks({
             className={`${input} w-20`}
           />
           <input
+            value={addTitle}
+            onChange={(e) => setAddTitle(e.target.value)}
+            placeholder="Título (ej. Battle Royale Deluxe)"
+            className={`${input} min-w-40 flex-1`}
+          />
+          <input
             value={addUrl}
             onChange={(e) => setAddUrl(e.target.value)}
             placeholder="URL de la editorial"
@@ -189,7 +196,7 @@ export default function AdminStoreLinks({
               start(async () => {
                 const r = await addSeriesEditionAction(
                   anilistId,
-                  seriesTitle,
+                  addTitle.trim() || seriesTitle,
                   addPub,
                   addUrl,
                   Number(addVol),

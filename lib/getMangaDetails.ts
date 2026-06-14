@@ -145,31 +145,34 @@ async function resolveEditionsLive(
   const mappedRows = await prisma.publisherEdition.findMany({
     where: { anilistId: anilist.id },
   });
-  const byPub = new Map<string, IndexedEdition>(
-    mappedRows
-      .filter((e) => e.volumes > 0)
-      .map((e) => [
-        e.publisher,
-        {
-          publisher: e.publisher,
-          slug: e.slug,
-          title: e.title,
-          volumes: e.volumes,
-          status: e.status,
-          url: e.url,
-        },
-      ]),
-  );
+  // Puede haber varias ediciones por editorial (regular + deluxe/kanzenban).
+  const all: IndexedEdition[] = mappedRows
+    .filter((e) => e.volumes > 0)
+    .map((e) => ({
+      publisher: e.publisher,
+      slug: e.slug,
+      title: e.title,
+      volumes: e.volumes,
+      status: e.status,
+      url: e.url,
+    }));
+  const mappedPubs = new Set(all.map((e) => e.publisher));
+  const live: IndexedEdition[] = [];
+  const addLive = (e: IndexedEdition) => {
+    all.push(e);
+    live.push(e);
+    void upsertPublisherEdition(e).catch(() => {});
+  };
 
   // 2) Fallback en vivo (verificado por autor) para editoriales SIN mapeo + MU.
   const tasks: Promise<void>[] = [];
 
-  if (!byPub.has("Ivrea Argentina")) {
+  if (!mappedPubs.has("Ivrea Argentina")) {
     tasks.push(
       getIvreaEdition(titles, knownSlug, authors)
         .then((d) => {
           if (d && d.argentinaVolumes > 0)
-            cache(byPub, {
+            addLive({
               publisher: "Ivrea Argentina",
               slug: d.slug,
               title: d.title || titles[0],
@@ -183,12 +186,12 @@ async function resolveEditionsLive(
   }
   // Panini no expone el autor en su tienda (ni en atributos ni en JSON-LD),
   // así que su match queda solo por título: no se puede verificar por autor.
-  if (!byPub.has("Panini Argentina")) {
+  if (!mappedPubs.has("Panini Argentina")) {
     tasks.push(
       getPaniniEdition(titles)
         .then((d) => {
           if (d && d.totalVolumes > 0)
-            cache(byPub, {
+            addLive({
               publisher: "Panini Argentina",
               slug: slugifyTitle(titles[0]),
               title: titles[0],
@@ -200,12 +203,12 @@ async function resolveEditionsLive(
         .catch(() => {}),
     );
   }
-  if (!byPub.has("Ovni Press")) {
+  if (!mappedPubs.has("Ovni Press")) {
     tasks.push(
       getOvniEdition(titles, authors)
         .then((d) => {
           if (d && d.totalVolumes > 0)
-            cache(byPub, {
+            addLive({
               publisher: "Ovni Press",
               slug: slugifyTitle(titles[0]),
               title: titles[0],
@@ -229,35 +232,39 @@ async function resolveEditionsLive(
   // autor), así la próxima salen del mapeo y aparecen también en el badge/browse.
   void linkPublisherEditions(
     anilist.id,
-    [...byPub.values()].map((e) => ({ publisher: e.publisher, title: e.title })),
+    live.map((e) => ({ publisher: e.publisher, title: e.title })),
   ).catch(() => {});
 
-  // 3) Lista uniforme de ediciones locales.
-  const local: LocalEdition[] = PUBLISHERS.filter((p) => byPub.has(p)).map(
-    (p) => {
-      const e = byPub.get(p)!;
-      return {
-        id: PUBLISHER_ID[p],
+  // 3) Lista uniforme de ediciones locales. Soporta varias por editorial: la de
+  //    más tomos conserva la clave canónica ("ivrea"); las extra (deluxe) llevan
+  //    una clave única para poder trackearlas por separado.
+  const byPublisher = new Map<string, IndexedEdition[]>();
+  for (const e of all) {
+    const arr = byPublisher.get(e.publisher) ?? [];
+    arr.push(e);
+    byPublisher.set(e.publisher, arr);
+  }
+  const local: LocalEdition[] = [];
+  for (const p of PUBLISHERS) {
+    const list = byPublisher.get(p);
+    if (!list) continue;
+    list.sort((a, b) => b.volumes - a.volumes);
+    list.forEach((e, i) => {
+      local.push({
+        id: i === 0 ? PUBLISHER_ID[p] : `${PUBLISHER_ID[p]}__${e.slug}`,
         publisher: p,
+        label: list.length > 1 ? `${p} · ${e.title}` : p,
         slug: e.slug,
         volumes: e.volumes,
         status: e.status ?? "EN CATÁLOGO",
         url: e.url,
-        note: e.status === "EN CATÁLOGO" ? "según catálogo de la editorial" : undefined,
-      };
-    },
-  );
+        note:
+          e.status === "EN CATÁLOGO" ? "según catálogo de la editorial" : undefined,
+      });
+    });
+  }
 
   return buildEditions(anilist, local, mu);
-}
-
-/** Agrega al mapa en memoria y persiste en el índice (best-effort). */
-function cache(
-  byPub: Map<string, IndexedEdition>,
-  e: IndexedEdition & { title: string },
-): void {
-  byPub.set(e.publisher, e);
-  void upsertPublisherEdition(e).catch(() => {});
 }
 
 /** Conveniencia (scripts/seed): combina core + ediciones. */
