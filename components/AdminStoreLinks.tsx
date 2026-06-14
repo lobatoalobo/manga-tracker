@@ -6,6 +6,7 @@ import {
   setCrumbQueryAction,
   setEditionUrlAction,
   addSeriesEditionAction,
+  unlinkEditionAction,
 } from "@/app/actions";
 import { crumbSearch } from "@/lib/crumb";
 
@@ -116,9 +117,31 @@ export default function AdminStoreLinks({
       {/* Links de cada edición */}
       {editions.map((ed) => (
         <div key={ed.id} className="mt-4">
-          <label className="block text-xs text-muted">
-            Link · {ed.publisher}
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="block text-xs text-muted">
+              Link · {ed.publisher}
+            </label>
+            <button
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    `¿Desvincular ${ed.publisher} de esta serie? Se borra su edición y deja de aparecer acá (no volverá a engancharse por título).`,
+                  )
+                )
+                  return;
+                save(
+                  () => unlinkEditionAction(anilistId, ed.publisher).then(() => {
+                    router.refresh();
+                  }),
+                  `${ed.publisher} desvinculada`,
+                );
+              }}
+              disabled={pending}
+              className="shrink-0 text-xs text-red-400 hover:text-red-300 hover:underline disabled:opacity-50"
+            >
+              Desvincular ✕
+            </button>
+          </div>
           <div className="mt-1 flex gap-2">
             <input
               value={urls[ed.id] ?? ""}

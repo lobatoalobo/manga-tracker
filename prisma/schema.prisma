@@ -359,6 +359,15 @@ model PublisherEdition {
   @@index([normTitle])
 }
 
+// "Esta editorial NO va en esta serie": para desvincular ediciones que la
+// resolución en vivo engancha mal por título (p. ej. ids duplicados de AniList).
+model EditionExclusion {
+  anilistId Int
+  publisher String
+
+  @@id([anilistId, publisher])
+}
+
 // Override manual del término de búsqueda de "Comprar en Crumb" por serie,
 // para cuando el título automático no encuentra el producto en Crumb.
 model CrumbMapping {

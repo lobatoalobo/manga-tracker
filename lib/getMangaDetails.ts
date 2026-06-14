@@ -142,12 +142,16 @@ async function resolveEditionsLive(
 
   // 1) Ediciones nacionales desde el MAPEO VERIFICADO (anilistId), no por
   //    título: así no se mezclan obras homónimas y es consistente con el badge.
-  const mappedRows = await prisma.publisherEdition.findMany({
-    where: { anilistId: anilist.id },
-  });
+  const [mappedRows, exclusionRows] = await Promise.all([
+    prisma.publisherEdition.findMany({ where: { anilistId: anilist.id } }),
+    prisma.editionExclusion.findMany({ where: { anilistId: anilist.id } }),
+  ]);
+  // Editoriales desvinculadas a mano de esta serie: ni se muestran ni se
+  // re-enganchan en vivo (p. ej. ids duplicados de AniList con mismo título).
+  const excluded = new Set(exclusionRows.map((e) => e.publisher));
   // Puede haber varias ediciones por editorial (regular + deluxe/kanzenban).
   const all: IndexedEdition[] = mappedRows
-    .filter((e) => e.volumes > 0)
+    .filter((e) => e.volumes > 0 && !excluded.has(e.publisher))
     .map((e) => ({
       publisher: e.publisher,
       slug: e.slug,
@@ -167,7 +171,7 @@ async function resolveEditionsLive(
   // 2) Fallback en vivo (verificado por autor) para editoriales SIN mapeo + MU.
   const tasks: Promise<void>[] = [];
 
-  if (!mappedPubs.has("Ivrea Argentina")) {
+  if (!mappedPubs.has("Ivrea Argentina") && !excluded.has("Ivrea Argentina")) {
     tasks.push(
       getIvreaEdition(titles, knownSlug, authors)
         .then((d) => {
@@ -186,7 +190,7 @@ async function resolveEditionsLive(
   }
   // Panini no expone el autor en su tienda (ni en atributos ni en JSON-LD),
   // así que su match queda solo por título: no se puede verificar por autor.
-  if (!mappedPubs.has("Panini Argentina")) {
+  if (!mappedPubs.has("Panini Argentina") && !excluded.has("Panini Argentina")) {
     tasks.push(
       getPaniniEdition(titles)
         .then((d) => {
@@ -203,7 +207,7 @@ async function resolveEditionsLive(
         .catch(() => {}),
     );
   }
-  if (!mappedPubs.has("Ovni Press")) {
+  if (!mappedPubs.has("Ovni Press") && !excluded.has("Ovni Press")) {
     tasks.push(
       getOvniEdition(titles, authors)
         .then((d) => {
