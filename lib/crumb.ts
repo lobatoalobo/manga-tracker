@@ -1,10 +1,12 @@
 export const CRUMB_URL = "https://www.crumb.com.ar";
 
-/** Link de búsqueda filtrada en el catálogo de Crumb. */
+/** Link de búsqueda filtrada en el catálogo de Crumb (sin tildes: matchea mejor). */
 export function crumbSearch(title: string): string {
-  return `${CRUMB_URL}/productos/?filter=${encodeURIComponent(
-    title.trim(),
-  )}&order=0&view=1`;
+  const q = title
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // saca tildes/diacríticos
+    .trim();
+  return `${CRUMB_URL}/productos/?filter=${encodeURIComponent(q)}&order=0&view=1`;
 }
 
 /** Categorías de manga por editorial en Crumb. */

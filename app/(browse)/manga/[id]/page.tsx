@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { getSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
@@ -33,8 +34,11 @@ export default async function Page({
   const { id } = await params;
   const mangaId = Number(id);
 
-  const [anilist, series, wished, note, reviews] = await Promise.all([
-    getMangaCore(mangaId),
+  // Si el id no existe en AniList (mapeo viejo/roto), 404 en vez de 500.
+  const anilist = await getMangaCore(mangaId).catch(() => null);
+  if (!anilist) notFound();
+
+  const [series, wished, note, reviews] = await Promise.all([
     userId ? getSeries(userId, mangaId) : Promise.resolve(null),
     userId ? isWished(userId, mangaId) : Promise.resolve(false),
     userId ? getNote(userId, mangaId) : Promise.resolve(null),

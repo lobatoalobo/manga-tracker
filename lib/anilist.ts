@@ -176,6 +176,62 @@ export async function searchMangaList(
   return [];
 }
 
+export interface SearchPage {
+  media: any[];
+  pageInfo: {
+    total: number;
+    currentPage: number;
+    lastPage: number;
+    hasNextPage: boolean;
+  };
+}
+
+/** Búsqueda paginada (para el home): 30 por página + total de resultados. */
+export async function searchMangaPage(
+  search: string,
+  includeAdult = true,
+  page = 1,
+): Promise<SearchPage> {
+  const query = `
+    query ($search: String, $page: Int) {
+      Page(page: $page, perPage: 30) {
+        pageInfo { total currentPage lastPage hasNextPage }
+        media(search: $search, type: MANGA${includeAdult ? "" : ", isAdult: false"}) {
+          id
+          title { romaji english native }
+          coverImage { large }
+          staff(perPage: 1, sort: RELEVANCE) { nodes { name { full } } }
+          status
+          isAdult
+        }
+      }
+    }
+  `;
+  const body = JSON.stringify({ query, variables: { search, page } });
+  const empty: SearchPage = {
+    media: [],
+    pageInfo: { total: 0, currentPage: page, lastPage: page, hasNextPage: false },
+  };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch("https://graphql.anilist.co", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    }).catch(() => null);
+    if (!res) return empty;
+    if (res.status === 429 && attempt < 2) {
+      const ra = Number(res.headers.get("retry-after")) || 2;
+      await new Promise((r) => setTimeout(r, (ra + 1) * 1000));
+      continue;
+    }
+    const json = await res.json().catch(() => null);
+    const Page = json?.data?.Page;
+    if (!Page) return empty;
+    return { media: Page.media ?? [], pageInfo: Page.pageInfo ?? empty.pageInfo };
+  }
+  return empty;
+}
+
 /**
  * Top de mangas "hot" del momento (trending de AniList).
  * Cacheado 1 semana: se refresca solo, sin cron.

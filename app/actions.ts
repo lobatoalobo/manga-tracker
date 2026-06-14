@@ -296,13 +296,31 @@ export async function deleteIndieWorkAction(id: number) {
 
 // --- Curación de mapeos editorial ↔ serie ---
 
+// Invalida la caché de ediciones de las series afectadas, para que el cambio de
+// mapeo se vea en la ficha (si no, la card sigue saliendo desde la caché).
+async function flushEditionCaches(
+  ...ids: (number | null | undefined)[]
+) {
+  for (const id of new Set(ids)) if (id) await invalidateEditionsCache(id);
+}
+
+async function editionAnilistId(id: number): Promise<number | null> {
+  const row = await prisma.publisherEdition.findUnique({
+    where: { id },
+    select: { anilistId: true },
+  });
+  return row?.anilistId ?? null;
+}
+
 /** Setea (o limpia con null) el anilistId de una edición del catálogo. */
 export async function setEditionMappingAction(
   id: number,
   anilistId: number | null,
 ) {
   await assertAdmin();
+  const old = await editionAnilistId(id);
   await setEditionAnilistId(id, anilistId);
+  await flushEditionCaches(old, anilistId);
   revalidatePath("/admin/mapeos");
 }
 
@@ -311,11 +329,12 @@ export async function resolveEditionMappingAction(id: number) {
   await assertAdmin();
   const row = await prisma.publisherEdition.findUnique({
     where: { id },
-    select: { publisher: true, slug: true, title: true },
+    select: { publisher: true, slug: true, title: true, anilistId: true },
   });
   if (row) {
     const anilistId = await resolveEditionSeries(row).catch(() => null);
     await setEditionAnilistId(id, anilistId);
+    await flushEditionCaches(row.anilistId, anilistId);
   }
   revalidatePath("/admin/mapeos");
 }
@@ -326,14 +345,18 @@ export async function updateEditionAction(
   data: { title?: string; url?: string; volumes?: number; anilistId?: number | null },
 ) {
   await assertAdmin();
+  const old = await editionAnilistId(id);
   await updatePublisherEditionFields(id, data);
+  await flushEditionCaches(old, data.anilistId);
   revalidatePath("/admin/mapeos");
 }
 
 /** Borra una entrada del catálogo (p. ej. una entrada fantasma de Panini). */
 export async function deleteEditionAction(id: number) {
   await assertAdmin();
+  const old = await editionAnilistId(id);
   await deletePublisherEdition(id);
+  await flushEditionCaches(old);
   revalidatePath("/admin/mapeos");
 }
 
