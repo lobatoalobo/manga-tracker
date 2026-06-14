@@ -20,7 +20,7 @@ const MODES: { key: Tab; label: string }[] = [
  * abrir una serie). El buscador filtra la sección actual (mangakas/editoriales)
  * al instante, o busca en AniList en Hot/A-Z y en la ficha.
  */
-export default function DiscoveryBar() {
+export default function DiscoveryBar({ loggedIn }: { loggedIn: boolean }) {
   const browse = useBrowse();
   const router = useRouter();
   const pathname = usePathname();
@@ -28,7 +28,9 @@ export default function DiscoveryBar() {
 
   const onHome = pathname === "/";
   const search = params.get("search") ?? "";
-  const tab = (params.get("tab") as Tab) || "hot";
+  // Logueado y sin pestaña = dashboard (no resaltamos ningún modo); anónimo
+  // arranca en Hot.
+  const tab = (params.get("tab") as Tab | null) ?? (loggedIn ? null : "hot");
   const ed = params.get("ed") ?? EDITORIALS[0].slug;
 
   const filterMode =
