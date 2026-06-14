@@ -229,15 +229,27 @@ export async function getTrendingManga(includeAdult = true) {
     }
   `;
 
-  const response = await fetch("https://graphql.anilist.co", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query }),
-    next: { revalidate: 60 * 60 * 24 * 7 }, // 1 semana
-  });
+  // Resiliente: reintenta ante 429 y nunca tira (peor caso, lista vacía) para
+  // no romper el home si AniList falla.
+  const body = JSON.stringify({ query });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const response = await fetch("https://graphql.anilist.co", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      next: { revalidate: 60 * 60 * 24 * 7 }, // 1 semana
+    }).catch(() => null);
 
-  const json = await response.json();
-  return json.data.Page.media;
+    if (!response) return [];
+    if (response.status === 429 && attempt < 2) {
+      const retryAfter = Number(response.headers.get("retry-after")) || 2;
+      await new Promise((r) => setTimeout(r, (retryAfter + 1) * 1000));
+      continue;
+    }
+    const json = await response.json().catch(() => null);
+    return json?.data?.Page?.media ?? [];
+  }
+  return [];
 }
 
 /** Obras (manga) de un autor/staff. */

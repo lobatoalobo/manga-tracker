@@ -88,7 +88,9 @@ export default async function Home({
     mangas = await getTrendingManga(admin);
   }
 
-  const nationalEditions = await nationalEditionsByManga(mangas);
+  const nationalEditions = await nationalEditionsByManga(mangas).catch(
+    () => new Map<number, string[]>(),
+  );
 
   return (
     <main className="mx-auto max-w-6xl px-5 pb-12 pt-5">
