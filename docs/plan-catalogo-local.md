@@ -1,7 +1,7 @@
 # Plan: catálogo propio (dejar de depender de AniList en runtime)
 
-> Estado: **propuesta** (no implementado). Documento de diseño para discutir y
-> ejecutar por fases. Nada de esto toca prod hasta acordarlo.
+> Estado: **decisiones tomadas, sin implementar**. Documento de diseño / spec
+> viva. Se ejecuta por fases; nada toca prod hasta acordar cada fase.
 
 ## Objetivo y principio
 
@@ -42,7 +42,6 @@ model Work {
   altTitles   String[] // otros títulos (romaji, inglés, japonés…) para matching/búsqueda
   coverImage  String?
   synopsis    String?
-  authors     String[] // autores (nombres); índice de mangaka deriva de acá
   genres      String[]
   status      String?  // RELEASING | FINISHED | …
   totalVolumes Int?    // referencia (obra completa)
@@ -53,7 +52,27 @@ model Work {
   updatedAt   DateTime @updatedAt
 
   editions Edition[]
+  authors  WorkAuthor[]
   @@index([normTitle])
+}
+
+// Autor local (reemplaza la tabla Mangaka). El índice alfabético sale de acá.
+model Author {
+  id            Int      @id @default(autoincrement())
+  name          String
+  normName      String
+  anilistStaffId Int?    @unique // referencia opcional: redirige /autor/[staffId] viejos
+  works         WorkAuthor[]
+  @@index([normName])
+}
+
+model WorkAuthor {
+  workId   Int
+  authorId Int
+  role     String? // autor | guion | dibujo | …
+  work     Work   @relation(fields: [workId], references: [id], onDelete: Cascade)
+  author   Author @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  @@id([workId, authorId])
 }
 
 model Edition {
@@ -67,18 +86,16 @@ model Edition {
   volumes   Int
   status    String?
   url       String?
-  // ISBN como llave fuerte (ver fase 1). Para matching y dedup confiable.
-  isbn      String? // ISBN del tomo 1 / representativo de la edición
   source    String  @default("manual") // crawl:ivrea | whakoom | manual | user
   notifiedVolumes Int @default(0)
   updatedAt DateTime @updatedAt
 
-  volumesList Volume[] // opcional (fase posterior), per-tomo + ISBN
+  volumesList Volume[] // per-tomo + ISBN (incluido desde el arranque, decisión 2)
   @@index([workId])
-  @@index([isbn])
 }
 
-// Opcional, fase posterior: tomo individual con su ISBN (Whakoom los tiene).
+// Tomo individual con su ISBN (Whakoom los tiene). El ISBN por tomo es la llave
+// fuerte para matching/dedup (mejor que el título). Incluido desde fase 1.
 model Volume {
   id        Int    @id @default(autoincrement())
   editionId Int
@@ -87,6 +104,7 @@ model Volume {
   isbn      String?
   coverImage String?
   @@unique([editionId, number])
+  @@index([isbn])
 }
 ```
 
@@ -104,12 +122,14 @@ Re-keyear todo esto a `workId` es **la parte cara y riesgosa**, no el scraping.
 
 ## Fases
 
-### Fase 1 — ISBN como llave de primer nivel (independiente, hacer ya)
-- Agregar `isbn` a `PublisherEdition` (y poblarlo desde el import de Whakoom, que
-  ya trae ISBN).
+### Fase 1 — ISBN + tomo individual como llave de primer nivel (hacer ya)
+- Agregar tomos individuales con `isbn` (modelo `Volume`, decisión 2 = ahora) y
+  poblarlos desde el import de Whakoom, que ya trae ISBN por tomo.
 - Usar ISBN como criterio de match/dedup donde esté disponible (antes que título).
 - **Ganancia inmediata** bajo el modelo actual: arregla homónimos/duplicados/
   deluxe sin tocar identidad. **Bajo riesgo.** No bloquea las fases siguientes.
+- (Sobre el modelo actual `PublisherEdition`, se le agrega la relación a `Volume`;
+  al migrar a `Edition` en fase 2 los tomos se reapuntan por `editionId`.)
 
 ### Fase 2 — Crear `Work` y poblarlo (sin re-keyear usuarios todavía)
 - Migración: crear `Work`. Backfill: una `Work` por cada `anilistId` distinto que
@@ -120,20 +140,30 @@ Re-keyear todo esto a `workId` es **la parte cara y riesgosa**, no el scraping.
 - `PublisherEdition.workId` backfilleado por su `anilistId`.
 
 ### Fase 3 — Mover el read-path a la DB local
-- `/manga/[id]` (detalle), búsqueda, browse, A-Z, trending y `/autor/[id]` leen de
-  `Work`/`Edition` locales, **no de AniList**.
+- `/manga/[id]` (detalle), búsqueda, browse, A-Z y trending leen de `Work`/
+  `Edition` locales, **no de AniList**.
+- `/autor/[id]` pasa a `Author` local (decisión 4); `Mangaka` se reemplaza por
+  `Author`. Se conserva `anilistStaffId` para redirigir los links viejos.
 - Se elimina `resolveEditions`/`EditionsCache`/`EditionExclusion` (ya no hay
   matching en vivo: las ediciones cuelgan del work).
-- Búsqueda: full-text local sobre `Work.normTitle` + `altTitles`. El catálogo será
-  más chico que el global de AniList (solo lo publicado en AR + lo que sembramos)
-  — coherente para un tracker de colecciones argentinas. Si querés descubrir algo
-  que no salió acá, queda un camino opcional "buscar en AniList para sembrar".
+- Búsqueda: full-text local sobre `Work.normTitle` + `altTitles`. El universo es
+  "AR-publicado + sembrado + agregado a mano" (decisión 1) — coherente para un
+  tracker de colecciones argentinas.
+- **"Agregar serie" on-demand** (decisión 1): camino para snapshotear desde
+  Whakoom (o AniList) a un `Work` local cuando alguien quiere trackear algo que
+  todavía no está. Una vez agregado vive en la DB → runtime sigue solo-local.
 
-### Fase 4 — Seed masivo desde Whakoom + crawls
-- Import masivo de Whakoom → `Work` + `Edition` (+ `Volume`/ISBN si activamos).
-- Crawls semanales por editorial (Ivrea/Panini/Ovni) que actualizan `Edition` y
-  disparan "tomo nuevo" (ya tenemos la infra de `notifiedVolumes`).
-- Entradas manuales (admin + reporte de usuarios) para huecos.
+### Fase 4 — Seed masivo (bulk controlado) + crawls
+Decisión 3 = **bulk, pero throttled y resumable** (no martillar). Orden:
+- **Seed primario desde los catálogos de editoriales** (Ivrea/Panini/Ovni), que
+  *es* la definición del universo "AR-publicado". Ya los crawleamos.
+- **Pasada de enriquecimiento con Whakoom**: ISBN + portadas por tomo (`Volume`),
+  y obras que el crawl listó mal o le faltan.
+- Implementado como **job batch con cursor en `AppState`** (mismo patrón que el
+  scan de mangakas): corta/retoma, ritmo educado, sin reventar a Whakoom.
+- Mantenimiento posterior: **crawls semanales** (actualizan `Edition`/`Volume` y
+  disparan "tomo nuevo" vía `notifiedVolumes`) + agregar on-demand + correcciones
+  de usuarios/admin.
 
 ### Fase 5 — Re-keyear datos de usuario a `workId` (la cara)
 - `Manga`, `TrackedEdition`, `UserNote`, `WishlistItem`, `PurchaseItem`,
@@ -148,20 +178,22 @@ Re-keyear todo esto a `workId` es **la parte cara y riesgosa**, no el scraping.
 - Las llamadas a AniList quedan solo en jobs offline de enriquecimiento (opcional)
   y en el camino "sembrar nueva serie". Cero AniList en runtime.
 
-## Decisiones abiertas (necesito tu input)
+## Decisiones tomadas
 
-1. **Alcance de búsqueda/descubrimiento:** ¿el universo es "solo lo publicado en
-   AR + lo sembrado", o querés mantener un "buscar en AniList para agregar" para
-   series que todavía no salieron acá? (Define cuánto seed inicial hace falta.)
-2. **Per-tomo (`Volume`) con ISBN ahora o después?** Whakoom los tiene; suma
-   precisión (portada por tomo, tracking fino) pero es más modelo y más import.
-3. **Whakoom seed: ¿bulk de entrada o incremental?** ¿Importamos todo el catálogo
-   AR de Whakoom de una, o vamos serie por serie a demanda?
-4. **`/autor/[id]`:** ¿autor por nombre local, o mantenemos ids de staff de AniList
-   como referencia del autor?
+1. **Alcance del catálogo:** universo = obras AR-publicadas + sembradas +
+   agregadas a mano. Se mantiene **"agregar serie" on-demand** (snapshot desde
+   Whakoom/AniList a un `Work` local) para lo que todavía no está; una vez
+   agregado vive en la DB y runtime sigue solo-local.
+2. **Tomo individual con ISBN:** **sí, desde el arranque** (modelo `Volume`).
+3. **Seed:** **bulk controlado** — primario desde catálogos de editoriales (=
+   universo AR), pasada de enriquecimiento con Whakoom, todo como job batch
+   throttled/resumable con cursor en `AppState`. Mantenimiento por crawl semanal.
+4. **Autores:** **entidad `Author` local** (reemplaza `Mangaka`), con
+   `anilistStaffId` opcional para redirigir links viejos.
 
 ## Recomendación de arranque
 
-Hacer **Fase 1 (ISBN) ya** —vale la pena con el modelo actual y no compromete
-nada— y en paralelo cerrar las decisiones abiertas para encarar Fase 2–3. La
-Fase 5 (re-key) se planifica aparte y con cuidado: es la única irreversible-ish.
+Empezar por **Fase 1 (tomos + ISBN)** —vale con el modelo actual y no compromete
+nada— y seguir con Fase 2–3. La Fase 5 (re-key de datos de usuario) se planifica
+aparte y con cuidado: es la única irreversible-ish; se hace conservando la columna
+`anilistId` vieja para poder revertir.
