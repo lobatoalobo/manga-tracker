@@ -1,11 +1,18 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { setCrumbQueryAction, setEditionUrlAction } from "@/app/actions";
+import { useRouter } from "next/navigation";
+import {
+  setCrumbQueryAction,
+  setEditionUrlAction,
+  addSeriesEditionAction,
+} from "@/app/actions";
 import { crumbSearch } from "@/lib/crumb";
 
 const input =
   "w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent";
+
+const PUBLISHERS = ["Ivrea Argentina", "Panini Argentina", "Ovni Press"];
 
 export interface EditionLinkRow {
   id: number;
@@ -20,13 +27,18 @@ export interface EditionLinkRow {
  */
 export default function AdminStoreLinks({
   anilistId,
+  seriesTitle,
   crumbInitial,
   editions,
+  defaultVolumes = 0,
 }: {
   anilistId: number;
+  seriesTitle: string;
   crumbInitial: string;
   editions: EditionLinkRow[];
+  defaultVolumes?: number;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [crumb, setCrumb] = useState(crumbInitial);
   const [urls, setUrls] = useState<Record<number, string>>(
@@ -34,6 +46,11 @@ export default function AdminStoreLinks({
   );
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
+
+  // Form para agregar una edición que el catálogo no trajo.
+  const [addPub, setAddPub] = useState(PUBLISHERS[0]);
+  const [addUrl, setAddUrl] = useState("");
+  const [addVol, setAddVol] = useState(defaultVolumes ? String(defaultVolumes) : "");
 
   const save = (fn: () => Promise<void>, msg: string) =>
     start(async () => {
@@ -135,6 +152,64 @@ export default function AdminStoreLinks({
           )}
         </div>
       ))}
+
+      {/* Agregar una edición que el catálogo no trajo (mapea directo a la serie). */}
+      <div className="mt-4 border-t border-border pt-3">
+        <p className="mb-1 text-xs text-muted">
+          Agregar edición {editions.length === 0 ? "(no hay ninguna mapeada)" : ""}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={addPub}
+            onChange={(e) => setAddPub(e.target.value)}
+            className={`${input} w-auto`}
+          >
+            {PUBLISHERS.map((p) => (
+              <option key={p} value={p}>
+                {p.replace(" Argentina", "")}
+              </option>
+            ))}
+          </select>
+          <input
+            value={addVol}
+            onChange={(e) => setAddVol(e.target.value)}
+            type="number"
+            min={0}
+            placeholder="Tomos"
+            className={`${input} w-20`}
+          />
+          <input
+            value={addUrl}
+            onChange={(e) => setAddUrl(e.target.value)}
+            placeholder="URL de la editorial"
+            className={`${input} min-w-40 flex-1`}
+          />
+          <button
+            onClick={() =>
+              start(async () => {
+                const r = await addSeriesEditionAction(
+                  anilistId,
+                  seriesTitle,
+                  addPub,
+                  addUrl,
+                  Number(addVol),
+                );
+                if (r.ok) {
+                  setSavedMsg(`${addPub} agregada`);
+                  setAddUrl("");
+                  router.refresh();
+                } else {
+                  setSavedMsg(r.error ?? "Error");
+                }
+              })
+            }
+            disabled={pending}
+            className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+          >
+            Agregar
+          </button>
+        </div>
+      </div>
 
       {savedMsg && <p className="mt-3 text-xs text-emerald-400">✓ {savedMsg}</p>}
     </div>

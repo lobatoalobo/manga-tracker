@@ -33,6 +33,9 @@ import {
   updatePublisherEditionFields,
   deletePublisherEdition,
   setEditionNationalOnly,
+  upsertPublisherEdition,
+  slugifyTitle,
+  EDITORIALS,
 } from "@/lib/catalog";
 import { resolveEditionSeries } from "@/lib/resolveSeries";
 import { isAdmin } from "@/lib/admin";
@@ -390,6 +393,39 @@ export async function setCrumbQueryAction(anilistId: number, query: string) {
   await assertAdmin();
   await setCrumbQuery(anilistId, query);
   revalidatePath(`/manga/${anilistId}`);
+}
+
+/**
+ * Admin: agrega (o actualiza) una edición de editorial para esta serie, mapeada
+ * directo al anilistId. Para resolver a mano series que no trae el catálogo.
+ */
+export async function addSeriesEditionAction(
+  anilistId: number,
+  title: string,
+  publisher: string,
+  url: string,
+  volumes: number,
+) {
+  await assertAdmin();
+  if (!EDITORIALS.some((e) => e.publisher === publisher))
+    return { ok: false as const, error: "Editorial inválida." };
+  const slug = slugifyTitle(title);
+  await upsertPublisherEdition({
+    publisher,
+    slug,
+    title,
+    volumes: Number.isFinite(volumes) && volumes > 0 ? volumes : 0,
+    status: "EN CATÁLOGO",
+    url: url.trim(),
+  });
+  await prisma.publisherEdition.updateMany({
+    where: { publisher, slug },
+    data: { anilistId },
+  });
+  await invalidateEditionsCache(anilistId);
+  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath("/admin/mapeos");
+  return { ok: true as const };
 }
 
 /** Admin: corrige el link de tienda de una edición (cualquier editorial). */
