@@ -477,6 +477,37 @@ export async function setEditionUrlAction(
   revalidatePath(`/manga/${anilistId}`);
 }
 
+/**
+ * Admin: desvincula una editorial de esta serie. Borra sus ediciones mapeadas y
+ * la deja en una lista de exclusión, para que la resolución en vivo NO la vuelva
+ * a enganchar por título (caso típico: ids duplicados de AniList con mismo
+ * nombre, donde la card aparece en la serie equivocada).
+ */
+export async function unlinkEditionAction(anilistId: number, publisher: string) {
+  await assertAdmin();
+  await prisma.editionExclusion.upsert({
+    where: { anilistId_publisher: { anilistId, publisher } },
+    update: {},
+    create: { anilistId, publisher },
+  });
+  await prisma.publisherEdition.deleteMany({ where: { anilistId, publisher } });
+  await invalidateEditionsCache(anilistId);
+  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath("/admin/mapeos");
+  return { ok: true as const };
+}
+
+/** Admin: deshace una desvinculación (vuelve a permitir esa editorial). */
+export async function relinkEditionAction(anilistId: number, publisher: string) {
+  await assertAdmin();
+  await prisma.editionExclusion
+    .delete({ where: { anilistId_publisher: { anilistId, publisher } } })
+    .catch(() => {});
+  await invalidateEditionsCache(anilistId);
+  revalidatePath(`/manga/${anilistId}`);
+  return { ok: true as const };
+}
+
 // --- Compras ---
 
 export interface AddPurchaseInput {
