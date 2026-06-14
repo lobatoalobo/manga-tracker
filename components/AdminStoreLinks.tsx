@@ -4,10 +4,10 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   setCrumbQueryAction,
-  setEditionUrlAction,
   addSeriesEditionAction,
   unlinkEditionAction,
   relinkEditionAction,
+  updateEditionAction,
 } from "@/app/actions";
 import { crumbSearch } from "@/lib/crumb";
 
@@ -19,6 +19,8 @@ const PUBLISHERS = ["Ivrea Argentina", "Panini Argentina", "Ovni Press"];
 export interface EditionLinkRow {
   id: number;
   publisher: string;
+  title: string;
+  volumes: number;
   url: string;
 }
 
@@ -47,6 +49,12 @@ export default function AdminStoreLinks({
   const [crumb, setCrumb] = useState(crumbInitial);
   const [urls, setUrls] = useState<Record<number, string>>(
     Object.fromEntries(editions.map((e) => [e.id, e.url])),
+  );
+  const [titles, setTitles] = useState<Record<number, string>>(
+    Object.fromEntries(editions.map((e) => [e.id, e.title])),
+  );
+  const [vols, setVols] = useState<Record<number, string>>(
+    Object.fromEntries(editions.map((e) => [e.id, String(e.volumes)])),
   );
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -117,13 +125,16 @@ export default function AdminStoreLinks({
         Probar búsqueda ↗
       </a>
 
-      {/* Links de cada edición */}
+      {/* Editor de cada edición existente: título, tomos y link. */}
       {editions.map((ed) => (
-        <div key={ed.id} className="mt-4">
+        <div
+          key={ed.id}
+          className="mt-4 rounded-lg border border-border bg-surface-2/40 p-3"
+        >
           <div className="flex items-center justify-between">
-            <label className="block text-xs text-muted">
-              Link · {ed.publisher}
-            </label>
+            <span className="text-xs font-medium text-foreground">
+              {ed.publisher}
+            </span>
             <button
               onClick={() => {
                 if (
@@ -145,7 +156,27 @@ export default function AdminStoreLinks({
               Desvincular ✕
             </button>
           </div>
-          <div className="mt-1 flex gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
+            <input
+              value={titles[ed.id] ?? ""}
+              onChange={(e) =>
+                setTitles((p) => ({ ...p, [ed.id]: e.target.value }))
+              }
+              placeholder="Título de la edición"
+              className={`${input} min-w-40 flex-1`}
+            />
+            <input
+              value={vols[ed.id] ?? ""}
+              onChange={(e) =>
+                setVols((p) => ({ ...p, [ed.id]: e.target.value }))
+              }
+              type="number"
+              min={0}
+              placeholder="Tomos"
+              className={`${input} w-20`}
+            />
+          </div>
+          <div className="mt-2 flex gap-2">
             <input
               value={urls[ed.id] ?? ""}
               onChange={(e) =>
@@ -157,8 +188,13 @@ export default function AdminStoreLinks({
             <button
               onClick={() =>
                 save(
-                  () => setEditionUrlAction(anilistId, ed.id, urls[ed.id] ?? ""),
-                  `${ed.publisher} guardado`,
+                  () =>
+                    updateEditionAction(ed.id, {
+                      title: (titles[ed.id] ?? "").trim() || ed.title,
+                      volumes: Number(vols[ed.id]),
+                      url: (urls[ed.id] ?? "").trim(),
+                    }).then(() => router.refresh()),
+                  `${ed.publisher} actualizada`,
                 )
               }
               disabled={pending}
