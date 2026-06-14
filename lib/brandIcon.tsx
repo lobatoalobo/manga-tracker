@@ -34,7 +34,7 @@ export function brandIcon(size: number) {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#ffffff",
+          background: "#0d0d12",
           overflow: "hidden",
         }}
       >
