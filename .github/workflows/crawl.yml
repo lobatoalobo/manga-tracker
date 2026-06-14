@@ -23,6 +23,10 @@ jobs:
   crawl:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    # A nivel job: lo necesita también el postinstall (prisma generate) durante
+    # `npm ci`, no solo el crawl. Sin esto, npm ci falla y nunca corre el job.
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,8 +36,6 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - name: Run job (${{ inputs.job }})
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           case "${{ inputs.job }}" in
             ivrea)          npm run crawl ivrea ;;
