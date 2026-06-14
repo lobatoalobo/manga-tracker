@@ -53,6 +53,7 @@ import {
   clearAllEditionsCache,
 } from "@/lib/getMangaDetails";
 import { dispatchCrawl } from "@/lib/github";
+import { importWhakoomUrl } from "@/lib/whakoomImport";
 import { runAdminTask } from "@/lib/adminTasks";
 import { setNotifPref, type NotifCategory } from "@/lib/notificationPrefs";
 import {
@@ -350,6 +351,18 @@ async function assertAdmin() {
 export async function runCrawlAction(job: string) {
   await assertAdmin();
   return dispatchCrawl(job);
+}
+
+/** Admin: importa una edición puntual desde una URL de Whakoom. */
+export async function importWhakoomUrlAction(url: string) {
+  await assertAdmin();
+  const res = await importWhakoomUrl(url.trim());
+  if (res.ok) {
+    revalidatePath("/admin/herramientas");
+    revalidatePath("/admin/mapeos");
+    if (res.anilistId) revalidatePath(`/manga/${res.anilistId}`);
+  }
+  return res;
 }
 
 /** Admin: corre una tarea de mantenimiento (dry-run = solo simula). */

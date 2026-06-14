@@ -4,6 +4,61 @@ import { upsertPublisherEdition, slugifyTitle } from "./catalog";
 import { ovniSearchUrl } from "./ovni";
 import { prisma } from "./prisma";
 
+export interface SingleImportResult {
+  ok: boolean;
+  error?: string;
+  title?: string;
+  publisher?: string;
+  anilistId?: number | null;
+  editionId?: number;
+}
+
+/**
+ * Importa UNA edición desde una URL de Whakoom (uso manual del admin). A
+ * diferencia del import masivo, guarda la edición **aunque no mapee** a AniList
+ * (queda "sin mapear" para curar en /admin/mapeos). Sirve para traer preventas
+ * y títulos en español que Whakoom tiene y nuestro crawl todavía no.
+ */
+export async function importWhakoomUrl(
+  url: string,
+): Promise<SingleImportResult> {
+  if (!/whakoom\.com\/ediciones\//i.test(url))
+    return { ok: false, error: "No parece una URL de edición de Whakoom." };
+
+  const ed = await getWhakoomEdition(url).catch(() => null);
+  if (!ed) return { ok: false, error: "No se pudo leer la página de Whakoom." };
+
+  const publisher = mapWhakoomPublisher(ed.publisher);
+  if (!publisher)
+    return { ok: false, error: `Editorial no soportada (${ed.publisher || "—"}).` };
+
+  const anilistId = await resolveByTitleAuthor(ed.title, ed.author).catch(
+    () => null,
+  );
+  const slug = slugifyTitle(ed.title);
+  const storeUrl = publisher === "Ovni Press" ? ovniSearchUrl(ed.title) : url;
+
+  await upsertPublisherEdition({
+    publisher,
+    slug,
+    title: ed.title,
+    volumes: ed.volumes,
+    status: "EN CATÁLOGO",
+    url: storeUrl,
+  });
+  if (anilistId)
+    await prisma.publisherEdition
+      .updateMany({ where: { publisher, slug }, data: { anilistId } })
+      .catch(() => {});
+
+  const row = await prisma.publisherEdition.findUnique({
+    where: { publisher_slug: { publisher, slug } },
+    select: { id: true },
+  });
+
+  return { ok: true, title: ed.title, publisher, anilistId, editionId: row?.id };
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**

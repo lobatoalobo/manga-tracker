@@ -11,9 +11,12 @@ import {
   nationalEditionsByManga,
   getEditorialAll,
   editorialCounts,
+  searchPublisherEditions,
   EDITORIALS,
   type EditorialWork,
+  type LocalCatalogHit,
 } from "@/lib/catalog";
+import { seriesHref } from "@/lib/url";
 import Pager from "@/components/Pager";
 import FinishedFilterButton from "@/components/FinishedFilterButton";
 import { MangakaList } from "@/components/MangakaBrowser";
@@ -59,16 +62,26 @@ export default async function Home({
     EDITORIALS.find((e) => e.slug === params.ed) ?? EDITORIALS[0];
 
   let mangas: any[] = [];
+  let localHits: LocalCatalogHit[] = [];
   let allMangakas: { id: number; name: string }[] = [];
   let editorialWorks: EditorialWork[] = [];
   let edCounts: Record<string, number> = {};
   let pageInfo: { lastPage: number } | null = null;
 
   if (query) {
-    const raw = await searchMangaList(query, loggedIn);
+    const [raw, local] = await Promise.all([
+      searchMangaList(query, loggedIn),
+      searchPublisherEditions(query).catch(() => [] as LocalCatalogHit[]),
+    ]);
     mangas = admin
       ? raw
       : raw.filter((m: any) => !m.isAdult || isExactTitleMatch(m.title, query));
+    // Catálogo local: lo que AniList no encuentra por título en español. Saca
+    // los que ya aparecen en los resultados de AniList.
+    const anilistIds = new Set(mangas.map((m: any) => m.id));
+    localHits = local.filter(
+      (h) => !(h.anilistId && anilistIds.has(h.anilistId)),
+    );
   } else if (tab === "mangaka") {
     try {
       allMangakas = await getAllMangakas();
@@ -105,7 +118,38 @@ export default async function Home({
           <h2 className="mb-4 text-lg font-semibold">
             Resultados para &quot;{query}&quot;
           </h2>
-          <MangaGrid mangas={mangas} nationalEditions={nationalEditions} />
+          {mangas.length === 0 && localHits.length === 0 ? (
+            <p className="text-sm text-muted">No encontramos resultados.</p>
+          ) : (
+            <MangaGrid mangas={mangas} nationalEditions={nationalEditions} />
+          )}
+
+          {localHits.length > 0 && (
+            <section className="mt-8">
+              <h3 className="mb-1 text-sm font-semibold">
+                📚 En editoriales argentinas
+              </h3>
+              <p className="mb-3 text-xs text-muted">
+                Ediciones del catálogo local que matchean tu búsqueda.
+              </p>
+              <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
+                {localHits.map((h) => (
+                  <li key={h.anilistId ? `a${h.anilistId}` : `e${h.id}`}>
+                    <Link
+                      href={h.anilistId ? seriesHref(h.anilistId) : `/nacional/${h.id}`}
+                      className="flex items-center justify-between gap-3 px-4 py-3 text-sm transition hover:bg-surface-2"
+                    >
+                      <span className="min-w-0 truncate">{h.title}</span>
+                      <span className="shrink-0 text-xs text-muted">
+                        {h.publisher.replace(" Argentina", "")}
+                        {!h.anilistId && " · 🇦🇷"}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </>
       ) : tab === "hot" ? (
         <MangaGrid mangas={mangas} nationalEditions={nationalEditions} />
