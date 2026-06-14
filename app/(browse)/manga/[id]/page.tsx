@@ -173,8 +173,10 @@ export default async function Page({
             <div className="mt-3">
               <AdminStoreLinks
                 anilistId={mangaId}
+                seriesTitle={title}
                 crumbInitial={adminStore.crumbInitial}
                 editions={adminStore.editions}
+                defaultVolumes={anilist.volumes ?? 0}
               />
             </div>
           )}
