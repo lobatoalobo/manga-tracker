@@ -471,6 +471,42 @@ export async function addSeriesEditionAction(
   return { ok: true as const };
 }
 
+/**
+ * Admin (panel de serie): edita UNA card de edición (título/tomos/URL) y refresca
+ * la ficha de forma fiable, invalidando la caché con el anilistId de la serie.
+ * Cada card es independiente: esto no toca al resto ni a la editorial.
+ */
+export async function updateSeriesEditionAction(
+  anilistId: number,
+  editionId: number,
+  data: { title?: string; url?: string; volumes?: number },
+) {
+  await assertAdmin();
+  await updatePublisherEditionFields(editionId, data);
+  await invalidateEditionsCache(anilistId);
+  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath("/admin/mapeos");
+  return { ok: true as const };
+}
+
+/**
+ * Admin (panel de serie): borra UNA card de edición y nada más. No excluye la
+ * editorial (para eso está "Desvincular editorial"): si era la única card
+ * auto-resoluble de esa editorial, puede volver a aparecer en un próximo update
+ * del catálogo, que es justamente el comportamiento esperado.
+ */
+export async function deleteSeriesEditionAction(
+  anilistId: number,
+  editionId: number,
+) {
+  await assertAdmin();
+  await deletePublisherEdition(editionId);
+  await invalidateEditionsCache(anilistId);
+  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath("/admin/mapeos");
+  return { ok: true as const };
+}
+
 /** Admin: corrige el link de tienda de una edición (cualquier editorial). */
 export async function setEditionUrlAction(
   anilistId: number,

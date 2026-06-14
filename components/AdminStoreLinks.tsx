@@ -7,7 +7,8 @@ import {
   addSeriesEditionAction,
   unlinkEditionAction,
   relinkEditionAction,
-  updateEditionAction,
+  updateSeriesEditionAction,
+  deleteSeriesEditionAction,
 } from "@/app/actions";
 import { crumbSearch } from "@/lib/crumb";
 
@@ -58,6 +59,9 @@ export default function AdminStoreLinks({
   );
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
+
+  // Editoriales que tienen al menos una card (para "Desvincular editorial").
+  const presentPublishers = [...new Set(editions.map((e) => e.publisher))];
 
   // Form para agregar una edición que el catálogo no trajo.
   const [addPub, setAddPub] = useState(PUBLISHERS[0]);
@@ -139,21 +143,22 @@ export default function AdminStoreLinks({
               onClick={() => {
                 if (
                   !window.confirm(
-                    `¿Desvincular ${ed.publisher} de esta serie? Se borra su edición y deja de aparecer acá (no volverá a engancharse por título).`,
+                    `¿Borrar esta card de ${ed.publisher}? Solo se borra esta edición; el resto y la editorial quedan intactos.`,
                   )
                 )
                   return;
                 save(
-                  () => unlinkEditionAction(anilistId, ed.publisher).then(() => {
-                    router.refresh();
-                  }),
-                  `${ed.publisher} desvinculada`,
+                  () =>
+                    deleteSeriesEditionAction(anilistId, ed.id).then(() => {
+                      router.refresh();
+                    }),
+                  `Card de ${ed.publisher} borrada`,
                 );
               }}
               disabled={pending}
               className="shrink-0 text-xs text-red-400 hover:text-red-300 hover:underline disabled:opacity-50"
             >
-              Desvincular ✕
+              Borrar ✕
             </button>
           </div>
           {excludedPublishers.includes(ed.publisher) && (
@@ -195,7 +200,7 @@ export default function AdminStoreLinks({
               onClick={() =>
                 save(
                   () =>
-                    updateEditionAction(ed.id, {
+                    updateSeriesEditionAction(anilistId, ed.id, {
                       title: (titles[ed.id] ?? "").trim() || ed.title,
                       volumes: Number(vols[ed.id]),
                       url: (urls[ed.id] ?? "").trim(),
@@ -221,6 +226,44 @@ export default function AdminStoreLinks({
           )}
         </div>
       ))}
+
+      {/* Desvincular editorial: nivel editorial, para que esta serie NO se vuelva
+          a relacionar con ella en futuros updates del catálogo. */}
+      {presentPublishers.length > 0 && (
+        <div className="mt-4 border-t border-border pt-3">
+          <p className="mb-1 text-xs text-muted">
+            Desvincular editorial — bloquea que esta serie se relacione con esa
+            editorial (borra todas sus cards). Para errores de catálogo, no para
+            sacar una card suelta.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {presentPublishers.map((p) => (
+              <button
+                key={p}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      `¿Desvincular ${p} de esta serie? Se borran TODAS sus cards y no se volverá a relacionar (podés deshacerlo con "Re-vincular").`,
+                    )
+                  )
+                    return;
+                  save(
+                    () =>
+                      unlinkEditionAction(anilistId, p).then(() => {
+                        router.refresh();
+                      }),
+                    `${p} desvinculada`,
+                  );
+                }}
+                disabled={pending}
+                className="rounded-full border border-red-500/30 px-3 py-1 text-xs text-red-400 transition hover:border-red-400 hover:text-red-300 disabled:opacity-50"
+              >
+                ⛔ Desvincular {p}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Editoriales desvinculadas: re-vincular (vuelve a permitir el matcheo). */}
       {excludedPublishers.length > 0 && (
