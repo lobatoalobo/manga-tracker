@@ -64,6 +64,17 @@ export async function getEditionsForSeries(
   }));
 }
 
+/** Editoriales desvinculadas a mano de la serie (para poder re-vincularlas). */
+export async function getExcludedPublishers(
+  anilistId: number,
+): Promise<string[]> {
+  const rows = await prisma.editionExclusion.findMany({
+    where: { anilistId },
+    select: { publisher: true },
+  });
+  return rows.map((r) => r.publisher);
+}
+
 /** Corrige el link de tienda de una edición (cualquier editorial). */
 export async function setEditionUrl(editionId: number, url: string) {
   await prisma.publisherEdition.updateMany({
