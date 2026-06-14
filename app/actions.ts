@@ -459,6 +459,12 @@ export async function addSeriesEditionAction(
     where: { publisher, slug },
     data: { anilistId },
   });
+  // Si esta editorial estaba desvinculada de la serie, agregarla a mano implica
+  // que ahora SÍ la querés: quitamos la exclusión (si no, la card no aparecería
+  // en las ediciones públicas aunque la agregues una y otra vez).
+  await prisma.editionExclusion
+    .deleteMany({ where: { anilistId, publisher } })
+    .catch(() => {});
   await invalidateEditionsCache(anilistId);
   revalidatePath(`/manga/${anilistId}`);
   revalidatePath("/admin/mapeos");
