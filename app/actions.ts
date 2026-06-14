@@ -433,18 +433,19 @@ export async function addSeriesEditionAction(
   if (!EDITORIALS.some((e) => e.publisher === publisher))
     return { ok: false as const, error: "Editorial inválida." };
 
-  // Slug a partir del título (así podés tener varias ediciones de la misma
-  // editorial+serie: "Battle Royale" y "Battle Royale Deluxe" → slugs distintos).
-  // Si el slug ya es de OTRA serie mapeada (títulos que normalizan igual, ej.
-  // Citrus/Citrus+), lo desambiguamos con el anilistId.
+  // Slug a partir del título. "Agregar" SIEMPRE crea una card nueva: si el slug
+  // ya existe (misma o distinta serie, ej. Battle Royale + Deluxe, o Citrus vs
+  // Citrus+), lo desambiguamos con un sufijo numérico hasta que sea único.
   const base = slugifyTitle(title);
   let slug = base;
-  const taken = await prisma.publisherEdition.findUnique({
-    where: { publisher_slug: { publisher, slug } },
-    select: { anilistId: true },
-  });
-  if (taken && taken.anilistId && taken.anilistId !== anilistId)
-    slug = `${base}-${anilistId}`;
+  for (let n = 2; ; n++) {
+    const taken = await prisma.publisherEdition.findUnique({
+      where: { publisher_slug: { publisher, slug } },
+      select: { id: true },
+    });
+    if (!taken) break;
+    slug = `${base}-${n}`;
+  }
 
   await upsertPublisherEdition({
     publisher,

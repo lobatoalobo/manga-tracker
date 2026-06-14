@@ -40,6 +40,7 @@ export interface SeriesEditionLink {
   id: number;
   publisher: string;
   title: string;
+  volumes: number;
   url: string; // link guardado (editable por admin)
 }
 
@@ -50,12 +51,13 @@ export async function getEditionsForSeries(
   const rows = await prisma.publisherEdition.findMany({
     where: { anilistId },
     orderBy: [{ publisher: "asc" }, { volumes: "desc" }],
-    select: { id: true, publisher: true, title: true, url: true },
+    select: { id: true, publisher: true, title: true, volumes: true, url: true },
   });
   return rows.map((r) => ({
     id: r.id,
     publisher: r.publisher,
     title: r.title,
+    volumes: r.volumes,
     // Para Ovni, si la URL no es de OvniPress, mostramos la búsqueda como base.
     url:
       r.publisher === "Ovni Press" && !isOvniUrl(r.url)
