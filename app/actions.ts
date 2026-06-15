@@ -561,7 +561,19 @@ export async function setWorkUpcomingAction(
   upcoming: boolean,
 ) {
   await assertAdmin();
-  await prisma.work.updateMany({ where: { anilistId }, data: { upcoming } });
+  // Vía edición→work (el work puede tener anilistId null aunque la edición no).
+  const eds = await prisma.publisherEdition.findMany({
+    where: { anilistId },
+    select: { workId: true },
+  });
+  const workIds = [
+    ...new Set(eds.map((e) => e.workId).filter((x): x is number => x != null)),
+  ];
+  if (workIds.length)
+    await prisma.work.updateMany({
+      where: { id: { in: workIds } },
+      data: { upcoming },
+    });
   await invalidateEditionsCache(anilistId);
   revalidatePath(`/manga/${anilistId}`);
   return { ok: true as const };
