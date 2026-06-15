@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateEditionAction, deleteEditionAction } from "@/app/actions";
+import {
+  updateEditionAction,
+  deleteEditionAction,
+  setCrumbQueryAction,
+} from "@/app/actions";
+import { crumbSearch } from "@/lib/crumb";
 
 const input =
   "w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent";
@@ -14,20 +19,25 @@ const input =
  */
 export default function AdminNacionalEdit({
   editionId,
+  pseudoId,
   title,
   volumes,
   url,
+  crumbInitial,
 }: {
   editionId: number;
+  pseudoId: number;
   title: string;
   volumes: number;
   url: string;
+  crumbInitial: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [t, setT] = useState(title);
   const [v, setV] = useState(String(volumes));
   const [u, setU] = useState(url);
+  const [crumb, setCrumb] = useState(crumbInitial);
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -74,6 +84,40 @@ export default function AdminNacionalEdit({
           URL de la ficha (de la editorial)
           <input value={u} onChange={(e) => setU(e.target.value)} className={`mt-1 ${input}`} />
         </label>
+        <div>
+          <label className="text-xs text-muted">
+            Búsqueda en Crumb
+            <input
+              value={crumb}
+              onChange={(e) => setCrumb(e.target.value)}
+              className={`mt-1 ${input}`}
+            />
+          </label>
+          <div className="mt-1 flex items-center gap-2">
+            <a
+              href={crumbSearch(crumb || " ")}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-accent hover:underline"
+            >
+              Probar búsqueda ↗
+            </a>
+            <button
+              onClick={() =>
+                start(async () => {
+                  await setCrumbQueryAction(pseudoId, crumb);
+                  setMsg("Crumb guardado");
+                  router.refresh();
+                  setTimeout(() => setMsg(null), 2000);
+                })
+              }
+              disabled={pending}
+              className="rounded-lg border border-accent px-2.5 py-1 text-xs text-accent transition hover:bg-accent hover:text-white disabled:opacity-50"
+            >
+              Guardar Crumb
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="mt-3 flex items-center gap-2">

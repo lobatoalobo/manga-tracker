@@ -11,6 +11,7 @@ import WishButton from "@/components/WishButton";
 import { SignIn } from "@/components/AuthButtons";
 import { isWished } from "@/lib/wishlist";
 import { crumbSearch } from "@/lib/crumb";
+import { getCrumbQuery } from "@/lib/storeLinks";
 import type { Edition } from "@/lib/editions";
 
 export const metadata = { title: "Edición nacional · Nakama" };
@@ -65,6 +66,8 @@ export default async function NacionalPage({
   const admin = isAdmin(session?.user?.email);
   const series = userId ? await getSeries(userId, pseudoId) : null;
   const wished = userId ? await isWished(userId, pseudoId) : false;
+  // Override del término de búsqueda de Crumb (admin), keyeado por el id local.
+  const crumbInitial = (await getCrumbQuery(pseudoId)) ?? title;
   const trackedKeys = series?.editions.map((e) => e.key) ?? [];
 
   const anilist = {
@@ -130,7 +133,7 @@ export default async function NacionalPage({
               <SignIn className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90" />
             )}
             <a
-              href={crumbSearch(title)}
+              href={crumbSearch(crumbInitial)}
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
@@ -151,9 +154,11 @@ export default async function NacionalPage({
           {admin && (
             <AdminNacionalEdit
               editionId={row.id}
+              pseudoId={pseudoId}
               title={row.title}
               volumes={row.volumes}
               url={row.url}
+              crumbInitial={crumbInitial}
             />
           )}
         </div>
