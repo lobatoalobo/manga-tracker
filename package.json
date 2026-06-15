@@ -21,6 +21,7 @@
     "split-homonyms": "tsx scripts/split-homonyms.ts",
     "fix-ivrea-urls": "tsx scripts/fix-ivrea-urls.ts",
     "fix-panini-urls": "tsx scripts/fix-panini-urls.ts",
+    "auto-map": "tsx scripts/auto-map.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
