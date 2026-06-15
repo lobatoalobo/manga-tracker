@@ -3,6 +3,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { getEditionMappings, EDITORIALS } from "@/lib/catalog";
+import { getMangaVolumes } from "@/lib/anilist";
 import MappingRow from "@/components/MappingRow";
 import Pager from "@/components/Pager";
 
@@ -35,6 +36,11 @@ export default async function AdminMapeosPage({
     q,
     page,
   });
+
+  // Total de tomos de AniList (referencia) para auditar conteos de esta página.
+  const anilistVolumes = await getMangaVolumes(
+    rows.flatMap((r) => (r.anilistId ? [r.anilistId] : [])),
+  ).catch(() => new Map<number, number>());
 
   const base =
     `/admin/mapeos?` +
@@ -110,7 +116,13 @@ export default async function AdminMapeosPage({
 
       <ul className="space-y-2">
         {rows.map((row) => (
-          <MappingRow key={row.id} row={row} />
+          <MappingRow
+            key={row.id}
+            row={row}
+            anilistVolumes={
+              row.anilistId ? anilistVolumes.get(row.anilistId) ?? null : null
+            }
+          />
         ))}
       </ul>
 

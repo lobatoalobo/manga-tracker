@@ -473,6 +473,38 @@ export async function getMangaCovers(
   return out;
 }
 
+/** Total de tomos en AniList (japonés/original) por id. Para auditar conteos. */
+export async function getMangaVolumes(
+  ids: number[],
+): Promise<Map<number, number>> {
+  const out = new Map<number, number>();
+  const unique = [...new Set(ids)].filter((n) => Number.isFinite(n));
+  if (unique.length === 0) return out;
+  const query = `
+    query ($ids: [Int]) {
+      Page(perPage: 50) {
+        media(id_in: $ids, type: MANGA) { id volumes }
+      }
+    }
+  `;
+  for (let i = 0; i < unique.length; i += 50) {
+    try {
+      const response = await fetch("https://graphql.anilist.co", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, variables: { ids: unique.slice(i, i + 50) } }),
+        next: { revalidate: 60 * 60 * 24 },
+      });
+      const json = await response.json();
+      for (const m of json?.data?.Page?.media ?? [])
+        if (typeof m.volumes === "number") out.set(m.id, m.volumes);
+    } catch {
+      /* best-effort */
+    }
+  }
+  return out;
+}
+
 export async function getMangaById(
   id: number,
 ) {
