@@ -343,6 +343,8 @@ model Work {
   title      String // título principal que mostramos
   normTitle  String // normalizado para agrupar ediciones y para búsqueda
   coverImage String?
+  author     String? // autor(es), editable; semilla de la ficha de la editorial
+  synopsis   String? // sinopsis, editable
   anilistId  Int?     @unique // referencia externa opcional (snapshot/enriquecimiento)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

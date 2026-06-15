@@ -47,10 +47,11 @@ export default async function NacionalPage({
       ? await getIvreaDataBySlug(ivreaSlug).catch(() => null)
       : null;
 
+  // Display: lo editado en el Work manda; la ficha de Ivrea es solo semilla.
   const title = row.work?.title || ficha?.title || row.title;
   const cover = row.work?.coverImage ?? ficha?.coverImage ?? null;
-  const author = ficha?.author ?? null;
-  const synopsis = ficha?.synopsis ?? null;
+  const author = row.work?.author ?? ficha?.author ?? null;
+  const synopsis = row.work?.synopsis ?? ficha?.synopsis ?? null;
   const volumes = row.volumes || ficha?.argentinaVolumes || 0;
   const status = row.status || ficha?.argentinaStatus || null;
   // El link guardado a veces es de Whakoom (fuente del import): lo etiquetamos
@@ -154,8 +155,12 @@ export default async function NacionalPage({
           {admin && (
             <AdminNacionalEdit
               editionId={row.id}
+              workId={row.workId}
               pseudoId={pseudoId}
-              title={row.title}
+              title={title}
+              author={author ?? ""}
+              synopsis={synopsis ?? ""}
+              coverImage={cover ?? ""}
               volumes={row.volumes}
               url={row.url}
               crumbInitial={crumbInitial}

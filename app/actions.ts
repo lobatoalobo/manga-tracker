@@ -35,6 +35,7 @@ import {
   setEditionNationalOnly,
   upsertPublisherEdition,
   slugifyTitle,
+  normalizeTitle,
   EDITORIALS,
 } from "@/lib/catalog";
 import { resolveEditionSeries } from "@/lib/resolveSeries";
@@ -504,6 +505,46 @@ export async function deleteSeriesEditionAction(
   await invalidateEditionsCache(anilistId);
   revalidatePath(`/manga/${anilistId}`);
   revalidatePath("/admin/mapeos");
+  return { ok: true as const };
+}
+
+/**
+ * Admin: edita los campos de display de una obra del catálogo local (título,
+ * autor, sinopsis, portada). Para "editar todo" desde /nacional sin depender de
+ * la ficha en vivo de la editorial. Si está mapeada, invalida su caché.
+ */
+export async function updateWorkAction(
+  workId: number,
+  data: {
+    title?: string;
+    author?: string | null;
+    synopsis?: string | null;
+    coverImage?: string | null;
+  },
+) {
+  await assertAdmin();
+  const patch: {
+    title?: string;
+    normTitle?: string;
+    author?: string | null;
+    synopsis?: string | null;
+    coverImage?: string | null;
+  } = {};
+  if (data.title !== undefined && data.title.trim()) {
+    patch.title = data.title.trim();
+    patch.normTitle = normalizeTitle(data.title);
+  }
+  if (data.author !== undefined) patch.author = data.author?.trim() || null;
+  if (data.synopsis !== undefined) patch.synopsis = data.synopsis?.trim() || null;
+  if (data.coverImage !== undefined)
+    patch.coverImage = data.coverImage?.trim() || null;
+
+  const work = await prisma.work.update({
+    where: { id: workId },
+    data: patch,
+    select: { anilistId: true },
+  });
+  if (work.anilistId) await invalidateEditionsCache(work.anilistId);
   return { ok: true as const };
 }
 
