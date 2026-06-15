@@ -1,81 +1,21 @@
 /**
- * Marca (y opcionalmente borra) ediciones que parecen CÓMIC occidental (Marvel/
- * DC/Image), no manga. Ovni y Panini publican ambos y el seed los trae mezclados.
+ * Marca/borra ediciones que parecen cómic occidental (Marvel/DC). Usa la misma
+ * lógica que la tarea admin (lib/curation).
  *
- *   npx tsx scripts/flag-comics.ts            # dry-run: lista los sospechosos
- *   npx tsx scripts/flag-comics.ts --apply    # borra los listados
- *
- * Heurística por TÍTULO (no infalible): revisá la lista del dry-run antes de
- * aplicar. Es una lista extensible; la afinamos cuando veamos los datos del seed.
- * No toca ediciones mapeadas a AniList (esas son manga casi seguro).
+ *   npx tsx scripts/flag-comics.ts            # dry-run
+ *   npx tsx scripts/flag-comics.ts --apply
  */
 import { prisma } from "../lib/prisma";
-
-// Franquicias / sellos de cómic occidental frecuentes en AR.
-const COMIC_TERMS = [
-  "marvel", "dc comics", "spider-man", "spiderman", "spider man", "batman",
-  "superman", "wonder woman", "mujer maravilla", "x-men", "x men", "wolverine",
-  "deadpool", "avengers", "vengadores", "justice league", "liga de la justicia",
-  "hulk", "thor", "iron man", "capitan america", "captain america", "the flash",
-  "green lantern", "linterna verde", "aquaman", "daredevil", "punisher",
-  "castigador", "venom", "carnage", "harley quinn", "teen titans",
-  "jovenes titanes", "suicide squad", "escuadron suicida", "watchmen", "sandman",
-  "hellboy", "walking dead", "star wars", "fantastic four", "4 fantasticos",
-  "cuatro fantasticos", "guardians of the galaxy", "guardianes de la galaxia",
-  "black panther", "pantera negra", "doctor strange", "ant-man", "black widow",
-  "moon knight", "ghost rider", "silver surfer", "miles morales", "absolute batman",
-  "dark knight", "gotham", "justice society", "green arrow", "shazam",
-  // Marvel/DC/Star Wars frecuentes en Panini (inequívocos, sin palabras genéricas):
-  "thanos", "black bolt", "blood hunt", "dark web", "devil's reign", "x-force",
-  "x-statix", "spider-gwen", "spider-verse", "gwen stacy", "black cat", "a.x.e",
-  "sabretooth", "gambit", "cyclops", "jean grey", "galactus", "doctor doom",
-  "red hood", "nightwing", "catwoman", "darkseid", "black adam", "namor",
-  "eternals", "inhumans", "she-hulk", "winter soldier", "luke cage", "iron fist",
-  "jessica jones", "kraven", "kingpin", "morbius", "america's got powers",
-  "camino a imperio", "anatomia de un metahumano", "star wars",
-];
-
-function looksLikeComic(title: string): string | null {
-  const t = title
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
-  for (const term of COMIC_TERMS) if (t.includes(term)) return term;
-  return null;
-}
+import { flagComics } from "../lib/curation";
 
 async function main() {
   const apply = process.argv.slice(2).some((a) => a === "--apply" || a === "apply");
-
-  const rows = await prisma.publisherEdition.findMany({
-    where: { anilistId: null }, // las mapeadas a AniList son manga casi seguro
-    select: { id: true, publisher: true, title: true, volumes: true },
-    orderBy: { publisher: "asc" },
-  });
-
-  const hits: { id: number; publisher: string; title: string; term: string }[] = [];
-  for (const r of rows) {
-    const term = looksLikeComic(r.title);
-    if (term) hits.push({ id: r.id, publisher: r.publisher, title: r.title, term });
-  }
-
-  for (const h of hits)
-    console.log(`· #${h.id} [${h.publisher}] "${h.title}"  (match: ${h.term})`);
-
-  console.log(`\n${hits.length} ediciones parecen cómic (de ${rows.length} sin mapear).`);
-
-  if (!apply) {
-    console.log("DRY-RUN: no se borró nada. Revisá la lista y corré --apply.");
-  } else if (hits.length) {
-    const r = await prisma.publisherEdition.deleteMany({
-      where: { id: { in: hits.map((h) => h.id) } },
-    });
-    const orphans = await prisma.work.deleteMany({
-      where: { editions: { none: {} } },
-    });
-    console.log(`Borradas ${r.count} ediciones + ${orphans.count} works huérfanos.`);
-  }
-
+  const r = await flagComics(!apply);
+  for (const s of r.samples) console.log("· " + s);
+  console.log(
+    `\n${r.changed} parecen cómic (de ${r.scanned} sin mapear)${apply ? " — borradas" : ""}${r.note ? ` · ${r.note}` : ""}`,
+  );
+  if (!apply) console.log("DRY-RUN: revisá y corré con --apply.");
   await prisma.$disconnect();
 }
 
