@@ -7,7 +7,10 @@ import { getIvreaDataBySlug } from "@/lib/providers/ivrea";
 import AddEditionButton from "@/components/AddEditionButton";
 import AdminNacionalEdit from "@/components/AdminNacionalEdit";
 import TrackingPanel from "@/components/TrackingPanel";
+import WishButton from "@/components/WishButton";
 import { SignIn } from "@/components/AuthButtons";
+import { isWished } from "@/lib/wishlist";
+import { crumbSearch } from "@/lib/crumb";
 import type { Edition } from "@/lib/editions";
 
 export const metadata = { title: "Edición nacional · Nakama" };
@@ -61,6 +64,7 @@ export default async function NacionalPage({
   const userId = session?.user?.id ?? null;
   const admin = isAdmin(session?.user?.email);
   const series = userId ? await getSeries(userId, pseudoId) : null;
+  const wished = userId ? await isWished(userId, pseudoId) : false;
   const trackedKeys = series?.editions.map((e) => e.key) ?? [];
 
   const anilist = {
@@ -107,16 +111,32 @@ export default async function NacionalPage({
             <Field label="Estado" value={status || "—"} />
           </dl>
 
-          <div className="mt-4 max-w-xs">
+          <div className="mt-4 flex max-w-md flex-wrap items-center gap-3">
             {userId ? (
-              <AddEditionButton
-                anilist={anilist}
-                edition={edition}
-                isTracked={trackedKeys.includes("ivrea")}
-              />
+              <>
+                <AddEditionButton
+                  anilist={anilist}
+                  edition={edition}
+                  isTracked={trackedKeys.includes("ivrea")}
+                />
+                <WishButton
+                  anilistId={pseudoId}
+                  title={title}
+                  coverImage={cover ?? ""}
+                  initialWished={wished}
+                />
+              </>
             ) : (
               <SignIn className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90" />
             )}
+            <a
+              href={crumbSearch(title)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
+            >
+              🛒 Comprar en Crumb
+            </a>
           </div>
 
           <a
