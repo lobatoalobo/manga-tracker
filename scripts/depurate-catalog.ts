@@ -16,6 +16,7 @@ import { prisma } from "../lib/prisma";
 interface Row {
   id: number;
   workId: number | null;
+  anilistId: number | null;
   publisher: string;
   title: string;
   volumes: number;
@@ -60,10 +61,10 @@ async function main() {
   const apply = process.argv.slice(2).some((a) => a === "--apply" || a === "apply");
 
   const rows: Row[] = await prisma.publisherEdition.findMany({
-    where: { workId: { not: null } },
     select: {
       id: true,
       workId: true,
+      anilistId: true,
       publisher: true,
       title: true,
       volumes: true,
@@ -71,10 +72,15 @@ async function main() {
     },
   });
 
-  // Agrupar por (obra, editorial).
+  // Agrupar por (serie, editorial). La "serie" es el anilistId si está (fuerte:
+  // junta ediciones del mismo anilistId aunque tengan distinto workId, p. ej.
+  // Battle Royale regular + deluxe), y si no, el workId. Sin ninguno, no agrupa.
   const groups = new Map<string, Row[]>();
   for (const r of rows) {
-    const key = `${r.workId}|${r.publisher}`;
+    const series =
+      r.anilistId != null ? `a${r.anilistId}` : r.workId != null ? `w${r.workId}` : null;
+    if (!series) continue;
+    const key = `${r.publisher}|${series}`;
     (groups.get(key) ?? groups.set(key, []).get(key)!).push(r);
   }
 

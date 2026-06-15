@@ -16,6 +16,9 @@
     "seed:whakoom": "tsx scripts/seed-whakoom.ts",
     "depurate": "tsx scripts/depurate-catalog.ts",
     "flag-comics": "tsx scripts/flag-comics.ts",
+    "enrich-covers": "tsx scripts/enrich-covers.ts",
+    "dedup-sources": "tsx scripts/dedup-sources.ts",
+    "split-homonyms": "tsx scripts/split-homonyms.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

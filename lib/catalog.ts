@@ -37,6 +37,21 @@ export function slugifyTitle(value: string): string {
 }
 
 /**
+ * Llave ESTRICTA de título para agrupar obras: como normalizeTitle pero preserva
+ * "+" y números, para NO fusionar homónimos que se distinguen justo por eso
+ * (Citrus vs Citrus+, Rayearth vs Rayearth II). normalizeTitle los aplasta igual.
+ */
+export function tightTitleKey(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9+]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * Limpia el título de una editorial para buscarlo en AniList. Las editoriales
  * agregan decoraciones que AniList no tiene (subtítulos entre guiones o
  * paréntesis), p. ej. "Aku No Hana -Las Flores Del Mal-" → "Aku No Hana".
@@ -218,17 +233,24 @@ export async function findOrCreateWork(opts: {
 }): Promise<number> {
   const normTitle = normalizeTitle(opts.title);
 
-  // Buscamos la obra existente: por anilistId (fuerte) o por título normalizado.
+  // Buscamos la obra existente: por anilistId (fuerte) o por título. Para el
+  // matcheo por título usamos la llave ESTRICTA (distingue Citrus de Citrus+):
+  // traemos los candidatos por normTitle (indexado) y filtramos por tightTitleKey.
   // Si no tiene portada y ahora tenemos una, la completamos (sin pisar la actual).
-  const existing = opts.anilistId
-    ? await prisma.work.findUnique({
-        where: { anilistId: opts.anilistId },
-        select: { id: true, coverImage: true },
-      })
-    : await prisma.work.findFirst({
-        where: { normTitle },
-        select: { id: true, coverImage: true },
-      });
+  let existing: { id: number; coverImage: string | null } | null;
+  if (opts.anilistId) {
+    existing = await prisma.work.findUnique({
+      where: { anilistId: opts.anilistId },
+      select: { id: true, coverImage: true },
+    });
+  } else {
+    const tight = tightTitleKey(opts.title);
+    const cands = await prisma.work.findMany({
+      where: { normTitle },
+      select: { id: true, coverImage: true, title: true },
+    });
+    existing = cands.find((w) => tightTitleKey(w.title) === tight) ?? null;
+  }
 
   if (existing) {
     if (!existing.coverImage && opts.coverImage)
