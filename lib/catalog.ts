@@ -236,6 +236,21 @@ export async function workCoverByAnilist(
   return w?.coverImage ?? null;
 }
 
+/** Portadas nacionales (del Work) para varios anilistId, en una query. */
+export async function nationalCoversByAnilist(
+  ids: number[],
+): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  if (ids.length === 0) return out;
+  const works = await prisma.work.findMany({
+    where: { anilistId: { in: ids }, coverImage: { not: null } },
+    select: { anilistId: true, coverImage: true },
+  });
+  for (const w of works)
+    if (w.anilistId != null && w.coverImage) out.set(w.anilistId, w.coverImage);
+  return out;
+}
+
 /**
  * Encuentra (o crea) la obra del catálogo local para una edición. Agrupa por
  * `anilistId` cuando existe (referencia fuerte) y, si no, por título normalizado
