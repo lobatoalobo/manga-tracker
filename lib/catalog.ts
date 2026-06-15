@@ -236,18 +236,38 @@ export async function workCoverByAnilist(
   return w?.coverImage ?? null;
 }
 
-/** Portadas nacionales (del Work) para varios anilistId, en una query. */
+/** Cover nacional + flag "próximo a salir" por anilistId (vía edición→work). */
+export async function workMetaByAnilist(
+  anilistId: number,
+): Promise<{ coverImage: string | null; upcoming: boolean } | null> {
+  const eds = await prisma.publisherEdition.findMany({
+    where: { anilistId },
+    select: { work: { select: { coverImage: true, upcoming: true } } },
+  });
+  if (eds.length === 0) return null;
+  return {
+    coverImage: eds.map((e) => e.work?.coverImage).find(Boolean) ?? null,
+    upcoming: eds.some((e) => e.work?.upcoming),
+  };
+}
+
+/**
+ * Portadas nacionales (del Work) para varios anilistId. Va por la EDICIÓN
+ * (edición→work), no por work.anilistId, porque una edición puede estar mapeada
+ * mientras su Work tiene anilistId null (se mapeó sin consolidar el Work).
+ */
 export async function nationalCoversByAnilist(
   ids: number[],
 ): Promise<Map<number, string>> {
   const out = new Map<number, string>();
   if (ids.length === 0) return out;
-  const works = await prisma.work.findMany({
-    where: { anilistId: { in: ids }, coverImage: { not: null } },
-    select: { anilistId: true, coverImage: true },
+  const rows = await prisma.publisherEdition.findMany({
+    where: { anilistId: { in: ids }, work: { coverImage: { not: null } } },
+    select: { anilistId: true, work: { select: { coverImage: true } } },
   });
-  for (const w of works)
-    if (w.anilistId != null && w.coverImage) out.set(w.anilistId, w.coverImage);
+  for (const r of rows)
+    if (r.anilistId != null && r.work?.coverImage && !out.has(r.anilistId))
+      out.set(r.anilistId, r.work.coverImage);
   return out;
 }
 

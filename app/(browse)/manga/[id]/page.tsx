@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { getSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
-import { workCoverByAnilist } from "@/lib/catalog";
+import { workMetaByAnilist } from "@/lib/catalog";
 import { isWished } from "@/lib/wishlist";
 import { getNote, getSeriesNotes } from "@/lib/notes";
 import { displayTitle } from "@/lib/title";
@@ -40,17 +40,19 @@ export default async function Page({
   const anilist = await getMangaCore(mangaId).catch(() => null);
   if (!anilist) notFound();
 
-  const [series, wished, note, reviews, nationalCover] = await Promise.all([
+  const [series, wished, note, reviews, workMeta] = await Promise.all([
     userId ? getSeries(userId, mangaId) : Promise.resolve(null),
     userId ? isWished(userId, mangaId) : Promise.resolve(false),
     userId ? getNote(userId, mangaId) : Promise.resolve(null),
     getSeriesNotes(mangaId),
-    workCoverByAnilist(mangaId).catch(() => null),
+    workMetaByAnilist(mangaId).catch(() => null),
   ]);
 
   // Para coleccionistas locales: si tenemos la portada de la edición nacional
   // (del catálogo), la preferimos a la japonesa de AniList.
-  const cover = nationalCover ?? anilist.coverImage;
+  const cover = workMeta?.coverImage ?? anilist.coverImage;
+  // "Próximo a salir": flag manual (preventa AR) o estado global no-publicado.
+  const upcoming = workMeta?.upcoming || anilist.status === "NOT_YET_RELEASED";
 
   // Contenido +18 solo para usuarios logueados.
   if (anilist.isAdult && !userId) {
@@ -98,6 +100,11 @@ export default async function Page({
         <div className="flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold">{title}</h1>
+            {upcoming && (
+              <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-300">
+                🔜 Próximo a salir
+              </span>
+            )}
           </div>
           {anilist.title.romaji && anilist.title.romaji !== title && (
             <p className="text-sm text-muted">{anilist.title.romaji}</p>
@@ -190,6 +197,7 @@ export default async function Page({
                 editions={adminStore.editions}
                 excludedPublishers={adminStore.excluded}
                 defaultVolumes={anilist.volumes ?? 0}
+                upcoming={workMeta?.upcoming ?? false}
               />
             </div>
           )}

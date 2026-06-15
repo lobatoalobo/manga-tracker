@@ -345,6 +345,8 @@ model Work {
   coverImage String?
   author     String? // autor(es), editable; semilla de la ficha de la editorial
   synopsis   String? // sinopsis, editable
+  genres     String[] // géneros, editables a mano (no hay fuente para no-AniList)
+  upcoming   Boolean  @default(false) // "Próximo a salir" en AR (preventa/anunciada)
   anilistId  Int?     @unique // referencia externa opcional (snapshot/enriquecimiento)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

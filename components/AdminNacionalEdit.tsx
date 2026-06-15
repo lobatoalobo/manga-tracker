@@ -26,6 +26,8 @@ export default function AdminNacionalEdit({
   author,
   synopsis,
   coverImage,
+  genres,
+  upcoming,
   volumes,
   url,
   crumbInitial,
@@ -37,6 +39,8 @@ export default function AdminNacionalEdit({
   author: string;
   synopsis: string;
   coverImage: string;
+  genres: string[];
+  upcoming: boolean;
   volumes: number;
   url: string;
   crumbInitial: string;
@@ -47,6 +51,8 @@ export default function AdminNacionalEdit({
   const [au, setAu] = useState(author);
   const [syn, setSyn] = useState(synopsis);
   const [cov, setCov] = useState(coverImage);
+  const [gen, setGen] = useState(genres.join(", "));
+  const [up, setUp] = useState(upcoming);
   const [v, setV] = useState(String(volumes));
   const [u, setU] = useState(url);
   const [crumb, setCrumb] = useState(crumbInitial);
@@ -72,6 +78,8 @@ export default function AdminNacionalEdit({
           author: au,
           synopsis: syn,
           coverImage: cov,
+          genres: gen.split(",").map((g) => g.trim()).filter(Boolean),
+          upcoming: up,
         });
       await updateEditionAction(editionId, {
         title: t.trim() || title,
@@ -119,6 +127,24 @@ export default function AdminNacionalEdit({
         <label className="text-xs text-muted">
           Portada (URL de imagen)
           <input value={cov} onChange={(e) => setCov(e.target.value)} className={`mt-1 ${input}`} />
+        </label>
+        <label className="text-xs text-muted">
+          Géneros (separados por coma)
+          <input
+            value={gen}
+            onChange={(e) => setGen(e.target.value)}
+            placeholder="Acción, Comedia, Drama"
+            className={`mt-1 ${input}`}
+          />
+        </label>
+        <label className="flex items-center gap-2 text-xs text-muted">
+          <input
+            type="checkbox"
+            checked={up}
+            onChange={(e) => setUp(e.target.checked)}
+            className="h-4 w-4 rounded border-border"
+          />
+          Próximo a salir (preventa / anunciada en AR)
         </label>
         <div className="flex gap-2">
           <label className="flex-1 text-xs text-muted">

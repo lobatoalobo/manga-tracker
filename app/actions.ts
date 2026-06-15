@@ -520,6 +520,8 @@ export async function updateWorkAction(
     author?: string | null;
     synopsis?: string | null;
     coverImage?: string | null;
+    genres?: string[];
+    upcoming?: boolean;
   },
 ) {
   await assertAdmin();
@@ -529,6 +531,8 @@ export async function updateWorkAction(
     author?: string | null;
     synopsis?: string | null;
     coverImage?: string | null;
+    genres?: string[];
+    upcoming?: boolean;
   } = {};
   if (data.title !== undefined && data.title.trim()) {
     patch.title = data.title.trim();
@@ -538,6 +542,9 @@ export async function updateWorkAction(
   if (data.synopsis !== undefined) patch.synopsis = data.synopsis?.trim() || null;
   if (data.coverImage !== undefined)
     patch.coverImage = data.coverImage?.trim() || null;
+  if (data.genres !== undefined)
+    patch.genres = data.genres.map((g) => g.trim()).filter(Boolean);
+  if (data.upcoming !== undefined) patch.upcoming = data.upcoming;
 
   const work = await prisma.work.update({
     where: { id: workId },
@@ -545,6 +552,30 @@ export async function updateWorkAction(
     select: { anilistId: true },
   });
   if (work.anilistId) await invalidateEditionsCache(work.anilistId);
+  return { ok: true as const };
+}
+
+/** Admin: marca/desmarca una serie mapeada como "próximo a salir" (preventa AR). */
+export async function setWorkUpcomingAction(
+  anilistId: number,
+  upcoming: boolean,
+) {
+  await assertAdmin();
+  // Vía edición→work (el work puede tener anilistId null aunque la edición no).
+  const eds = await prisma.publisherEdition.findMany({
+    where: { anilistId },
+    select: { workId: true },
+  });
+  const workIds = [
+    ...new Set(eds.map((e) => e.workId).filter((x): x is number => x != null)),
+  ];
+  if (workIds.length)
+    await prisma.work.updateMany({
+      where: { id: { in: workIds } },
+      data: { upcoming },
+    });
+  await invalidateEditionsCache(anilistId);
+  revalidatePath(`/manga/${anilistId}`);
   return { ok: true as const };
 }
 

@@ -9,6 +9,7 @@ import {
   relinkEditionAction,
   updateSeriesEditionAction,
   deleteSeriesEditionAction,
+  setWorkUpcomingAction,
 } from "@/app/actions";
 import { crumbSearch } from "@/lib/crumb";
 
@@ -37,6 +38,7 @@ export default function AdminStoreLinks({
   editions,
   excludedPublishers = [],
   defaultVolumes = 0,
+  upcoming = false,
 }: {
   anilistId: number;
   seriesTitle: string;
@@ -44,9 +46,11 @@ export default function AdminStoreLinks({
   editions: EditionLinkRow[];
   excludedPublishers?: string[];
   defaultVolumes?: number;
+  upcoming?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [up, setUp] = useState(upcoming);
   const [crumb, setCrumb] = useState(crumbInitial);
   const [urls, setUrls] = useState<Record<number, string>>(
     Object.fromEntries(editions.map((e) => [e.id, e.url])),
@@ -100,6 +104,28 @@ export default function AdminStoreLinks({
           Cerrar
         </button>
       </div>
+
+      {/* Próximo a salir (preventa AR) */}
+      <label className="mb-3 flex items-center gap-2 text-xs text-muted">
+        <input
+          type="checkbox"
+          checked={up}
+          onChange={(e) => {
+            const value = e.target.checked;
+            setUp(value);
+            save(
+              () =>
+                setWorkUpcomingAction(anilistId, value).then(() => {
+                  router.refresh();
+                }),
+              "Guardado",
+            );
+          }}
+          disabled={pending}
+          className="h-4 w-4 rounded border-border"
+        />
+        🔜 Próximo a salir (preventa / anunciada en AR)
+      </label>
 
       {/* Crumb */}
       <label className="text-xs text-muted">Búsqueda en Crumb</label>
