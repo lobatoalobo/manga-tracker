@@ -26,6 +26,7 @@ import FinishedFilterButton from "@/components/FinishedFilterButton";
 import { MangakaList } from "@/components/MangakaBrowser";
 import EditorialBrowser from "@/components/browse/EditorialBrowser";
 import Dashboard from "@/components/Dashboard";
+import CatalogRefreshBanner from "@/components/CatalogRefreshBanner";
 import Link from "next/link";
 
 type Tab = "hot" | "az" | "mangaka" | "editoriales";
@@ -50,7 +51,16 @@ export default async function Home({
 
   // Home logueado sin búsqueda ni pestaña → dashboard personal.
   if (loggedIn && session?.user?.id && !query && !params.tab) {
-    return <Dashboard userId={session.user.id} name={session.user.name} />;
+    return (
+      <>
+        {admin && (
+          <div className="mx-auto max-w-6xl px-5 pt-5">
+            <CatalogRefreshBanner />
+          </div>
+        )}
+        <Dashboard userId={session.user.id} name={session.user.name} />
+      </>
+    );
   }
   const tab: Tab =
     params.tab === "az"
@@ -134,6 +144,7 @@ export default async function Home({
 
   return (
     <main className="mx-auto max-w-6xl px-5 pb-12 pt-5">
+      {admin && <CatalogRefreshBanner />}
       {query ? (
         <>
           <h2 className="mb-1 text-lg font-semibold">

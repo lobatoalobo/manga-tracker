@@ -22,6 +22,10 @@ const GROUPS: Group[] = [
         desc: "Siembra el catálogo desde Whakoom (Ivrea/Panini/Ovni, secuencial y resumable).",
       },
       {
+        cmd: "npx tsx scripts/crawl.ts whakoom-all",
+        desc: "Actualiza TODO el catálogo de Whakoom (Panini/Ovni/Utopía/Kemuri/Larp/Distrito) + notifica tomos nuevos. Correr LOCAL (Whakoom bloquea a los runners). Es lo que avisa el banner del home.",
+      },
+      {
         cmd: "npm run import:whakoom -- <url>",
         desc: "Importa una edición puntual desde una URL de Whakoom (/ediciones/<id>/…).",
       },
@@ -56,8 +60,16 @@ const GROUPS: Group[] = [
     title: "Enriquecimiento / mapeo",
     scripts: [
       {
-        cmd: "npx tsx scripts/auto-map.ts --apply",
-        desc: "Mapea a AniList las ediciones sin mapear (por título original + autor). Después: depurate.",
+        cmd: "npx tsx scripts/auto-map.ts [utopia|kemuri|…] --apply",
+        desc: "Mapea a AniList las ediciones sin mapear (por título original + autor). Acepta una editorial. Después: depurate.",
+      },
+      {
+        cmd: "npx tsx scripts/backfill-work-authors.ts [utopia|…] --apply",
+        desc: "Rellena Work.author desde Whakoom (el import viejo no lo guardaba). Necesario para que Auto/auto-map resuelvan por autor. Correr ANTES de auto-map.",
+      },
+      {
+        cmd: "npx tsx scripts/fix-broken-maps.ts --apply",
+        desc: "Arregla series que tiran 404: ediciones mapeadas a un id que no es manga (ej. id de anime). Re-resuelve o las desmapea.",
       },
       {
         cmd: "npx tsx scripts/enrich-covers.ts",

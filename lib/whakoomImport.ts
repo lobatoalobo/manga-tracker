@@ -45,6 +45,7 @@ async function persistEditionIdentity(opts: {
   title: string;
   anilistId: number | null;
   cover: string | null;
+  author: string | null;
   whakoomId: string | null;
   volumesList: WhakoomVolume[];
 }) {
@@ -58,6 +59,7 @@ async function persistEditionIdentity(opts: {
     title: opts.title,
     anilistId: opts.anilistId,
     coverImage: opts.cover,
+    author: opts.author,
   }).catch(() => null);
 
   const data: { whakoomId?: string; workId?: number } = {};
@@ -143,6 +145,7 @@ export async function importWhakoomUrl(
     title: ed.title,
     anilistId,
     cover: ed.cover,
+    author: ed.author,
     whakoomId: ed.whakoomId,
     volumesList: ed.volumesList,
   });
@@ -285,6 +288,7 @@ export async function importWhakoomUrls(
       title: ed.title,
       anilistId,
       cover: ed.cover,
+      author: ed.author,
       whakoomId: ed.whakoomId,
       volumesList: ed.volumesList,
     });

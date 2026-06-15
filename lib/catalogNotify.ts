@@ -1,6 +1,20 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { filterNotifEnabled } from "@/lib/notificationPrefs";
 import { sendPushToUsers } from "@/lib/push";
+
+/**
+ * Pone `notifiedVolumes = volumes` (sin notificar) para re-baselinar una
+ * corrección de conteo: cuando un re-import sube `volumes` porque el dato viejo
+ * estaba MAL (ej. Panini subcontaba Naruto 54 vs 72 real), NO es un tomo nuevo y
+ * no debe spamear "tomo nuevo". Devuelve cuántas filas tocó.
+ */
+export async function baselineNotifiedVolumes(publisher?: string): Promise<number> {
+  const where = publisher
+    ? Prisma.sql`WHERE "publisher" = ${publisher}`
+    : Prisma.empty;
+  return prisma.$executeRaw`UPDATE "PublisherEdition" SET "notifiedVolumes" = "volumes" ${where}`;
+}
 
 const PUB_KEY: Record<string, string> = {
   "Ivrea Argentina": "ivrea",

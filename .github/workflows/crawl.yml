@@ -1,8 +1,10 @@
 name: Crawl
 
-# Corre los crawls/jobs pesados en un runner (sin el límite de 60s de Vercel).
-# Se dispara manualmente desde la pestaña Actions o con los botones del
-# dashboard admin (vía API). Corre contra la DB de producción (secret).
+# Corre los crawls/jobs de SITIO en un runner de GitHub (sin el límite de 60s de
+# Vercel). Ejecución MANUAL (Actions / botones del admin); sin cron.
+# OJO: lo de WHAKOOM NO va acá — Whakoom bloquea a los runners de GitHub
+# (validado: 0 ediciones desde Actions, 298 local). Se corre LOCAL con
+# `npm run crawl whakoom-all` (ver /admin/scripts).
 on:
   workflow_dispatch:
     inputs:
@@ -16,15 +18,11 @@ on:
           - ovni
           - mangakas
           - resolve
-          - whakoom-ovni
-          - whakoom-panini
 
 jobs:
   crawl:
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    # A nivel job: lo necesita también el postinstall (prisma generate) durante
-    # `npm ci`, no solo el crawl. Sin esto, npm ci falla y nunca corre el job.
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
@@ -36,14 +34,13 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - name: Run job (${{ inputs.job }})
+        shell: bash
         run: |
           case "${{ inputs.job }}" in
-            ivrea)          npm run crawl ivrea ;;
-            panini)         npm run crawl panini ;;
-            ovni)           npm run crawl ovni ;;
-            mangakas)       npm run crawl mangakas ;;
-            resolve)        npm run crawl resolve ;;
-            whakoom-ovni)   npm run crawl whakoom-pub "https://www.whakoom.com/publisher/15389/ovni_press/all" ;;
-            whakoom-panini) npm run crawl whakoom-pub "https://www.whakoom.com/publisher/20930/panini_comics_argentina/all" ;;
+            ivrea)    npm run crawl ivrea ;;
+            panini)   npm run crawl panini ;;
+            ovni)     npm run crawl ovni ;;
+            mangakas) npm run crawl mangakas ;;
+            resolve)  npm run crawl resolve ;;
             *) echo "Job desconocido: ${{ inputs.job }}"; exit 1 ;;
           esac
