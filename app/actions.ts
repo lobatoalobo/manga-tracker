@@ -369,6 +369,35 @@ export async function setEditionNationalOnlyAction(id: number, value: boolean) {
   revalidatePath("/admin/herramientas");
 }
 
+/** Acción en lote sobre varias entradas seleccionadas en /admin/mapeos. */
+export async function bulkEditionAction(
+  ids: number[],
+  op: "delete" | "national" | "unnational",
+) {
+  await assertAdmin();
+  const unique = [...new Set(ids)].filter((n) => Number.isInteger(n));
+  if (!unique.length) return { changed: 0 };
+
+  if (op === "delete") {
+    const rows = await prisma.publisherEdition.findMany({
+      where: { id: { in: unique } },
+      select: { anilistId: true },
+    });
+    await prisma.publisherEdition.deleteMany({ where: { id: { in: unique } } });
+    await flushEditionCaches(...rows.map((r) => r.anilistId));
+    // Limpiamos works que quedaron sin ediciones.
+    await prisma.work.deleteMany({ where: { editions: { none: {} } } });
+  } else {
+    await prisma.publisherEdition.updateMany({
+      where: { id: { in: unique } },
+      data: { nationalOnly: op === "national" },
+    });
+  }
+  revalidatePath("/admin/mapeos");
+  revalidatePath("/admin/herramientas");
+  return { changed: unique.length };
+}
+
 async function assertAdmin() {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) throw new Error("No autorizado");

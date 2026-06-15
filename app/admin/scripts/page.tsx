@@ -43,6 +43,10 @@ const GROUPS: Group[] = [
         desc: "Dedup crawl↔Whakoom (misma serie cargada por dos fuentes, mismo título).",
       },
       {
+        cmd: "npx tsx scripts/consolidate-dups.ts --apply",
+        desc: "Consolida 'Posibles duplicados' (misma editorial+título+tomos): junta anilistId + link real de la editorial en una, borra la sobrante.",
+      },
+      {
         cmd: "npx tsx scripts/split-homonyms.ts --apply",
         desc: "Separa homónimos fusionados en un mismo Work (Citrus / Citrus+).",
       },

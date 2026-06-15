@@ -23,6 +23,8 @@ const PUBLISHERS = [
   "Kemuri Ediciones",
   "Utopía Editorial",
   "Larp Editores",
+  "Distrito Manga",
+  "Planeta Cómic",
 ];
 
 export interface EditionLinkRow {

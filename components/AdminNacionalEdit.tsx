@@ -157,10 +157,22 @@ export default function AdminNacionalEdit({
             />
           </label>
         </div>
-        <label className="text-xs text-muted">
-          URL de la ficha (de la editorial)
-          <input value={u} onChange={(e) => setU(e.target.value)} className={`mt-1 ${input}`} />
-        </label>
+        <div>
+          <label className="text-xs text-muted">
+            URL de la ficha (de la editorial)
+            <input value={u} onChange={(e) => setU(e.target.value)} className={`mt-1 ${input}`} />
+          </label>
+          {u.trim() && (
+            <a
+              href={u.trim()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-block text-xs text-accent hover:underline"
+            >
+              Probar link ↗
+            </a>
+          )}
+        </div>
         <div>
           <label className="text-xs text-muted">
             Búsqueda en Crumb

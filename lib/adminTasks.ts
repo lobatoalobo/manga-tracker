@@ -4,6 +4,12 @@ import { resolveEditionSeries } from "@/lib/resolveSeries";
 import { detectAndNotifyNewVolumes } from "@/lib/catalogNotify";
 import { logJobRun } from "@/lib/jobs";
 import {
+  flagComics,
+  consolidateDups,
+  depurateCatalog,
+  splitHomonyms,
+} from "@/lib/curation";
+import {
   EDITIONS_CACHE_VERSION,
   clearAllEditionsCache,
 } from "@/lib/getMangaDetails";
@@ -30,6 +36,40 @@ interface AdminTask extends AdminTaskMeta {
 const SAMPLE = 20;
 
 const tasks: AdminTask[] = [
+  {
+    id: "flag-comics",
+    title: "Sacar cómics occidentales",
+    description:
+      "Detecta y borra ediciones que parecen cómic (Marvel/DC/Star Wars) por título, entre las que NO están mapeadas a AniList. Simular lista; aplicar borra.",
+    danger: true,
+    invalidatesEditions: true,
+    run: (dryRun) => flagComics(dryRun),
+  },
+  {
+    id: "consolidate-dups",
+    title: "Consolidar duplicados",
+    description:
+      "Junta la misma serie cargada por crawl + Whakoom (misma editorial + título + tomos) en UNA edición: anilistId + link real de la editorial. Borra la sobrante.",
+    invalidatesEditions: true,
+    run: (dryRun) => consolidateDups(dryRun),
+  },
+  {
+    id: "depurate-catalog",
+    title: "Depurar: 1 edición regular por serie",
+    description:
+      "Deja la edición más completa por (obra, editorial); borra specials/duplicados seguros + works huérfanos. Los homónimos ambiguos los marca, no los toca.",
+    danger: true,
+    invalidatesEditions: true,
+    run: (dryRun) => depurateCatalog(dryRun),
+  },
+  {
+    id: "split-homonyms",
+    title: "Separar homónimos",
+    description:
+      "Separa en works distintos los homónimos que quedaron fusionados (p. ej. Citrus vs Citrus+).",
+    invalidatesEditions: true,
+    run: (dryRun) => splitHomonyms(dryRun),
+  },
   {
     id: "fix-volumes-out-of-range",
     title: "Arreglar tomos fuera de rango",

@@ -63,6 +63,7 @@ export default function NavBar({
   ];
 
   const adminLinks: MenuLink[] = [
+    { href: "/admin", label: "Panel" },
     { href: "/admin/mapeos", label: "Mapeos editoriales" },
     { href: "/admin/reportes", label: "Reportes", badge: badges.reports },
     { href: "/admin/tiendas", label: "Tiendas", badge: badges.stores },

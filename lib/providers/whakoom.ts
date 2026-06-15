@@ -14,15 +14,37 @@ export interface WhakoomEdition {
   volumesList: WhakoomVolume[]; // tomos individuales con su id de Whakoom
 }
 
+/** Decodifica entidades HTML (numéricas y las comunes con nombre). */
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ");
+}
+
 /** Mapea la editorial de Whakoom a nuestras editoriales argentinas (o null). */
 export function mapWhakoomPublisher(whakoomPublisher: string): string | null {
-  const p = whakoomPublisher.toLowerCase();
+  // Normalizamos tildes: la editorial puede venir "Planeta Cómic" (con tilde) y
+  // los checks usan ASCII ("comic").
+  const p = whakoomPublisher
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
   if (p.includes("panini") && p.includes("argentina")) return "Panini Argentina";
   if (p.includes("ivrea")) return "Ivrea Argentina";
   if (p.includes("ovni")) return "Ovni Press";
   if (p.includes("kemuri")) return "Kemuri Ediciones";
   if (p.includes("utopia")) return "Utopía Editorial";
   if (p.includes("larp")) return "Larp Editores";
+  if (p.includes("distrito") && p.includes("manga")) return "Distrito Manga";
+  // "Planeta Cómic" (no los regionales "Planeta Cómic México/Chile").
+  if (p.includes("planeta") && p.includes("comic") && !/m[eé]xico|chile/.test(p))
+    return "Planeta Cómic";
   return null;
 }
 
@@ -148,7 +170,9 @@ export function parseWhakoomEdition(
       new RegExp(`href="${hrefPrefix}[^"]+"[^>]*>([\\s\\S]*?)</a>`, "i"),
     );
     if (!m) return null;
-    const txt = m[1].replace(/<[^>]+>/g, "").trim();
+    // Decodificamos entidades HTML: el texto del <a> viene crudo, p. ej. la
+    // editorial "Planeta C&#243;mic" (ó) o autores con tildes.
+    const txt = decodeEntities(m[1].replace(/<[^>]+>/g, "")).trim();
     return txt || null;
   };
 
