@@ -335,6 +335,23 @@ model AppState {
   updatedAt DateTime @updatedAt
 }
 
+// Identidad propia de obra (catálogo local). Reemplaza progresivamente a
+// `anilistId` como llave del dominio. Se puebla desde el import/crawl; `anilistId`
+// queda como referencia opcional de enriquecimiento, no como llave.
+model Work {
+  id         Int      @id @default(autoincrement())
+  title      String // título principal que mostramos
+  normTitle  String // normalizado para agrupar ediciones y para búsqueda
+  coverImage String?
+  anilistId  Int?     @unique // referencia externa opcional (snapshot/enriquecimiento)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  editions PublisherEdition[]
+
+  @@index([normTitle])
+}
+
 // Índice de catálogos de las editoriales (poblado por scripts/crawl.ts).
 // Permite resolver ediciones con un lookup rápido en vez de scrapear en vivo.
 model PublisherEdition {
@@ -356,12 +373,17 @@ model PublisherEdition {
   // Id de la edición en Whakoom (de /ediciones/<id>/…). Identidad fuerte: sus
   // relaciones ya están debugueadas, así desambiguamos sin depender del título.
   whakoomId       String?  @unique
+  // Obra del catálogo local a la que pertenece (agrupa varias ediciones). Se
+  // backfillea; mientras tanto puede ser null.
+  workId          Int?
+  work            Work?    @relation(fields: [workId], references: [id], onDelete: SetNull)
   updatedAt       DateTime @updatedAt
 
   volumesList Volume[]
 
   @@unique([publisher, slug])
   @@index([normTitle])
+  @@index([workId])
 }
 
 // Tomo individual de una edición. Per-tomo guardamos el id de Whakoom (llave

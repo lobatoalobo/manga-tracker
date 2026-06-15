@@ -22,6 +22,31 @@ export function mapWhakoomPublisher(whakoomPublisher: string): string | null {
   return null;
 }
 
+// Headers de navegador completos: Whakoom (Cloudflare) puede rechazar fetches
+// "pelados" desde IPs de datacenter si falta Accept/Accept-Language/UA real.
+const BROWSER_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  Accept:
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
+};
+
+/**
+ * Fetch crudo de una página de Whakoom, reportando el motivo de falla (status
+ * HTTP o error de red) para poder distinguir "bloqueado" de "no parseó".
+ */
+export async function fetchWhakoomHtml(
+  url: string,
+): Promise<{ ok: true; html: string } | { ok: false; reason: string }> {
+  const r = await fetch(url, { headers: BROWSER_HEADERS }).catch(
+    (e) => ({ _err: e instanceof Error ? e.message : "error de red" }) as const,
+  );
+  if ("_err" in r) return { ok: false, reason: `red: ${r._err}` };
+  if (!r.ok) return { ok: false, reason: `HTTP ${r.status}` };
+  return { ok: true, html: await r.text() };
+}
+
 /**
  * Lee una página pública de edición de Whakoom (/ediciones/<id>/…) y extrae
  * título, autor, editorial y cantidad de tomos. Las páginas de edición son
@@ -30,12 +55,9 @@ export function mapWhakoomPublisher(whakoomPublisher: string): string | null {
 export async function getWhakoomEdition(
   url: string,
 ): Promise<WhakoomEdition | null> {
-  const r = await fetch(url, {
-    headers: { "User-Agent": "Mozilla/5.0" },
-  }).catch(() => null);
-  if (!r || !r.ok) return null;
-
-  return parseWhakoomEdition(await r.text(), url);
+  const r = await fetchWhakoomHtml(url);
+  if (!r.ok) return null;
+  return parseWhakoomEdition(r.html, url);
 }
 
 /**
