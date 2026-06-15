@@ -3,7 +3,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { getWishlist } from "@/lib/wishlist";
 import { nationalEditionIds } from "@/lib/getMangaDetails";
-import { nationalCoversByAnilist } from "@/lib/catalog";
+import { nationalCoversByAnilist, upcomingForIds } from "@/lib/catalog";
 import { crumbSearch } from "@/lib/crumb";
 import { seriesHref } from "@/lib/url";
 import RemoveWishButton from "@/components/RemoveWishButton";
@@ -19,6 +19,9 @@ export default async function DeseadosPage() {
   const nationalCovers = await nationalCoversByAnilist(
     items.map((w) => w.anilistId),
   ).catch(() => new Map<number, string>());
+  const upcoming = await upcomingForIds(items.map((w) => w.anilistId)).catch(
+    () => new Set<number>(),
+  );
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-8">
@@ -44,7 +47,12 @@ export default async function DeseadosPage() {
             >
               <RemoveWishButton anilistId={w.anilistId} />
               <Link href={seriesHref(w.anilistId)} className="block">
-                <div className="aspect-2/3 w-full overflow-hidden bg-surface-2">
+                <div className="relative aspect-2/3 w-full overflow-hidden bg-surface-2">
+                  {upcoming.has(w.anilistId) && (
+                    <span className="absolute left-2 top-2 z-10 rounded-full bg-amber-500/90 px-2 py-0.5 text-[10px] font-semibold text-white">
+                      🔜 Pronto
+                    </span>
+                  )}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={nationalCovers.get(w.anilistId) ?? w.coverImage}

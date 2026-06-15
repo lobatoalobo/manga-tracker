@@ -91,6 +91,12 @@ export async function detectAndNotifyNewVolumes(
         where: { id: r.id },
         data: { notifiedVolumes: r.volumes },
       });
+      // Si salió un tomo nuevo, la serie ya está a la venta → sacamos el flag
+      // "próximo a salir" (el badge desaparece en toda la plataforma).
+      await prisma.work.updateMany({
+        where: { editions: { some: { id: r.id } }, upcoming: true },
+        data: { upcoming: false },
+      });
     }
   }
 

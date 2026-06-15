@@ -248,6 +248,31 @@ export async function upcomingByAnilist(ids: number[]): Promise<Set<number>> {
   return out;
 }
 
+/**
+ * Set de ids "próximo a salir", en el MISMO espacio de ids que la colección:
+ * positivos = anilistId (vía edición), negativos = -editionId (obras nacionales).
+ */
+export async function upcomingForIds(ids: number[]): Promise<Set<number>> {
+  const out = new Set<number>();
+  const pos = ids.filter((i) => i > 0);
+  const negEditionIds = ids.filter((i) => i < 0).map((i) => -i);
+  if (pos.length) {
+    const rows = await prisma.publisherEdition.findMany({
+      where: { anilistId: { in: pos }, work: { upcoming: true } },
+      select: { anilistId: true },
+    });
+    for (const r of rows) if (r.anilistId != null) out.add(r.anilistId);
+  }
+  if (negEditionIds.length) {
+    const rows = await prisma.publisherEdition.findMany({
+      where: { id: { in: negEditionIds }, work: { upcoming: true } },
+      select: { id: true },
+    });
+    for (const r of rows) out.add(-r.id);
+  }
+  return out;
+}
+
 /** Cover nacional + flag "próximo a salir" por anilistId (vía edición→work). */
 export async function workMetaByAnilist(
   anilistId: number,

@@ -194,6 +194,9 @@ function CollectionRow({
             {displayTitle(item.title)}
           </p>
           <p className="mt-0.5 truncate text-xs text-muted">
+            {item.upcoming && (
+              <span className="text-amber-300">🔜 Pronto · </span>
+            )}
             {edition.label}
             {edition.readingStatus === "READING" && " · 📖 Leyendo"}
             {edition.readingStatus === "READ" && " · ✅ Leído"}
