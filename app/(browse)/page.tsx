@@ -11,6 +11,7 @@ import { displayTitle, isExactTitleMatch } from "@/lib/title";
 import { getAllMangakas } from "@/lib/mangakas";
 import {
   nationalEditionsByManga,
+  nationalCoversByAnilist,
   getEditorialAll,
   editorialCounts,
   searchPublisherEditions,
@@ -121,6 +122,10 @@ export default async function Home({
   const nationalEditions = await nationalEditionsByManga(mangas).catch(
     () => new Map<number, string[]>(),
   );
+  // Portada nacional (cuando la tenemos) para identificar mejor en las listas.
+  const nationalCovers = await nationalCoversByAnilist(
+    mangas.map((m: any) => m.id),
+  ).catch(() => new Map<number, string>());
 
   return (
     <main className="mx-auto max-w-6xl px-5 pb-12 pt-5">
@@ -140,7 +145,7 @@ export default async function Home({
           {mangas.length === 0 && localHits.length === 0 ? (
             <p className="text-sm text-muted">No encontramos resultados.</p>
           ) : (
-            <MangaGrid mangas={mangas} nationalEditions={nationalEditions} />
+            <MangaGrid mangas={mangas} nationalEditions={nationalEditions} nationalCovers={nationalCovers} />
           )}
 
           {searchInfo && searchInfo.lastPage > 1 && (
@@ -197,7 +202,7 @@ export default async function Home({
           )}
         </>
       ) : tab === "hot" ? (
-        <MangaGrid mangas={mangas} nationalEditions={nationalEditions} />
+        <MangaGrid mangas={mangas} nationalEditions={nationalEditions} nationalCovers={nationalCovers} />
       ) : tab === "az" ? (
         <>
           <FinishedFilterButton enabled active={onlyFinished} />
@@ -205,6 +210,7 @@ export default async function Home({
             <MangaGrid
               mangas={mangas}
               nationalEditions={nationalEditions}
+              nationalCovers={nationalCovers}
               byRomaji
             />
           </div>
@@ -250,10 +256,12 @@ export default async function Home({
 function MangaGrid({
   mangas,
   nationalEditions,
+  nationalCovers,
   byRomaji = false,
 }: {
   mangas: any[];
   nationalEditions: Map<number, string[]>;
+  nationalCovers?: Map<number, string>;
   byRomaji?: boolean;
 }) {
   if (mangas.length === 0) {
@@ -267,6 +275,7 @@ function MangaGrid({
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
       {mangas.map((manga: any) => {
         const national = nationalEditions.get(manga.id);
+        const cover = nationalCovers?.get(manga.id) ?? manga.coverImage.large;
         return (
           <Link
             key={manga.id}
@@ -286,7 +295,7 @@ function MangaGrid({
               )}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={manga.coverImage.large}
+                src={cover}
                 alt={titleOf(manga)}
                 className="h-full w-full object-cover transition group-hover:scale-105"
               />

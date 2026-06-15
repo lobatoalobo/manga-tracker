@@ -11,6 +11,7 @@ import WishButton from "@/components/WishButton";
 import { SignIn } from "@/components/AuthButtons";
 import { isWished } from "@/lib/wishlist";
 import { crumbSearch } from "@/lib/crumb";
+import { getCrumbQuery } from "@/lib/storeLinks";
 import type { Edition } from "@/lib/editions";
 
 export const metadata = { title: "Edición nacional · Nakama" };
@@ -46,10 +47,11 @@ export default async function NacionalPage({
       ? await getIvreaDataBySlug(ivreaSlug).catch(() => null)
       : null;
 
+  // Display: lo editado en el Work manda; la ficha de Ivrea es solo semilla.
   const title = row.work?.title || ficha?.title || row.title;
   const cover = row.work?.coverImage ?? ficha?.coverImage ?? null;
-  const author = ficha?.author ?? null;
-  const synopsis = ficha?.synopsis ?? null;
+  const author = row.work?.author ?? ficha?.author ?? null;
+  const synopsis = row.work?.synopsis ?? ficha?.synopsis ?? null;
   const volumes = row.volumes || ficha?.argentinaVolumes || 0;
   const status = row.status || ficha?.argentinaStatus || null;
   // El link guardado a veces es de Whakoom (fuente del import): lo etiquetamos
@@ -65,6 +67,8 @@ export default async function NacionalPage({
   const admin = isAdmin(session?.user?.email);
   const series = userId ? await getSeries(userId, pseudoId) : null;
   const wished = userId ? await isWished(userId, pseudoId) : false;
+  // Override del término de búsqueda de Crumb (admin), keyeado por el id local.
+  const crumbInitial = (await getCrumbQuery(pseudoId)) ?? title;
   const trackedKeys = series?.editions.map((e) => e.key) ?? [];
 
   const anilist = {
@@ -130,7 +134,7 @@ export default async function NacionalPage({
               <SignIn className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90" />
             )}
             <a
-              href={crumbSearch(title)}
+              href={crumbSearch(crumbInitial)}
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
@@ -151,9 +155,15 @@ export default async function NacionalPage({
           {admin && (
             <AdminNacionalEdit
               editionId={row.id}
-              title={row.title}
+              workId={row.workId}
+              pseudoId={pseudoId}
+              title={title}
+              author={author ?? ""}
+              synopsis={synopsis ?? ""}
+              coverImage={cover ?? ""}
               volumes={row.volumes}
               url={row.url}
+              crumbInitial={crumbInitial}
             />
           )}
         </div>

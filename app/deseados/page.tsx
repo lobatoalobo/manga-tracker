@@ -3,6 +3,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { getWishlist } from "@/lib/wishlist";
 import { nationalEditionIds } from "@/lib/getMangaDetails";
+import { nationalCoversByAnilist } from "@/lib/catalog";
 import { crumbSearch } from "@/lib/crumb";
 import { seriesHref } from "@/lib/url";
 import RemoveWishButton from "@/components/RemoveWishButton";
@@ -15,6 +16,9 @@ export default async function DeseadosPage() {
 
   const items = await getWishlist(session.user.id);
   const nationalIds = await nationalEditionIds(items.map((w) => w.anilistId));
+  const nationalCovers = await nationalCoversByAnilist(
+    items.map((w) => w.anilistId),
+  ).catch(() => new Map<number, string>());
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-8">
@@ -43,7 +47,7 @@ export default async function DeseadosPage() {
                 <div className="aspect-2/3 w-full overflow-hidden bg-surface-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={w.coverImage}
+                    src={nationalCovers.get(w.anilistId) ?? w.coverImage}
                     alt={w.title}
                     className="h-full w-full object-cover transition group-hover:scale-105"
                   />

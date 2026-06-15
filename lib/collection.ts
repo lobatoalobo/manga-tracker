@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getMangaById, searchMangaList } from "@/lib/anilist";
+import { nationalCoversByAnilist } from "@/lib/catalog";
 import type { TrackedEdition, OwnedVolume } from "@prisma/client";
 
 type EditionRow = TrackedEdition & { ownedVolumes: OwnedVolume[] };
@@ -61,6 +62,11 @@ export async function getCollectionItems(
     orderBy: { romajiTitle: "asc" },
   });
 
+  // Portada nacional (cuando la tenemos) en vez de la guardada/AniList.
+  const nationalCovers = await nationalCoversByAnilist(
+    rows.map((m) => m.anilistId),
+  ).catch(() => new Map<number, string>());
+
   const items: CollectionItem[] = [];
   for (const m of rows) {
     for (const e of m.editions) {
@@ -71,7 +77,7 @@ export async function getCollectionItems(
           english: m.englishTitle,
           native: m.nativeTitle,
         },
-        coverImage: m.coverImage,
+        coverImage: nationalCovers.get(m.anilistId) ?? m.coverImage,
         edition: toEditionView(e),
       });
     }
