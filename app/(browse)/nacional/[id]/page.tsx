@@ -34,10 +34,13 @@ export default async function NacionalPage({
   if (row.anilistId) redirect(`/manga/${row.anilistId}`);
 
   // Datos LOCALES (catálogo/Work) primero; la ficha de Ivrea solo enriquece
-  // (autor/sinopsis) y solo aplica a ediciones de Ivrea con slug real del sitio.
+  // (autor/sinopsis). El slug del sitio sale de la URL guardada cuando es de
+  // Ivrea (así, al corregir la URL a mano, la ficha carga); si no, el slug interno.
+  const ivreaSlug =
+    row.url.match(/ivrea\.com\.ar\/titulo\/([^/?#]+)/i)?.[1] ?? row.slug;
   const ficha =
     row.publisher === "Ivrea Argentina"
-      ? await getIvreaDataBySlug(row.slug).catch(() => null)
+      ? await getIvreaDataBySlug(ivreaSlug).catch(() => null)
       : null;
 
   const title = row.work?.title || ficha?.title || row.title;
