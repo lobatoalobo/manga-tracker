@@ -42,6 +42,8 @@ const PUBLISHER_ID: Record<string, string> = {
   "Kemuri Ediciones": "kemuri",
   "Utopía Editorial": "utopia",
   "Larp Editores": "larp",
+  "Distrito Manga": "distrito",
+  "Planeta Cómic": "planeta",
 };
 
 /**

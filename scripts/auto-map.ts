@@ -22,7 +22,7 @@ async function main() {
   const limIdx = args.indexOf("--limit");
   const limit = limIdx >= 0 ? Number(args[limIdx + 1]) || null : null;
   const pubArg = args.find((a) =>
-    ["ivrea", "panini", "ovni", "kemuri", "utopia", "larp"].includes(a),
+    ["ivrea", "panini", "ovni", "kemuri", "utopia", "larp", "distrito", "planeta"].includes(a),
   );
   const publisher = pubArg
     ? {
@@ -32,6 +32,8 @@ async function main() {
         kemuri: "Kemuri Ediciones",
         utopia: "Utopía Editorial",
         larp: "Larp Editores",
+        distrito: "Distrito Manga",
+        planeta: "Planeta Cómic",
       }[pubArg]
     : undefined;
 

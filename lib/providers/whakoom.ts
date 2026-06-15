@@ -23,6 +23,10 @@ export function mapWhakoomPublisher(whakoomPublisher: string): string | null {
   if (p.includes("kemuri")) return "Kemuri Ediciones";
   if (p.includes("utopia")) return "Utopía Editorial";
   if (p.includes("larp")) return "Larp Editores";
+  if (p.includes("distrito") && p.includes("manga")) return "Distrito Manga";
+  // "Planeta Cómic" (no los regionales "Planeta Cómic México/Chile").
+  if (p.includes("planeta") && p.includes("comic") && !/m[eé]xico|chile/.test(p))
+    return "Planeta Cómic";
   return null;
 }
 

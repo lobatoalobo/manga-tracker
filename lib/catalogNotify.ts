@@ -9,6 +9,8 @@ const PUB_KEY: Record<string, string> = {
   "Kemuri Ediciones": "kemuri",
   "Utopía Editorial": "utopia",
   "Larp Editores": "larp",
+  "Distrito Manga": "distrito",
+  "Planeta Cómic": "planeta",
 };
 
 export interface NewVolumeResult {

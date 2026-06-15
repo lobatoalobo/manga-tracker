@@ -47,6 +47,14 @@ const PUBLISHERS: Record<string, { label: string; allUrl: string | null }> = {
     label: "Larp Editores",
     allUrl: "https://www.whakoom.com/publisher/15398/larp_editores/all",
   },
+  distrito: {
+    label: "Distrito Manga",
+    allUrl: "https://www.whakoom.com/publisher/38673/distrito_manga/all",
+  },
+  planeta: {
+    label: "Planeta Cómic",
+    allUrl: "https://www.whakoom.com/publisher/102/planeta_comic/all",
+  },
 };
 
 const cursorKey = (slug: string) => `seed:whakoom:${slug}`;

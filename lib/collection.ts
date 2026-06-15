@@ -491,6 +491,8 @@ const PURCHASE_PUBLISHER_KEY: Record<string, string> = {
   "Kemuri Ediciones": "kemuri",
   "Utopía Editorial": "utopia",
   "Larp Editores": "larp",
+  "Distrito Manga": "distrito",
+  "Planeta Cómic": "planeta",
 };
 
 /**
