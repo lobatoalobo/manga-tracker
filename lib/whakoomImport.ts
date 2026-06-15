@@ -1,7 +1,6 @@
 import {
   getWhakoomEdition,
   fetchWhakoomHtml,
-  parseWhakoomEdition,
   mapWhakoomPublisher,
   type WhakoomVolume,
 } from "./providers/whakoom";
@@ -45,6 +44,7 @@ async function persistEditionIdentity(opts: {
   slug: string;
   title: string;
   anilistId: number | null;
+  cover: string | null;
   whakoomId: string | null;
   volumesList: WhakoomVolume[];
 }) {
@@ -57,6 +57,7 @@ async function persistEditionIdentity(opts: {
   const workId = await findOrCreateWork({
     title: opts.title,
     anilistId: opts.anilistId,
+    coverImage: opts.cover,
   }).catch(() => null);
 
   const data: { whakoomId?: string; workId?: number } = {};
@@ -100,15 +101,18 @@ export async function importWhakoomUrl(
   if (!/whakoom\.com\/ediciones\//i.test(url))
     return { ok: false, error: "No parece una URL de edición de Whakoom." };
 
-  const fetched = await fetchWhakoomHtml(url);
-  if (!fetched.ok)
+  // getWhakoomEdition trae la lista COMPLETA de tomos (vía /todos). Si falla,
+  // sondeamos el fetch para dar un motivo claro (bloqueo vs parseo).
+  const ed = await getWhakoomEdition(url).catch(() => null);
+  if (!ed) {
+    const probe = await fetchWhakoomHtml(url);
     return {
       ok: false,
-      error: `No se pudo leer la página de Whakoom (${fetched.reason}). Si dice HTTP 403/503, Whakoom está bloqueando el server; usá el script de import local.`,
+      error: probe.ok
+        ? "Se leyó la página pero no se pudo parsear."
+        : `No se pudo leer la página de Whakoom (${probe.reason}). Si dice HTTP 403/503, Whakoom está bloqueando el server; usá el script de import local.`,
     };
-  const ed = parseWhakoomEdition(fetched.html, url);
-  if (!ed)
-    return { ok: false, error: "Se leyó la página pero no se pudo parsear." };
+  }
 
   const publisher = mapWhakoomPublisher(ed.publisher);
   if (!publisher)
@@ -138,6 +142,7 @@ export async function importWhakoomUrl(
     slug,
     title: ed.title,
     anilistId,
+    cover: ed.cover,
     whakoomId: ed.whakoomId,
     volumesList: ed.volumesList,
   });
@@ -172,11 +177,8 @@ export async function enumeratePublisherEditions(
 
   const urls = new Set<string>();
   for (let p = 1; p <= maxPages; p++) {
-    const html = await fetch(`${base}?_p=${p}`, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-    })
-      .then((r) => (r.ok ? r.text() : ""))
-      .catch(() => "");
+    const res = await fetchWhakoomHtml(`${base}?_p=${p}`);
+    const html = res.ok ? res.html : "";
 
     const paths = [
       ...new Set(
@@ -216,10 +218,14 @@ export async function importWhakoomUrls(
   urls: string[],
   opts: {
     throttleMs?: number;
+    // Si es false, no consulta AniList (más rápido y sin depender de su API):
+    // el seed bulk lo deja en null y el mapeo se hace después como enriquecimiento.
+    resolveAnilist?: boolean;
     onProgress?: (p: { done: number; total: number; mapped: number }) => void;
   } = {},
 ): Promise<ImportResult> {
   const throttle = opts.throttleMs ?? 700;
+  const resolveAnilist = opts.resolveAnilist !== false;
   const clean = [
     ...new Set(
       urls
@@ -251,9 +257,9 @@ export async function importWhakoomUrls(
     // lo que no mapea. El catálogo es local; AniList es solo una referencia. Esto
     // arregla que el import masivo tiraba la mayoría de las series (AniList no las
     // tiene o con otro título).
-    const anilistId = await resolveByTitleAuthor(ed.title, ed.author).catch(
-      () => null,
-    );
+    const anilistId = resolveAnilist
+      ? await resolveByTitleAuthor(ed.title, ed.author).catch(() => null)
+      : null;
 
     const slug = await targetSlug(publisher, ed.title, ed.whakoomId);
     // Para Ovni guardamos un link a OvniPress (no a Whakoom, que es solo la
@@ -278,6 +284,7 @@ export async function importWhakoomUrls(
       slug,
       title: ed.title,
       anilistId,
+      cover: ed.cover,
       whakoomId: ed.whakoomId,
       volumesList: ed.volumesList,
     });

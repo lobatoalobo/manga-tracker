@@ -9,6 +9,7 @@ export interface WhakoomEdition {
   publisher: string; // editorial tal como la lista Whakoom
   volumes: number;
   url: string;
+  cover: string | null; // portada (og:image)
   whakoomId: string | null; // id de la edición (/ediciones/<id>/…)
   volumesList: WhakoomVolume[]; // tomos individuales con su id de Whakoom
 }
@@ -32,32 +33,89 @@ const BROWSER_HEADERS = {
   "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
 };
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 /**
  * Fetch crudo de una página de Whakoom, reportando el motivo de falla (status
- * HTTP o error de red) para poder distinguir "bloqueado" de "no parseó".
+ * HTTP o error de red). Reintenta una vez ante rate-limit (429/503), que pasa
+ * al pedir varias páginas seguidas.
  */
 export async function fetchWhakoomHtml(
   url: string,
 ): Promise<{ ok: true; html: string } | { ok: false; reason: string }> {
-  const r = await fetch(url, { headers: BROWSER_HEADERS }).catch(
-    (e) => ({ _err: e instanceof Error ? e.message : "error de red" }) as const,
-  );
-  if ("_err" in r) return { ok: false, reason: `red: ${r._err}` };
-  if (!r.ok) return { ok: false, reason: `HTTP ${r.status}` };
-  return { ok: true, html: await r.text() };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const r = await fetch(url, { headers: BROWSER_HEADERS }).catch(
+      (e) => ({ _err: e instanceof Error ? e.message : "error de red" }) as const,
+    );
+    if ("_err" in r) {
+      if (attempt === 0) {
+        await sleep(1500);
+        continue;
+      }
+      return { ok: false, reason: `red: ${r._err}` };
+    }
+    if (r.status === 429 || r.status === 503) {
+      if (attempt === 0) {
+        await sleep(2000);
+        continue;
+      }
+      return { ok: false, reason: `HTTP ${r.status}` };
+    }
+    if (!r.ok) return { ok: false, reason: `HTTP ${r.status}` };
+    return { ok: true, html: await r.text() };
+  }
+  return { ok: false, reason: "rate-limit" };
+}
+
+/**
+ * Extrae la lista de tomos de un HTML de Whakoom. Cada tomo es un link
+ * /comics/<id>/<slug>[/<n>]: si están numerados, uno por número (deduplicado);
+ * si no, es una edición de 1 tomo. El conteo de tomos = `.length` de esto.
+ */
+export function parseVolumesList(t: string): WhakoomVolume[] {
+  const numbered = [...t.matchAll(/\/comics\/([A-Za-z0-9]+)\/[^"/]+\/(\d+)/g)];
+  const byNumber = new Map<number, string>();
+  for (const m of numbered) {
+    const n = Number(m[2]);
+    if (!byNumber.has(n)) byNumber.set(n, m[1]);
+  }
+  if (byNumber.size > 0)
+    return [...byNumber.entries()]
+      .map(([number, comicId]) => ({ number, comicId }))
+      .sort((a, b) => a.number - b.number);
+
+  const only = [...t.matchAll(/\/comics\/([A-Za-z0-9]+)\//g)].map((m) => m[1])[0];
+  return only ? [{ number: 1, comicId: only }] : [];
 }
 
 /**
  * Lee una página pública de edición de Whakoom (/ediciones/<id>/…) y extrae
- * título, autor, editorial y cantidad de tomos. Las páginas de edición son
- * públicas (a diferencia del buscador), así que no requiere login.
+ * título, autor, editorial, portada y la lista COMPLETA de tomos.
+ *
+ * La página de edición trunca los tomos a los últimos (~11); la lista completa
+ * vive en la vista `/todos`. Por eso hacemos un segundo fetch a /todos y usamos
+ * esa lista para el conteo (si trae más que la página principal).
  */
 export async function getWhakoomEdition(
   url: string,
 ): Promise<WhakoomEdition | null> {
   const r = await fetchWhakoomHtml(url);
   if (!r.ok) return null;
-  return parseWhakoomEdition(r.html, url);
+  const ed = parseWhakoomEdition(r.html, url);
+  if (!ed) return null;
+
+  const todosUrl =
+    url.replace(/[?#].*$/, "").replace(/\/+$/, "") + "/todos";
+  await sleep(350); // respiro entre los 2 fetches de la misma edición
+  const todos = await fetchWhakoomHtml(todosUrl);
+  if (todos.ok) {
+    const full = parseVolumesList(todos.html);
+    if (full.length > ed.volumesList.length) {
+      ed.volumesList = full;
+      ed.volumes = full.length;
+    }
+  }
+  return ed;
 }
 
 /**
@@ -94,37 +152,17 @@ export function parseWhakoomEdition(
   const author = linkText("/autores/");
   const publisher = linkText("/publisher/") ?? "";
 
-  // Cada tomo es un link /comics/<id>/<slug>[/<n>]. Las ediciones de varios
-  // tomos numeran el último segmento; las de 1 tomo no lo tienen. Tomamos el
-  // número más alto, o contamos los comics distintos si no hay numeración.
-  const numbered = [
-    ...t.matchAll(/\/comics\/([A-Za-z0-9]+)\/[^"/]+\/(\d+)/g),
-  ];
-  const comicIds = new Set(
-    [...t.matchAll(/\/comics\/([A-Za-z0-9]+)\//g)].map((m) => m[1]),
-  );
-
-  // Lista de tomos con su id de Whakoom. Si están numerados, uno por número
-  // (deduplicado); si no, es una edición de 1 tomo (number = 1).
-  const byNumber = new Map<number, string>();
-  for (const m of numbered) {
-    const n = Number(m[2]);
-    if (!byNumber.has(n)) byNumber.set(n, m[1]);
-  }
-  let volumesList: WhakoomVolume[];
-  if (byNumber.size > 0) {
-    volumesList = [...byNumber.entries()]
-      .map(([number, comicId]) => ({ number, comicId }))
-      .sort((a, b) => a.number - b.number);
-  } else {
-    const only = [...comicIds][0];
-    volumesList = only ? [{ number: 1, comicId: only }] : [];
-  }
-  const volumes = volumesList.length
-    ? Math.max(...volumesList.map((v) => v.number))
-    : 0;
+  // Lista de tomos. OJO: el conteo es la CANTIDAD de tomos distintos, NO el
+  // número más alto (una "edición especial" puede tener los tomos 41 y 42 = 2
+  // tomos, no 42). Y la página de edición está truncada a los últimos tomos:
+  // la lista completa la trae /todos (ver getWhakoomEdition).
+  const volumesList = parseVolumesList(t);
+  const volumes = volumesList.length;
 
   const whakoomId = url.match(/\/ediciones\/(\d+)/)?.[1] ?? null;
+  const cover =
+    t.match(/<meta property="og:image" content="([^"]+)"/i)?.[1]?.trim() ||
+    null;
 
-  return { title, author, publisher, volumes, url, whakoomId, volumesList };
+  return { title, author, publisher, volumes, url, cover, whakoomId, volumesList };
 }

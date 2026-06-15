@@ -13,6 +13,9 @@
     "studio:staging": "node scripts/with-staging.mjs npx prisma studio",
     "crawl": "tsx scripts/crawl.ts",
     "import:whakoom": "tsx scripts/import-whakoom.ts",
+    "seed:whakoom": "tsx scripts/seed-whakoom.ts",
+    "depurate": "tsx scripts/depurate-catalog.ts",
+    "flag-comics": "tsx scripts/flag-comics.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

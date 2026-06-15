@@ -58,10 +58,25 @@ export default function EditorialBrowser({
             key={w.id}
             href={w.anilistId ? `/manga/${w.anilistId}` : `/r/ed/${w.id}`}
             title={w.title}
-            className="flex items-center justify-between gap-2 rounded-xl border border-border bg-surface px-4 py-3 transition hover:border-accent"
+            className="flex items-center gap-3 rounded-xl border border-border bg-surface p-2 transition hover:border-accent"
           >
-            <span className="truncate text-sm font-medium">{w.title}</span>
-            <span className="shrink-0 text-xs text-muted">{w.volumes} tomos</span>
+            <span className="flex h-16 w-12 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-2">
+              {w.coverImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={w.coverImage}
+                  alt=""
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="text-lg">📕</span>
+              )}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">{w.title}</span>
+              <span className="text-xs text-muted">{w.volumes} tomos</span>
+            </span>
           </Link>
         ))}
       </div>

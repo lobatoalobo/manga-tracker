@@ -161,7 +161,10 @@ export default async function Home({
               </p>
               <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
                 {localHits.map((h) => {
-                  const cover = h.anilistId ? localCovers.get(h.anilistId) : null;
+                  const cover =
+                    (h.anilistId ? localCovers.get(h.anilistId) : null) ??
+                    h.coverImage ??
+                    null;
                   return (
                     <li key={h.anilistId ? `a${h.anilistId}` : `e${h.id}`}>
                       <Link
