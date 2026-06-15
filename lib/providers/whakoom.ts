@@ -9,6 +9,7 @@ export interface WhakoomEdition {
   publisher: string; // editorial tal como la lista Whakoom
   volumes: number;
   url: string;
+  cover: string | null; // portada (og:image)
   whakoomId: string | null; // id de la edición (/ediciones/<id>/…)
   volumesList: WhakoomVolume[]; // tomos individuales con su id de Whakoom
 }
@@ -125,6 +126,9 @@ export function parseWhakoomEdition(
     : 0;
 
   const whakoomId = url.match(/\/ediciones\/(\d+)/)?.[1] ?? null;
+  const cover =
+    t.match(/<meta property="og:image" content="([^"]+)"/i)?.[1]?.trim() ||
+    null;
 
-  return { title, author, publisher, volumes, url, whakoomId, volumesList };
+  return { title, author, publisher, volumes, url, cover, whakoomId, volumesList };
 }

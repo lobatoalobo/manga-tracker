@@ -56,6 +56,8 @@ export interface LocalCatalogHit {
   publisher: string;
   title: string;
   anilistId: number | null;
+  workId: number | null;
+  coverImage: string | null;
 }
 
 /**
@@ -75,18 +77,36 @@ export async function searchPublisherEditions(
   if (tokens.length === 0) return [];
   const rows = await prisma.publisherEdition.findMany({
     where: { AND: tokens.map((t) => ({ normTitle: { contains: t } })) },
-    select: { id: true, publisher: true, title: true, anilistId: true },
+    select: {
+      id: true,
+      publisher: true,
+      title: true,
+      anilistId: true,
+      workId: true,
+      work: { select: { coverImage: true } },
+    },
     orderBy: { volumes: "desc" },
     take: 60,
   });
-  // Dedupe: una fila por serie mapeada (anilistId) y por edición no mapeada.
+  // Dedupe: una fila por obra (workId), o por serie mapeada / edición si falta.
   const seen = new Set<string>();
   const out: LocalCatalogHit[] = [];
   for (const r of rows) {
-    const key = r.anilistId ? `a:${r.anilistId}` : `e:${r.id}`;
+    const key = r.workId
+      ? `w:${r.workId}`
+      : r.anilistId
+        ? `a:${r.anilistId}`
+        : `e:${r.id}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(r);
+    out.push({
+      id: r.id,
+      publisher: r.publisher,
+      title: r.title,
+      anilistId: r.anilistId,
+      workId: r.workId,
+      coverImage: r.work?.coverImage ?? null,
+    });
     if (out.length >= limit) break;
   }
   return out;
@@ -198,26 +218,33 @@ export async function findOrCreateWork(opts: {
 }): Promise<number> {
   const normTitle = normalizeTitle(opts.title);
 
-  if (opts.anilistId) {
-    const w = await prisma.work.upsert({
-      where: { anilistId: opts.anilistId },
-      update: {},
-      create: {
-        title: opts.title,
-        normTitle,
-        anilistId: opts.anilistId,
-        coverImage: opts.coverImage ?? null,
-      },
-    });
-    return w.id;
+  // Buscamos la obra existente: por anilistId (fuerte) o por título normalizado.
+  // Si no tiene portada y ahora tenemos una, la completamos (sin pisar la actual).
+  const existing = opts.anilistId
+    ? await prisma.work.findUnique({
+        where: { anilistId: opts.anilistId },
+        select: { id: true, coverImage: true },
+      })
+    : await prisma.work.findFirst({
+        where: { normTitle },
+        select: { id: true, coverImage: true },
+      });
+
+  if (existing) {
+    if (!existing.coverImage && opts.coverImage)
+      await prisma.work
+        .update({ where: { id: existing.id }, data: { coverImage: opts.coverImage } })
+        .catch(() => {});
+    return existing.id;
   }
 
-  // Sin anilistId: reusamos una obra existente con el mismo título normalizado
-  // (puede ser una ya mapeada a AniList: es la misma serie), o creamos una nueva.
-  const existing = await prisma.work.findFirst({ where: { normTitle } });
-  if (existing) return existing.id;
   const created = await prisma.work.create({
-    data: { title: opts.title, normTitle, coverImage: opts.coverImage ?? null },
+    data: {
+      title: opts.title,
+      normTitle,
+      anilistId: opts.anilistId ?? null,
+      coverImage: opts.coverImage ?? null,
+    },
   });
   return created.id;
 }
