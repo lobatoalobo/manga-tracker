@@ -1,11 +1,11 @@
 name: Crawl
 
 # Corre los crawls/jobs pesados en un runner (sin el límite de 60s de Vercel).
-# - Jobs de SITIO (Ivrea, etc.) y el cron de Ivrea → runner de GitHub (ubuntu).
+# Ejecución MANUAL (Actions / botones del admin). Sin cron: el admin decide
+# cuándo, con el banner-recordatorio del home como aviso de cadencia sugerida.
+# - Jobs de SITIO (Ivrea, etc.) → runner de GitHub (ubuntu).
 # - Jobs de WHAKOOM → self-hosted runner (tu máquina): Whakoom BLOQUEA a los
 #   runners de GitHub (validado: enumera 0 ediciones desde Actions, 298 local).
-# Se dispara a mano (Actions / botones del admin) o por schedule semanal.
-# OJO: los schedule SOLO corren desde la rama default (main).
 on:
   workflow_dispatch:
     inputs:
@@ -24,18 +24,11 @@ on:
           - whakoom-panini
           - whakoom-ovni-baseline
           - whakoom-panini-baseline
-  schedule:
-    # Lunes 09:00 UTC (~06:00 ART): Ivrea por su sitio (github-hosted).
-    - cron: "0 9 * * 1"
-    # Lunes 10:00 UTC: todo lo de Whakoom (self-hosted).
-    - cron: "0 10 * * 1"
 
 jobs:
-  # --- Jobs de sitio + cron de Ivrea: runner de GitHub --------------------------
+  # --- Jobs de sitio: runner de GitHub -----------------------------------------
   hosted:
-    if: >-
-      (github.event_name == 'workflow_dispatch' && !startsWith(github.event.inputs.job, 'whakoom')) ||
-      (github.event_name == 'schedule' && github.event.schedule == '0 9 * * 1')
+    if: ${{ !startsWith(github.event.inputs.job, 'whakoom') }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -62,11 +55,9 @@ jobs:
             *) echo "Job hosted desconocido: $JOB"; exit 1 ;;
           esac
 
-  # --- Jobs de Whakoom + cron semanal: self-hosted runner (tu máquina) ----------
+  # --- Jobs de Whakoom: self-hosted runner (tu máquina) -------------------------
   whakoom:
-    if: >-
-      (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.job, 'whakoom')) ||
-      (github.event_name == 'schedule' && github.event.schedule == '0 10 * * 1')
+    if: ${{ startsWith(github.event.inputs.job, 'whakoom') }}
     runs-on: [self-hosted]
     timeout-minutes: 240
     env:
