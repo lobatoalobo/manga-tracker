@@ -22,6 +22,10 @@ const GROUPS: Group[] = [
         desc: "Siembra el catálogo desde Whakoom (Ivrea/Panini/Ovni, secuencial y resumable).",
       },
       {
+        cmd: "npx tsx scripts/crawl.ts whakoom-all",
+        desc: "Actualiza TODO el catálogo de Whakoom (Panini/Ovni/Utopía/Kemuri/Larp/Distrito) + notifica tomos nuevos. Correr LOCAL (Whakoom bloquea a los runners). Es lo que avisa el banner del home.",
+      },
+      {
         cmd: "npm run import:whakoom -- <url>",
         desc: "Importa una edición puntual desde una URL de Whakoom (/ediciones/<id>/…).",
       },

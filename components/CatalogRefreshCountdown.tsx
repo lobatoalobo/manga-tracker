@@ -33,7 +33,7 @@ export default function CatalogRefreshCountdown({
   if (lastMs == null || dueMs == null)
     return (
       <span className="text-amber-300">
-        · nunca actualizado — corré “Whakoom · TODAS”
+        · nunca actualizado — corré <code>npm run crawl whakoom-all</code>
       </span>
     );
 

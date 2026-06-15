@@ -1,16 +1,13 @@
 const REPO = process.env.GITHUB_REPO || "lobatoalobo/manga-tracker";
 
+// Solo jobs de SITIO: corren en runner de GitHub. Lo de Whakoom NO se dispara
+// desde acá (Whakoom bloquea a los runners); se corre local (ver /admin/scripts).
 export const CRAWL_JOBS = [
   "ivrea",
   "panini",
   "ovni",
   "mangakas",
   "resolve",
-  "whakoom-all",
-  "whakoom-ovni",
-  "whakoom-panini",
-  "whakoom-ovni-baseline",
-  "whakoom-panini-baseline",
 ] as const;
 
 export type CrawlJob = (typeof CRAWL_JOBS)[number];

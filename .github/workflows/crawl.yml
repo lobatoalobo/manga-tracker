@@ -1,11 +1,10 @@
 name: Crawl
 
-# Corre los crawls/jobs pesados en un runner (sin el límite de 60s de Vercel).
-# Ejecución MANUAL (Actions / botones del admin). Sin cron: el admin decide
-# cuándo, con el banner-recordatorio del home como aviso de cadencia sugerida.
-# - Jobs de SITIO (Ivrea, etc.) → runner de GitHub (ubuntu).
-# - Jobs de WHAKOOM → self-hosted runner (tu máquina): Whakoom BLOQUEA a los
-#   runners de GitHub (validado: enumera 0 ediciones desde Actions, 298 local).
+# Corre los crawls/jobs de SITIO en un runner de GitHub (sin el límite de 60s de
+# Vercel). Ejecución MANUAL (Actions / botones del admin); sin cron.
+# OJO: lo de WHAKOOM NO va acá — Whakoom bloquea a los runners de GitHub
+# (validado: 0 ediciones desde Actions, 298 local). Se corre LOCAL con
+# `npm run crawl whakoom-all` (ver /admin/scripts).
 on:
   workflow_dispatch:
     inputs:
@@ -19,16 +18,9 @@ on:
           - ovni
           - mangakas
           - resolve
-          - whakoom-all
-          - whakoom-ovni
-          - whakoom-panini
-          - whakoom-ovni-baseline
-          - whakoom-panini-baseline
 
 jobs:
-  # --- Jobs de sitio: runner de GitHub -----------------------------------------
-  hosted:
-    if: ${{ !startsWith(github.event.inputs.job, 'whakoom') }}
+  crawl:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -41,44 +33,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma generate
-      - name: Run hosted job
+      - name: Run job (${{ inputs.job }})
         shell: bash
         run: |
-          JOB="${{ github.event.inputs.job || 'ivrea' }}"
-          echo "Job: $JOB"
-          case "$JOB" in
+          case "${{ inputs.job }}" in
             ivrea)    npm run crawl ivrea ;;
             panini)   npm run crawl panini ;;
             ovni)     npm run crawl ovni ;;
             mangakas) npm run crawl mangakas ;;
             resolve)  npm run crawl resolve ;;
-            *) echo "Job hosted desconocido: $JOB"; exit 1 ;;
-          esac
-
-  # --- Jobs de Whakoom: self-hosted runner (tu máquina) -------------------------
-  whakoom:
-    if: ${{ startsWith(github.event.inputs.job, 'whakoom') }}
-    runs-on: [self-hosted]
-    timeout-minutes: 240
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: npm ci
-      - run: npx prisma generate
-      - name: Run whakoom job
-        shell: bash
-        run: |
-          JOB="${{ github.event.inputs.job || 'whakoom-all' }}"
-          echo "Job: $JOB"
-          case "$JOB" in
-            whakoom-all)             npm run crawl whakoom-all ;;
-            whakoom-ovni)            npm run crawl whakoom-pub "https://www.whakoom.com/publisher/15389/ovni_press/all" ;;
-            whakoom-panini)          npm run crawl whakoom-pub "https://www.whakoom.com/publisher/20930/panini_comics_argentina/all" ;;
-            whakoom-ovni-baseline)   npm run crawl whakoom-pub "https://www.whakoom.com/publisher/15389/ovni_press/all" baseline ;;
-            whakoom-panini-baseline) npm run crawl whakoom-pub "https://www.whakoom.com/publisher/20930/panini_comics_argentina/all" baseline ;;
-            *) echo "Job whakoom desconocido: $JOB"; exit 1 ;;
+            *) echo "Job desconocido: ${{ inputs.job }}"; exit 1 ;;
           esac
