@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { getWishlist } from "@/lib/wishlist";
 import { nationalEditionIds } from "@/lib/getMangaDetails";
 import { crumbSearch } from "@/lib/crumb";
+import { seriesHref } from "@/lib/url";
 import RemoveWishButton from "@/components/RemoveWishButton";
 
 export const metadata = { title: "Deseados · Nakama" };
@@ -38,7 +39,7 @@ export default async function DeseadosPage() {
               className="group relative overflow-hidden rounded-xl border border-border bg-surface transition hover:border-accent"
             >
               <RemoveWishButton anilistId={w.anilistId} />
-              <Link href={`/manga/${w.anilistId}`} className="block">
+              <Link href={seriesHref(w.anilistId)} className="block">
                 <div className="aspect-2/3 w-full overflow-hidden bg-surface-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
