@@ -57,7 +57,7 @@ function safeToCollapse(keep: Row, drop: Row): boolean {
 }
 
 async function main() {
-  const apply = process.argv.includes("--apply");
+  const apply = process.argv.slice(2).some((a) => a === "--apply" || a === "apply");
 
   const rows: Row[] = await prisma.publisherEdition.findMany({
     where: { workId: { not: null } },

@@ -37,7 +37,7 @@ function looksLikeComic(title: string): string | null {
 }
 
 async function main() {
-  const apply = process.argv.includes("--apply");
+  const apply = process.argv.slice(2).some((a) => a === "--apply" || a === "apply");
 
   const rows = await prisma.publisherEdition.findMany({
     where: { anilistId: null }, // las mapeadas a AniList son manga casi seguro
