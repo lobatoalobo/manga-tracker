@@ -20,6 +20,7 @@
     "dedup-sources": "tsx scripts/dedup-sources.ts",
     "split-homonyms": "tsx scripts/split-homonyms.ts",
     "fix-ivrea-urls": "tsx scripts/fix-ivrea-urls.ts",
+    "fix-panini-urls": "tsx scripts/fix-panini-urls.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
