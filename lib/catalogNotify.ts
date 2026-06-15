@@ -65,7 +65,18 @@ export async function detectAndNotifyNewVolumes(
       },
       select: { manga: { select: { userId: true } } },
     });
-    const allUsers = [...new Set(tracked.map((t) => t.manga.userId))];
+    const audience = tracked.map((t) => t.manga.userId);
+    // Si era una preventa que recién sale, avisamos también a quienes la tienen
+    // en DESEADOS (su público natural: querían comprarla cuando saliera).
+    const releasing = !!r.work?.upcoming;
+    if (releasing) {
+      const wished = await prisma.wishlistItem.findMany({
+        where: { anilistId },
+        select: { userId: true },
+      });
+      audience.push(...wished.map((w) => w.userId));
+    }
+    const allUsers = [...new Set(audience)];
     const userIds = await filterNotifEnabled(allUsers, "NEW_VOLUME");
 
     if (userIds.length && samples.length < 20)
@@ -82,11 +93,13 @@ export async function detectAndNotifyNewVolumes(
             type: "NEW_VOLUME",
             actorName: r.title,
             anilistId,
-            text: `Tomo ${r.volumes} · ${r.publisher}`,
+            text: releasing
+              ? `¡Ya salió! Tomo ${r.volumes} · ${r.publisher}`
+              : `Tomo ${r.volumes} · ${r.publisher}`,
           })),
         });
         await sendPushToUsers(userIds, {
-          title: "📖 Tomo nuevo",
+          title: releasing ? "🎉 ¡Ya salió!" : "📖 Tomo nuevo",
           body: `${r.title} — Tomo ${r.volumes} (${r.publisher})`,
           url: `/manga/${anilistId}`,
         });
