@@ -236,6 +236,43 @@ export async function workCoverByAnilist(
   return w?.coverImage ?? null;
 }
 
+/** Set de anilistId marcados "próximo a salir" (flag manual del Work), vía edición. */
+export async function upcomingByAnilist(ids: number[]): Promise<Set<number>> {
+  const out = new Set<number>();
+  if (ids.length === 0) return out;
+  const rows = await prisma.publisherEdition.findMany({
+    where: { anilistId: { in: ids }, work: { upcoming: true } },
+    select: { anilistId: true },
+  });
+  for (const r of rows) if (r.anilistId != null) out.add(r.anilistId);
+  return out;
+}
+
+/**
+ * Set de ids "próximo a salir", en el MISMO espacio de ids que la colección:
+ * positivos = anilistId (vía edición), negativos = -editionId (obras nacionales).
+ */
+export async function upcomingForIds(ids: number[]): Promise<Set<number>> {
+  const out = new Set<number>();
+  const pos = ids.filter((i) => i > 0);
+  const negEditionIds = ids.filter((i) => i < 0).map((i) => -i);
+  if (pos.length) {
+    const rows = await prisma.publisherEdition.findMany({
+      where: { anilistId: { in: pos }, work: { upcoming: true } },
+      select: { anilistId: true },
+    });
+    for (const r of rows) if (r.anilistId != null) out.add(r.anilistId);
+  }
+  if (negEditionIds.length) {
+    const rows = await prisma.publisherEdition.findMany({
+      where: { id: { in: negEditionIds }, work: { upcoming: true } },
+      select: { id: true },
+    });
+    for (const r of rows) out.add(-r.id);
+  }
+  return out;
+}
+
 /** Cover nacional + flag "próximo a salir" por anilistId (vía edición→work). */
 export async function workMetaByAnilist(
   anilistId: number,
@@ -351,6 +388,7 @@ export interface EditorialWork {
   volumes: number;
   url: string;
   coverImage: string | null;
+  upcoming: boolean;
 }
 
 const editorialSelect = {
@@ -359,7 +397,7 @@ const editorialSelect = {
   anilistId: true,
   volumes: true,
   url: true,
-  work: { select: { coverImage: true } },
+  work: { select: { coverImage: true, upcoming: true } },
 } as const;
 
 type EditorialRow = {
@@ -368,7 +406,7 @@ type EditorialRow = {
   anilistId: number | null;
   volumes: number;
   url: string;
-  work: { coverImage: string | null } | null;
+  work: { coverImage: string | null; upcoming: boolean } | null;
 };
 
 const toEditorialWork = (r: EditorialRow): EditorialWork => ({
@@ -378,6 +416,7 @@ const toEditorialWork = (r: EditorialRow): EditorialWork => ({
   volumes: r.volumes,
   url: r.url,
   coverImage: r.work?.coverImage ?? null,
+  upcoming: r.work?.upcoming ?? false,
 });
 
 /** Página del catálogo de una editorial (orden alfabético). */
@@ -495,6 +534,7 @@ export async function updatePublisherEditionFields(
     normTitle?: string;
     url?: string;
     volumes?: number;
+    notifiedVolumes?: number;
     anilistId?: number | null;
   } = {};
   if (data.title !== undefined) {
@@ -502,8 +542,13 @@ export async function updatePublisherEditionFields(
     patch.normTitle = normalizeTitle(data.title);
   }
   if (data.url !== undefined) patch.url = data.url.trim();
-  if (data.volumes !== undefined && Number.isFinite(data.volumes))
+  if (data.volumes !== undefined && Number.isFinite(data.volumes)) {
     patch.volumes = data.volumes;
+    // Re-baselineamos el conteo notificado al valor que setea el admin: una
+    // corrección manual no debe spamear "tomo nuevo", y deja el 0→1 de una
+    // preventa listo para que el crawl lo detecte como lanzamiento real.
+    patch.notifiedVolumes = data.volumes;
+  }
   if (data.anilistId !== undefined) patch.anilistId = data.anilistId;
   await prisma.publisherEdition.update({ where: { id }, data: patch });
 }

@@ -33,6 +33,7 @@ export async function detectAndNotifyNewVolumes(
       title: true,
       volumes: true,
       notifiedVolumes: true,
+      work: { select: { upcoming: true } },
     },
   });
 
@@ -43,8 +44,11 @@ export async function detectAndNotifyNewVolumes(
   for (const r of increased) {
     const anilistId = r.anilistId as number;
 
-    // Primera vez que vemos la edición → baseline silencioso.
-    if (r.notifiedVolumes === 0) {
+    // Primera vez que vemos la edición → baseline silencioso. EXCEPCIÓN: si la
+    // obra está marcada "próximo a salir", este primer tomo es el lanzamiento
+    // real en AR → no es baseline, lo tratamos como tomo nuevo (notifica + abajo
+    // limpia el flag upcoming).
+    if (r.notifiedVolumes === 0 && !r.work?.upcoming) {
       if (!dryRun)
         await prisma.publisherEdition.update({
           where: { id: r.id },
@@ -90,6 +94,12 @@ export async function detectAndNotifyNewVolumes(
       await prisma.publisherEdition.update({
         where: { id: r.id },
         data: { notifiedVolumes: r.volumes },
+      });
+      // Si salió un tomo nuevo, la serie ya está a la venta → sacamos el flag
+      // "próximo a salir" (el badge desaparece en toda la plataforma).
+      await prisma.work.updateMany({
+        where: { editions: { some: { id: r.id } }, upcoming: true },
+        data: { upcoming: false },
       });
     }
   }

@@ -36,7 +36,12 @@ export default function MangaCard({
       )}
 
       <Link href={href} className="block">
-        <div className="aspect-2/3 w-full overflow-hidden bg-surface-2">
+        <div className="relative aspect-2/3 w-full overflow-hidden bg-surface-2">
+          {item.upcoming && (
+            <span className="absolute left-2 top-2 z-10 rounded-full bg-amber-500/90 px-2 py-0.5 text-[10px] font-semibold text-white">
+              🔜 Pronto
+            </span>
+          )}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={item.coverImage}

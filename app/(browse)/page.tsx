@@ -12,6 +12,7 @@ import { getAllMangakas } from "@/lib/mangakas";
 import {
   nationalEditionsByManga,
   nationalCoversByAnilist,
+  upcomingByAnilist,
   getEditorialAll,
   editorialCounts,
   searchPublisherEditions,
@@ -126,6 +127,10 @@ export default async function Home({
   const nationalCovers = await nationalCoversByAnilist(
     mangas.map((m: any) => m.id),
   ).catch(() => new Map<number, string>());
+  // Series marcadas "próximo a salir" (preventa AR) para el badge en las cards.
+  const upcomingIds = await upcomingByAnilist(
+    mangas.map((m: any) => m.id),
+  ).catch(() => new Set<number>());
 
   return (
     <main className="mx-auto max-w-6xl px-5 pb-12 pt-5">
@@ -145,7 +150,7 @@ export default async function Home({
           {mangas.length === 0 && localHits.length === 0 ? (
             <p className="text-sm text-muted">No encontramos resultados.</p>
           ) : (
-            <MangaGrid mangas={mangas} nationalEditions={nationalEditions} nationalCovers={nationalCovers} />
+            <MangaGrid mangas={mangas} nationalEditions={nationalEditions} nationalCovers={nationalCovers} upcomingIds={upcomingIds} />
           )}
 
           {searchInfo && searchInfo.lastPage > 1 && (
@@ -202,7 +207,7 @@ export default async function Home({
           )}
         </>
       ) : tab === "hot" ? (
-        <MangaGrid mangas={mangas} nationalEditions={nationalEditions} nationalCovers={nationalCovers} />
+        <MangaGrid mangas={mangas} nationalEditions={nationalEditions} nationalCovers={nationalCovers} upcomingIds={upcomingIds} />
       ) : tab === "az" ? (
         <>
           <FinishedFilterButton enabled active={onlyFinished} />
@@ -211,6 +216,7 @@ export default async function Home({
               mangas={mangas}
               nationalEditions={nationalEditions}
               nationalCovers={nationalCovers}
+              upcomingIds={upcomingIds}
               byRomaji
             />
           </div>
@@ -257,11 +263,13 @@ function MangaGrid({
   mangas,
   nationalEditions,
   nationalCovers,
+  upcomingIds,
   byRomaji = false,
 }: {
   mangas: any[];
   nationalEditions: Map<number, string[]>;
   nationalCovers?: Map<number, string>;
+  upcomingIds?: Set<number>;
   byRomaji?: boolean;
 }) {
   if (mangas.length === 0) {
@@ -276,6 +284,8 @@ function MangaGrid({
       {mangas.map((manga: any) => {
         const national = nationalEditions.get(manga.id);
         const cover = nationalCovers?.get(manga.id) ?? manga.coverImage.large;
+        const upcoming =
+          upcomingIds?.has(manga.id) || manga.status === "NOT_YET_RELEASED";
         return (
           <Link
             key={manga.id}
@@ -285,6 +295,14 @@ function MangaGrid({
             }`}
           >
             <div className="relative aspect-2/3 w-full overflow-hidden bg-surface-2">
+              {upcoming && (
+                <span
+                  className="absolute left-2 top-2 z-10 rounded-full bg-amber-500/90 px-2 py-0.5 text-[10px] font-semibold text-white"
+                  title="Próximo a salir (preventa / anunciada en AR)"
+                >
+                  🔜 Pronto
+                </span>
+              )}
               {national && (
                 <span
                   className="absolute right-2 top-2 z-10 rounded-full bg-sky-500/90 px-2 py-0.5 text-[10px] font-semibold text-white"

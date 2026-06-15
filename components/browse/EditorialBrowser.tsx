@@ -75,7 +75,14 @@ export default function EditorialBrowser({
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium">{w.title}</span>
-              <span className="text-xs text-muted">{w.volumes} tomos</span>
+              <span className="text-xs text-muted">
+                {w.volumes} tomos
+                {w.upcoming && (
+                  <span className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+                    🔜 Pronto
+                  </span>
+                )}
+              </span>
             </span>
           </Link>
         ))}
