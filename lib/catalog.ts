@@ -236,6 +236,18 @@ export async function workCoverByAnilist(
   return w?.coverImage ?? null;
 }
 
+/** Set de anilistId marcados "próximo a salir" (flag manual del Work), vía edición. */
+export async function upcomingByAnilist(ids: number[]): Promise<Set<number>> {
+  const out = new Set<number>();
+  if (ids.length === 0) return out;
+  const rows = await prisma.publisherEdition.findMany({
+    where: { anilistId: { in: ids }, work: { upcoming: true } },
+    select: { anilistId: true },
+  });
+  for (const r of rows) if (r.anilistId != null) out.add(r.anilistId);
+  return out;
+}
+
 /** Cover nacional + flag "próximo a salir" por anilistId (vía edición→work). */
 export async function workMetaByAnilist(
   anilistId: number,
@@ -351,6 +363,7 @@ export interface EditorialWork {
   volumes: number;
   url: string;
   coverImage: string | null;
+  upcoming: boolean;
 }
 
 const editorialSelect = {
@@ -359,7 +372,7 @@ const editorialSelect = {
   anilistId: true,
   volumes: true,
   url: true,
-  work: { select: { coverImage: true } },
+  work: { select: { coverImage: true, upcoming: true } },
 } as const;
 
 type EditorialRow = {
@@ -368,7 +381,7 @@ type EditorialRow = {
   anilistId: number | null;
   volumes: number;
   url: string;
-  work: { coverImage: string | null } | null;
+  work: { coverImage: string | null; upcoming: boolean } | null;
 };
 
 const toEditorialWork = (r: EditorialRow): EditorialWork => ({
@@ -378,6 +391,7 @@ const toEditorialWork = (r: EditorialRow): EditorialWork => ({
   volumes: r.volumes,
   url: r.url,
   coverImage: r.work?.coverImage ?? null,
+  upcoming: r.work?.upcoming ?? false,
 });
 
 /** Página del catálogo de una editorial (orden alfabético). */
