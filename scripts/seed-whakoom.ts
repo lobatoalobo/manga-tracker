@@ -35,6 +35,10 @@ const PUBLISHERS: Record<string, { label: string; allUrl: string | null }> = {
     allUrl:
       "https://www.whakoom.com/publisher/20930/panini_comics_argentina/all",
   },
+  kemuri: {
+    label: "Kemuri Ediciones",
+    allUrl: "https://www.whakoom.com/publisher/37785/kemuri_ediciones/all",
+  },
 };
 
 const cursorKey = (slug: string) => `seed:whakoom:${slug}`;

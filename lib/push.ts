@@ -54,6 +54,9 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
           JSON.stringify(payload),
+          // urgency "high" + TTL: le pide al push service que despierte el
+          // dispositivo y entregue aunque la app esté cerrada / en bajo consumo.
+          { urgency: "high", TTL: 60 * 60 * 24 },
         );
       } catch (e: unknown) {
         const code = (e as { statusCode?: number })?.statusCode;

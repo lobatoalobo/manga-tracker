@@ -20,6 +20,7 @@ export function mapWhakoomPublisher(whakoomPublisher: string): string | null {
   if (p.includes("panini") && p.includes("argentina")) return "Panini Argentina";
   if (p.includes("ivrea")) return "Ivrea Argentina";
   if (p.includes("ovni")) return "Ovni Press";
+  if (p.includes("kemuri")) return "Kemuri Ediciones";
   return null;
 }
 

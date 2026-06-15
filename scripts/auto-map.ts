@@ -21,9 +21,16 @@ async function main() {
   const apply = args.some((a) => a === "--apply" || a === "apply");
   const limIdx = args.indexOf("--limit");
   const limit = limIdx >= 0 ? Number(args[limIdx + 1]) || null : null;
-  const pubArg = args.find((a) => ["ivrea", "panini", "ovni"].includes(a));
+  const pubArg = args.find((a) =>
+    ["ivrea", "panini", "ovni", "kemuri"].includes(a),
+  );
   const publisher = pubArg
-    ? { ivrea: "Ivrea Argentina", panini: "Panini Argentina", ovni: "Ovni Press" }[pubArg]
+    ? {
+        ivrea: "Ivrea Argentina",
+        panini: "Panini Argentina",
+        ovni: "Ovni Press",
+        kemuri: "Kemuri Ediciones",
+      }[pubArg]
     : undefined;
 
   let rows = await prisma.publisherEdition.findMany({

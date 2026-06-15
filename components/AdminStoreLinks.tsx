@@ -16,7 +16,12 @@ import { crumbSearch } from "@/lib/crumb";
 const input =
   "w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent";
 
-const PUBLISHERS = ["Ivrea Argentina", "Panini Argentina", "Ovni Press"];
+const PUBLISHERS = [
+  "Ivrea Argentina",
+  "Panini Argentina",
+  "Ovni Press",
+  "Kemuri Ediciones",
+];
 
 export interface EditionLinkRow {
   id: number;
