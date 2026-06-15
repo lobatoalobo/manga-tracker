@@ -23,6 +23,8 @@
     "fix-panini-urls": "tsx scripts/fix-panini-urls.ts",
     "auto-map": "tsx scripts/auto-map.ts",
     "test-preventa": "tsx scripts/test-preventa.ts",
+    "reset-preventa": "tsx scripts/reset-preventa.ts",
+    "push-test": "tsx scripts/push-test.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

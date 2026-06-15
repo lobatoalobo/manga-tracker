@@ -69,6 +69,7 @@ export default function NavBar({
     { href: "/admin/independientes", label: "Indie", badge: badges.indie },
     { href: "/admin/logins", label: "Logins" },
     { href: "/admin/herramientas", label: "Herramientas" },
+    { href: "/admin/scripts", label: "Scripts" },
     { href: "/admin/inspeccionar", label: "Inspeccionar serie" },
   ];
 
