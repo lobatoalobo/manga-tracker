@@ -15,7 +15,13 @@ import type { EditionMapping } from "@/lib/catalog";
 const input =
   "rounded-lg border border-border bg-surface-2 px-2 py-1 text-sm outline-none focus:border-accent";
 
-export default function MappingRow({ row }: { row: EditionMapping }) {
+export default function MappingRow({
+  row,
+  anilistVolumes = null,
+}: {
+  row: EditionMapping;
+  anilistVolumes?: number | null;
+}) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [anilist, setAnilist] = useState(row.anilistId?.toString() ?? "");
@@ -54,7 +60,25 @@ export default function MappingRow({ row }: { row: EditionMapping }) {
             {row.title}
           </p>
           <p className="mt-0.5 text-xs text-muted">
-            {row.publisher} · {row.volumes} tomos ·{" "}
+            {row.publisher} ·{" "}
+            <span
+              className={
+                anilistVolumes != null && row.volumes > anilistVolumes
+                  ? "font-medium text-red-400"
+                  : ""
+              }
+              title={
+                anilistVolumes != null && row.volumes > anilistVolumes
+                  ? "Tenemos más tomos que el total de AniList: probable error"
+                  : undefined
+              }
+            >
+              {row.volumes} tomos
+            </span>
+            {anilistVolumes != null && (
+              <span className="text-muted"> (AniList: {anilistVolumes})</span>
+            )}{" "}
+            ·{" "}
             {row.anilistId ? (
               <Link
                 href={`/manga/${row.anilistId}`}
