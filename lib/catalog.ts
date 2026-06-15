@@ -481,6 +481,7 @@ export async function getEditionMappings(opts: {
   publisher?: string;
   state?: "mapped" | "unmapped" | "national";
   q?: string;
+  whakoomUrl?: boolean;
   page?: number;
   perPage?: number;
 }): Promise<{ rows: EditionMapping[]; total: number; lastPage: number }> {
@@ -492,6 +493,7 @@ export async function getEditionMappings(opts: {
     anilistId?: { not: null } | null;
     nationalOnly?: boolean;
     normTitle?: { contains: string };
+    url?: { contains: string };
   } = {};
   if (opts.publisher) where.publisher = opts.publisher;
   if (opts.state === "mapped") where.anilistId = { not: null };
@@ -501,6 +503,7 @@ export async function getEditionMappings(opts: {
     where.nationalOnly = false;
   }
   if (opts.state === "national") where.nationalOnly = true;
+  if (opts.whakoomUrl) where.url = { contains: "whakoom" };
   if (opts.q) where.normTitle = { contains: normalizeTitle(opts.q) };
 
   const [total, rows] = await Promise.all([
