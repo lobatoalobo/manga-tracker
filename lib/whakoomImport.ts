@@ -175,11 +175,8 @@ export async function enumeratePublisherEditions(
 
   const urls = new Set<string>();
   for (let p = 1; p <= maxPages; p++) {
-    const html = await fetch(`${base}?_p=${p}`, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-    })
-      .then((r) => (r.ok ? r.text() : ""))
-      .catch(() => "");
+    const res = await fetchWhakoomHtml(`${base}?_p=${p}`);
+    const html = res.ok ? res.html : "";
 
     const paths = [
       ...new Set(
@@ -219,10 +216,14 @@ export async function importWhakoomUrls(
   urls: string[],
   opts: {
     throttleMs?: number;
+    // Si es false, no consulta AniList (más rápido y sin depender de su API):
+    // el seed bulk lo deja en null y el mapeo se hace después como enriquecimiento.
+    resolveAnilist?: boolean;
     onProgress?: (p: { done: number; total: number; mapped: number }) => void;
   } = {},
 ): Promise<ImportResult> {
   const throttle = opts.throttleMs ?? 700;
+  const resolveAnilist = opts.resolveAnilist !== false;
   const clean = [
     ...new Set(
       urls
@@ -254,9 +255,9 @@ export async function importWhakoomUrls(
     // lo que no mapea. El catálogo es local; AniList es solo una referencia. Esto
     // arregla que el import masivo tiraba la mayoría de las series (AniList no las
     // tiene o con otro título).
-    const anilistId = await resolveByTitleAuthor(ed.title, ed.author).catch(
-      () => null,
-    );
+    const anilistId = resolveAnilist
+      ? await resolveByTitleAuthor(ed.title, ed.author).catch(() => null)
+      : null;
 
     const slug = await targetSlug(publisher, ed.title, ed.whakoomId);
     // Para Ovni guardamos un link a OvniPress (no a Whakoom, que es solo la

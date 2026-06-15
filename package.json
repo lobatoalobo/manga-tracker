@@ -13,6 +13,7 @@
     "studio:staging": "node scripts/with-staging.mjs npx prisma studio",
     "crawl": "tsx scripts/crawl.ts",
     "import:whakoom": "tsx scripts/import-whakoom.ts",
+    "seed:whakoom": "tsx scripts/seed-whakoom.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
