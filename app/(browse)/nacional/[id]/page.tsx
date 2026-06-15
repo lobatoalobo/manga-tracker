@@ -1,9 +1,11 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { isAdmin } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { getSeries } from "@/lib/collection";
 import { getIvreaDataBySlug } from "@/lib/providers/ivrea";
 import AddEditionButton from "@/components/AddEditionButton";
+import AdminNacionalEdit from "@/components/AdminNacionalEdit";
 import TrackingPanel from "@/components/TrackingPanel";
 import { SignIn } from "@/components/AuthButtons";
 import type { Edition } from "@/lib/editions";
@@ -54,6 +56,7 @@ export default async function NacionalPage({
   const pseudoId = -editionId;
   const session = await auth();
   const userId = session?.user?.id ?? null;
+  const admin = isAdmin(session?.user?.email);
   const series = userId ? await getSeries(userId, pseudoId) : null;
   const trackedKeys = series?.editions.map((e) => e.key) ?? [];
 
@@ -121,6 +124,15 @@ export default async function NacionalPage({
           >
             {linkLabel} ↗
           </a>
+
+          {admin && (
+            <AdminNacionalEdit
+              editionId={row.id}
+              title={row.title}
+              volumes={row.volumes}
+              url={row.url}
+            />
+          )}
         </div>
       </div>
 
