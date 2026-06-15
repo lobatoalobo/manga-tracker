@@ -116,6 +116,18 @@ async function main() {
     console.log(`Borradas ${r.count} ediciones (sus Volume se borraron en cascada).`);
   }
 
+  // Limpieza de Works huérfanos (sin ninguna edición), p. ej. tras borrar
+  // cómics o duplicados. Una obra sin ediciones no representa nada.
+  const orphans = await prisma.work.count({ where: { editions: { none: {} } } });
+  if (orphans > 0) {
+    if (!apply) {
+      console.log(`(${orphans} works huérfanos se borrarían con --apply.)`);
+    } else {
+      const r = await prisma.work.deleteMany({ where: { editions: { none: {} } } });
+      console.log(`Borrados ${r.count} works huérfanos.`);
+    }
+  }
+
   await prisma.$disconnect();
 }
 
