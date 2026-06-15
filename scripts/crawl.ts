@@ -259,10 +259,22 @@ async function crawlWhakoom(file: string) {
     console.log("  Salteadas:\n   " + res.skipped.slice(0, 30).join("\n   "));
 }
 
+// URLs /all de las editoriales que viven SOLO de Whakoom (Ivrea va por su sitio;
+// Planeta queda afuera: catálogo enorme y mitad no-manga, se cura a mano).
+const WHAKOOM_ALL_URLS = [
+  "https://www.whakoom.com/publisher/20930/panini_comics_argentina/all",
+  "https://www.whakoom.com/publisher/15389/ovni_press/all",
+  "https://www.whakoom.com/publisher/37785/kemuri_ediciones/all",
+  "https://www.whakoom.com/publisher/19718/utopia_editorial/all",
+  "https://www.whakoom.com/publisher/15398/larp_editores/all",
+  "https://www.whakoom.com/publisher/38673/distrito_manga/all",
+];
+
 async function crawlWhakoomPublisher(
   allUrl: string,
   reset: boolean,
   baseline: boolean,
+  tail = true,
 ) {
   console.log("\n=== Importar editorial completa desde Whakoom ===");
   const startedAt = new Date();
@@ -303,6 +315,8 @@ async function crawlWhakoomPublisher(
   });
   console.log("  Motivos de skip:", reasons);
 
+  if (!tail) return; // whakoom-all maneja la notificación una sola vez al final
+
   if (baseline) {
     // Corrección de conteos viejos malos: re-baselinamos sin notificar para no
     // spamear "tomo nuevo" por tomos que ya existían (solo el dato estaba mal).
@@ -311,6 +325,24 @@ async function crawlWhakoomPublisher(
   } else {
     await notifyNewVolumes();
   }
+}
+
+/**
+ * Import programado de TODAS las editoriales que viven de Whakoom (set & forget).
+ * Importa una por una y notifica "tomo nuevo" UNA sola vez al final. Las ediciones
+ * nuevas se baselean solas en silencio (notifiedVolumes 0), así que no spamea.
+ * Corre en el self-hosted runner (Whakoom bloquea a los runners de GitHub).
+ */
+async function crawlWhakoomAll() {
+  for (const url of WHAKOOM_ALL_URLS) {
+    try {
+      await crawlWhakoomPublisher(url, false, false, false);
+    } catch (e) {
+      console.error(`  Falló ${url} (sigo con el resto):`, e);
+    }
+    await sleep(2000);
+  }
+  await notifyNewVolumes();
 }
 
 async function main() {
@@ -327,6 +359,11 @@ async function main() {
   }
 
   const which = process.argv[2]; // ivrea|panini|ovni|mangakas|resolve|whakoom*
+  if (which === "whakoom-all") {
+    await crawlWhakoomAll();
+    console.log("\nListo.");
+    return;
+  }
   if (which === "resolve") {
     // resolve [reset] [publisher]   ej: resolve reset "Ivrea Argentina"
     const reset = process.argv[3] === "reset";

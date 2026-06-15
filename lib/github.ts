@@ -6,6 +6,7 @@ export const CRAWL_JOBS = [
   "ovni",
   "mangakas",
   "resolve",
+  "whakoom-all",
   "whakoom-ovni",
   "whakoom-panini",
   "whakoom-ovni-baseline",

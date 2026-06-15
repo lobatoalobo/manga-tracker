@@ -1,8 +1,11 @@
 name: Crawl
 
 # Corre los crawls/jobs pesados en un runner (sin el límite de 60s de Vercel).
-# Se dispara manualmente desde la pestaña Actions o con los botones del
-# dashboard admin (vía API). Corre contra la DB de producción (secret).
+# - Jobs de SITIO (Ivrea, etc.) y el cron de Ivrea → runner de GitHub (ubuntu).
+# - Jobs de WHAKOOM → self-hosted runner (tu máquina): Whakoom BLOQUEA a los
+#   runners de GitHub (validado: enumera 0 ediciones desde Actions, 298 local).
+# Se dispara a mano (Actions / botones del admin) o por schedule semanal.
+# OJO: los schedule SOLO corren desde la rama default (main).
 on:
   workflow_dispatch:
     inputs:
@@ -16,17 +19,25 @@ on:
           - ovni
           - mangakas
           - resolve
+          - whakoom-all
           - whakoom-ovni
           - whakoom-panini
           - whakoom-ovni-baseline
           - whakoom-panini-baseline
+  schedule:
+    # Lunes 09:00 UTC (~06:00 ART): Ivrea por su sitio (github-hosted).
+    - cron: "0 9 * * 1"
+    # Lunes 10:00 UTC: todo lo de Whakoom (self-hosted).
+    - cron: "0 10 * * 1"
 
 jobs:
-  crawl:
+  # --- Jobs de sitio + cron de Ivrea: runner de GitHub --------------------------
+  hosted:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && !startsWith(github.event.inputs.job, 'whakoom')) ||
+      (github.event_name == 'schedule' && github.event.schedule == '0 9 * * 1')
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    # A nivel job: lo necesita también el postinstall (prisma generate) durante
-    # `npm ci`, no solo el crawl. Sin esto, npm ci falla y nunca corre el job.
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
@@ -37,17 +48,46 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma generate
-      - name: Run job (${{ inputs.job }})
+      - name: Run hosted job
+        shell: bash
         run: |
-          case "${{ inputs.job }}" in
-            ivrea)          npm run crawl ivrea ;;
-            panini)         npm run crawl panini ;;
-            ovni)           npm run crawl ovni ;;
-            mangakas)       npm run crawl mangakas ;;
-            resolve)        npm run crawl resolve ;;
-            whakoom-ovni)   npm run crawl whakoom-pub "https://www.whakoom.com/publisher/15389/ovni_press/all" ;;
-            whakoom-panini) npm run crawl whakoom-pub "https://www.whakoom.com/publisher/20930/panini_comics_argentina/all" ;;
+          JOB="${{ github.event.inputs.job || 'ivrea' }}"
+          echo "Job: $JOB"
+          case "$JOB" in
+            ivrea)    npm run crawl ivrea ;;
+            panini)   npm run crawl panini ;;
+            ovni)     npm run crawl ovni ;;
+            mangakas) npm run crawl mangakas ;;
+            resolve)  npm run crawl resolve ;;
+            *) echo "Job hosted desconocido: $JOB"; exit 1 ;;
+          esac
+
+  # --- Jobs de Whakoom + cron semanal: self-hosted runner (tu máquina) ----------
+  whakoom:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.job, 'whakoom')) ||
+      (github.event_name == 'schedule' && github.event.schedule == '0 10 * * 1')
+    runs-on: [self-hosted]
+    timeout-minutes: 240
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Run whakoom job
+        shell: bash
+        run: |
+          JOB="${{ github.event.inputs.job || 'whakoom-all' }}"
+          echo "Job: $JOB"
+          case "$JOB" in
+            whakoom-all)             npm run crawl whakoom-all ;;
+            whakoom-ovni)            npm run crawl whakoom-pub "https://www.whakoom.com/publisher/15389/ovni_press/all" ;;
+            whakoom-panini)          npm run crawl whakoom-pub "https://www.whakoom.com/publisher/20930/panini_comics_argentina/all" ;;
             whakoom-ovni-baseline)   npm run crawl whakoom-pub "https://www.whakoom.com/publisher/15389/ovni_press/all" baseline ;;
             whakoom-panini-baseline) npm run crawl whakoom-pub "https://www.whakoom.com/publisher/20930/panini_comics_argentina/all" baseline ;;
-            *) echo "Job desconocido: ${{ inputs.job }}"; exit 1 ;;
+            *) echo "Job whakoom desconocido: $JOB"; exit 1 ;;
           esac

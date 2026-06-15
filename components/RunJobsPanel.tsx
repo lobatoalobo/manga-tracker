@@ -4,6 +4,11 @@ import { useState, useTransition } from "react";
 import { runCrawlAction } from "@/app/actions";
 
 const JOBS: { id: string; label: string; desc: string }[] = [
+  {
+    id: "whakoom-all",
+    label: "Whakoom · TODAS",
+    desc: "Re-import de todas las editoriales de Whakoom + notifica (self-hosted runner)",
+  },
   { id: "whakoom-ovni", label: "Ovni (Whakoom)", desc: "Import completo de Ovni" },
   { id: "whakoom-panini", label: "Panini (Whakoom)", desc: "Import completo de Panini" },
   {
