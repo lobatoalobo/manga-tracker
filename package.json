@@ -19,6 +19,7 @@
     "enrich-covers": "tsx scripts/enrich-covers.ts",
     "dedup-sources": "tsx scripts/dedup-sources.ts",
     "split-homonyms": "tsx scripts/split-homonyms.ts",
+    "fix-ivrea-urls": "tsx scripts/fix-ivrea-urls.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

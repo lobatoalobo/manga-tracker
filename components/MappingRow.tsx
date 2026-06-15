@@ -87,10 +87,20 @@ export default function MappingRow({
               >
                 serie #{row.anilistId} ↗
               </Link>
-            ) : row.nationalOnly ? (
-              <span className="text-sky-300">🇦🇷 nacional-only</span>
             ) : (
-              <span className="text-amber-400">sin mapear</span>
+              <>
+                <span className={row.nationalOnly ? "text-sky-300" : "text-amber-400"}>
+                  {row.nationalOnly ? "🇦🇷 nacional-only" : "sin mapear"}
+                </span>{" "}
+                ·{" "}
+                <Link
+                  href={`/nacional/${row.id}`}
+                  target="_blank"
+                  className="text-accent hover:underline"
+                >
+                  abrir ↗
+                </Link>
+              </>
             )}{" "}
             ·{" "}
             <a
