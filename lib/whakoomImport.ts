@@ -1,5 +1,7 @@
 import {
   getWhakoomEdition,
+  fetchWhakoomHtml,
+  parseWhakoomEdition,
   mapWhakoomPublisher,
   type WhakoomVolume,
 } from "./providers/whakoom";
@@ -84,8 +86,15 @@ export async function importWhakoomUrl(
   if (!/whakoom\.com\/ediciones\//i.test(url))
     return { ok: false, error: "No parece una URL de edición de Whakoom." };
 
-  const ed = await getWhakoomEdition(url).catch(() => null);
-  if (!ed) return { ok: false, error: "No se pudo leer la página de Whakoom." };
+  const fetched = await fetchWhakoomHtml(url);
+  if (!fetched.ok)
+    return {
+      ok: false,
+      error: `No se pudo leer la página de Whakoom (${fetched.reason}). Si dice HTTP 403/503, Whakoom está bloqueando el server; usá el script de import local.`,
+    };
+  const ed = parseWhakoomEdition(fetched.html, url);
+  if (!ed)
+    return { ok: false, error: "Se leyó la página pero no se pudo parsear." };
 
   const publisher = mapWhakoomPublisher(ed.publisher);
   if (!publisher)

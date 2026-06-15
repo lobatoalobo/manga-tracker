@@ -12,6 +12,7 @@
     "migrate:staging": "node scripts/with-staging.mjs npx prisma migrate deploy",
     "studio:staging": "node scripts/with-staging.mjs npx prisma studio",
     "crawl": "tsx scripts/crawl.ts",
+    "import:whakoom": "tsx scripts/import-whakoom.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
