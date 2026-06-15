@@ -203,11 +203,6 @@ export default async function NacionalPage({
           editions={series.editions}
         />
       )}
-
-      <p className="mt-8 text-xs text-muted">
-        Esta obra no figura en AniList; la información proviene de nuestro catálogo
-        local ({row.publisher}).
-      </p>
     </main>
   );
 }
