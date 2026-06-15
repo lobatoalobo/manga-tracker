@@ -25,6 +25,14 @@ const COMIC_TERMS = [
   "black panther", "pantera negra", "doctor strange", "ant-man", "black widow",
   "moon knight", "ghost rider", "silver surfer", "miles morales", "absolute batman",
   "dark knight", "gotham", "justice society", "green arrow", "shazam",
+  // Marvel/DC/Star Wars frecuentes en Panini (inequívocos, sin palabras genéricas):
+  "thanos", "black bolt", "blood hunt", "dark web", "devil's reign", "x-force",
+  "x-statix", "spider-gwen", "spider-verse", "gwen stacy", "black cat", "a.x.e",
+  "sabretooth", "gambit", "cyclops", "jean grey", "galactus", "doctor doom",
+  "red hood", "nightwing", "catwoman", "darkseid", "black adam", "namor",
+  "eternals", "inhumans", "she-hulk", "winter soldier", "luke cage", "iron fist",
+  "jessica jones", "kraven", "kingpin", "morbius", "america's got powers",
+  "camino a imperio", "anatomia de un metahumano", "star wars",
 ];
 
 function looksLikeComic(title: string): string | null {
@@ -62,7 +70,10 @@ async function main() {
     const r = await prisma.publisherEdition.deleteMany({
       where: { id: { in: hits.map((h) => h.id) } },
     });
-    console.log(`Borradas ${r.count} ediciones.`);
+    const orphans = await prisma.work.deleteMany({
+      where: { editions: { none: {} } },
+    });
+    console.log(`Borradas ${r.count} ediciones + ${orphans.count} works huérfanos.`);
   }
 
   await prisma.$disconnect();
