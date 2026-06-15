@@ -16,7 +16,12 @@ export interface WhakoomEdition {
 
 /** Mapea la editorial de Whakoom a nuestras editoriales argentinas (o null). */
 export function mapWhakoomPublisher(whakoomPublisher: string): string | null {
-  const p = whakoomPublisher.toLowerCase();
+  // Normalizamos tildes: la editorial puede venir "Planeta Cómic" (con tilde) y
+  // los checks usan ASCII ("comic").
+  const p = whakoomPublisher
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
   if (p.includes("panini") && p.includes("argentina")) return "Panini Argentina";
   if (p.includes("ivrea")) return "Ivrea Argentina";
   if (p.includes("ovni")) return "Ovni Press";
