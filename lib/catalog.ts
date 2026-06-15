@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { looksLikeComic } from "@/lib/comicTerms";
+import { WHAKOOM_NATIVE } from "@/lib/publishers";
 
 export const PUBLISHERS = [
   "Ivrea Argentina",
@@ -493,7 +494,7 @@ export async function getEditionMappings(opts: {
   const page = Math.max(1, opts.page ?? 1);
 
   const where: {
-    publisher?: string;
+    publisher?: string | { notIn: string[] };
     anilistId?: { not: null } | null;
     nationalOnly?: boolean;
     normTitle?: { contains: string };
@@ -516,7 +517,13 @@ export async function getEditionMappings(opts: {
     where.volumesList = { none: { coverImage: { not: null } } };
     where.OR = [{ workId: null }, { work: { coverImage: null } }];
   }
-  if (opts.whakoomUrl) where.url = { contains: "whakoom" };
+  // Link Whakoom = URL que quedó apuntando a Whakoom y debería ser de la
+  // editorial. Excluimos las editoriales nativas de Whakoom (Utopía): ahí el
+  // link de Whakoom es el correcto, no un pendiente.
+  if (opts.whakoomUrl) {
+    where.url = { contains: "whakoom" };
+    if (!opts.publisher) where.publisher = { notIn: [...WHAKOOM_NATIVE] };
+  }
   if (opts.q) where.normTitle = { contains: normalizeTitle(opts.q) };
 
   const select = {
