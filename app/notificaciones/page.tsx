@@ -3,6 +3,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { getNotifications, markAllRead } from "@/lib/notifications";
 import { seriesHref } from "@/lib/url";
+import RefreshOnMount from "@/components/RefreshOnMount";
 
 export const metadata = { title: "Notificaciones · Nakama" };
 
@@ -32,6 +33,8 @@ export default async function NotificacionesPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-5 py-8">
+      {/* Refresca el layout para limpiar la campanita tras markAllRead. */}
+      <RefreshOnMount />
       <div className="mb-6 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Notificaciones</h1>
         <Link

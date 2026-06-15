@@ -13,6 +13,7 @@ import NavBar from "@/components/NavBar";
 import BottomNav from "@/components/BottomNav";
 import InstallPWA from "@/components/InstallPWA";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import NotifSync from "@/components/NotifSync";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -89,6 +90,7 @@ export default async function RootLayout({
         {children}
 
         <ServiceWorkerRegister />
+        {session?.user && <NotifSync />}
 
         {session?.user && (
           <BottomNav

@@ -19,7 +19,17 @@ self.addEventListener("push", (event) => {
     badge: "/icons/192",
     data: { url: data.url || "/" },
   };
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      // Avisar a las pestañas abiertas para que refresquen la campanita/listas.
+      self.clients
+        .matchAll({ type: "window", includeUncontrolled: true })
+        .then((clients) => {
+          for (const c of clients) c.postMessage({ type: "push" });
+        }),
+    ]),
+  );
 });
 
 // Al tocar la notificación, enfoca/abre la URL.
