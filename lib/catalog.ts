@@ -278,7 +278,35 @@ export interface EditorialWork {
   anilistId: number | null;
   volumes: number;
   url: string;
+  coverImage: string | null;
 }
+
+const editorialSelect = {
+  id: true,
+  title: true,
+  anilistId: true,
+  volumes: true,
+  url: true,
+  work: { select: { coverImage: true } },
+} as const;
+
+type EditorialRow = {
+  id: number;
+  title: string;
+  anilistId: number | null;
+  volumes: number;
+  url: string;
+  work: { coverImage: string | null } | null;
+};
+
+const toEditorialWork = (r: EditorialRow): EditorialWork => ({
+  id: r.id,
+  title: r.title,
+  anilistId: r.anilistId,
+  volumes: r.volumes,
+  url: r.url,
+  coverImage: r.work?.coverImage ?? null,
+});
 
 /** Página del catálogo de una editorial (orden alfabético). */
 export async function getEditorialPage(
@@ -294,21 +322,25 @@ export async function getEditorialPage(
       orderBy: { normTitle: "asc" },
       skip: (safePage - 1) * perPage,
       take: perPage,
-      select: { id: true, title: true, anilistId: true, volumes: true, url: true },
+      select: editorialSelect,
     }),
   ]);
-  return { works: rows, lastPage: Math.max(1, Math.ceil(total / perPage)) };
+  return {
+    works: rows.map(toEditorialWork),
+    lastPage: Math.max(1, Math.ceil(total / perPage)),
+  };
 }
 
 /** Todo el catálogo de una editorial (para filtrar/paginar client-side). */
 export async function getEditorialAll(
   publisher: string,
 ): Promise<EditorialWork[]> {
-  return prisma.publisherEdition.findMany({
+  const rows = await prisma.publisherEdition.findMany({
     where: { publisher },
     orderBy: { normTitle: "asc" },
-    select: { id: true, title: true, anilistId: true, volumes: true, url: true },
+    select: editorialSelect,
   });
+  return rows.map(toEditorialWork);
 }
 
 // --- Curación admin de mapeos editorial ↔ serie ---
