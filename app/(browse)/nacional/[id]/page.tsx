@@ -106,7 +106,25 @@ export default async function NacionalPage({
             <span className="rounded-full bg-sky-500/15 px-2.5 py-0.5 text-xs font-medium text-sky-300">
               🇦🇷 Edición nacional
             </span>
+            {row.work?.upcoming && (
+              <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-300">
+                🔜 Próximo a salir
+              </span>
+            )}
           </div>
+
+          {(row.work?.genres?.length ?? 0) > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {row.work!.genres.map((g) => (
+                <span
+                  key={g}
+                  className="rounded-full bg-surface-2 px-3 py-1 text-xs text-muted"
+                >
+                  {g}
+                </span>
+              ))}
+            </div>
+          )}
 
           <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
             <Field label="Editorial" value={row.publisher} />
@@ -161,6 +179,8 @@ export default async function NacionalPage({
               author={author ?? ""}
               synopsis={synopsis ?? ""}
               coverImage={cover ?? ""}
+              genres={row.work?.genres ?? []}
+              upcoming={row.work?.upcoming ?? false}
               volumes={row.volumes}
               url={row.url}
               crumbInitial={crumbInitial}

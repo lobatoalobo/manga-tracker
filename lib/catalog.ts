@@ -236,6 +236,16 @@ export async function workCoverByAnilist(
   return w?.coverImage ?? null;
 }
 
+/** Cover nacional + flag "próximo a salir" del Work, por anilistId. */
+export async function workMetaByAnilist(
+  anilistId: number,
+): Promise<{ coverImage: string | null; upcoming: boolean } | null> {
+  return prisma.work.findUnique({
+    where: { anilistId },
+    select: { coverImage: true, upcoming: true },
+  });
+}
+
 /** Portadas nacionales (del Work) para varios anilistId, en una query. */
 export async function nationalCoversByAnilist(
   ids: number[],
