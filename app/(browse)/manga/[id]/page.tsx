@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { getSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
+import { workCoverByAnilist } from "@/lib/catalog";
 import { isWished } from "@/lib/wishlist";
 import { getNote, getSeriesNotes } from "@/lib/notes";
 import { displayTitle } from "@/lib/title";
@@ -39,12 +40,17 @@ export default async function Page({
   const anilist = await getMangaCore(mangaId).catch(() => null);
   if (!anilist) notFound();
 
-  const [series, wished, note, reviews] = await Promise.all([
+  const [series, wished, note, reviews, nationalCover] = await Promise.all([
     userId ? getSeries(userId, mangaId) : Promise.resolve(null),
     userId ? isWished(userId, mangaId) : Promise.resolve(false),
     userId ? getNote(userId, mangaId) : Promise.resolve(null),
     getSeriesNotes(mangaId),
+    workCoverByAnilist(mangaId).catch(() => null),
   ]);
+
+  // Para coleccionistas locales: si tenemos la portada de la edición nacional
+  // (del catálogo), la preferimos a la japonesa de AniList.
+  const cover = nationalCover ?? anilist.coverImage;
 
   // Contenido +18 solo para usuarios logueados.
   if (anilist.isAdult && !userId) {
@@ -84,7 +90,7 @@ export default async function Page({
       <div className="flex flex-col gap-6 sm:flex-row">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={anilist.coverImage}
+          src={cover}
           alt={title}
           className="h-72 w-48 shrink-0 self-start rounded-xl object-cover"
         />
@@ -166,7 +172,7 @@ export default async function Page({
               <WishButton
                 anilistId={mangaId}
                 title={title}
-                coverImage={anilist.coverImage}
+                coverImage={cover}
                 initialWished={wished}
               />
             )}

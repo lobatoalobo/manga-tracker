@@ -222,6 +222,21 @@ export async function upsertPublisherEdition(e: {
 }
 
 /**
+ * Portada del Work por anilistId. Cuando vino del import de Whakoom es la
+ * portada de la EDICIÓN NACIONAL (más reconocible para coleccionistas locales);
+ * si no, la de AniList que rellenamos. null si no hay Work/portada.
+ */
+export async function workCoverByAnilist(
+  anilistId: number,
+): Promise<string | null> {
+  const w = await prisma.work.findUnique({
+    where: { anilistId },
+    select: { coverImage: true },
+  });
+  return w?.coverImage ?? null;
+}
+
+/**
  * Encuentra (o crea) la obra del catálogo local para una edición. Agrupa por
  * `anilistId` cuando existe (referencia fuerte) y, si no, por título normalizado
  * (varias ediciones de la misma serie comparten título). Devuelve el workId.
