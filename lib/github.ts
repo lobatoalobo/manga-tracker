@@ -8,6 +8,8 @@ export const CRAWL_JOBS = [
   "resolve",
   "whakoom-ovni",
   "whakoom-panini",
+  "whakoom-ovni-baseline",
+  "whakoom-panini-baseline",
 ] as const;
 
 export type CrawlJob = (typeof CRAWL_JOBS)[number];

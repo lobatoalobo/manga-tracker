@@ -18,6 +18,8 @@ on:
           - resolve
           - whakoom-ovni
           - whakoom-panini
+          - whakoom-ovni-baseline
+          - whakoom-panini-baseline
 
 jobs:
   crawl:
@@ -45,5 +47,7 @@ jobs:
             resolve)        npm run crawl resolve ;;
             whakoom-ovni)   npm run crawl whakoom-pub "https://www.whakoom.com/publisher/15389/ovni_press/all" ;;
             whakoom-panini) npm run crawl whakoom-pub "https://www.whakoom.com/publisher/20930/panini_comics_argentina/all" ;;
+            whakoom-ovni-baseline)   npm run crawl whakoom-pub "https://www.whakoom.com/publisher/15389/ovni_press/all" baseline ;;
+            whakoom-panini-baseline) npm run crawl whakoom-pub "https://www.whakoom.com/publisher/20930/panini_comics_argentina/all" baseline ;;
             *) echo "Job desconocido: ${{ inputs.job }}"; exit 1 ;;
           esac

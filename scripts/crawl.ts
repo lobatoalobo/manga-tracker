@@ -9,11 +9,28 @@ import {
   enumeratePublisherEditions,
 } from "../lib/whakoomImport";
 import { logJobRun, groupSkipReasons } from "../lib/jobs";
-import { detectAndNotifyNewVolumes } from "../lib/catalogNotify";
+import {
+  detectAndNotifyNewVolumes,
+  baselineNotifiedVolumes,
+} from "../lib/catalogNotify";
 import { prisma } from "../lib/prisma";
 import { readFileSync } from "fs";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Editorial a partir de una URL /publisher/<id>/<slug>/all de Whakoom. */
+function publisherFromAllUrl(url: string): string | null {
+  const u = url.toLowerCase();
+  if (u.includes("panini")) return "Panini Argentina";
+  if (u.includes("ivrea")) return "Ivrea Argentina";
+  if (u.includes("ovni")) return "Ovni Press";
+  if (u.includes("kemuri")) return "Kemuri Ediciones";
+  if (u.includes("utopia")) return "Utopía Editorial";
+  if (u.includes("larp")) return "Larp Editores";
+  if (u.includes("distrito")) return "Distrito Manga";
+  if (u.includes("planeta")) return "Planeta Cómic";
+  return null;
+}
 
 const UA = { "User-Agent": "Mozilla/5.0" };
 
@@ -242,23 +259,18 @@ async function crawlWhakoom(file: string) {
     console.log("  Salteadas:\n   " + res.skipped.slice(0, 30).join("\n   "));
 }
 
-async function crawlWhakoomPublisher(allUrl: string, reset: boolean) {
+async function crawlWhakoomPublisher(
+  allUrl: string,
+  reset: boolean,
+  baseline: boolean,
+) {
   console.log("\n=== Importar editorial completa desde Whakoom ===");
   const startedAt = new Date();
+  const publisher = publisherFromAllUrl(allUrl);
 
-  if (reset) {
-    const u = allUrl.toLowerCase();
-    const publisher = u.includes("panini")
-      ? "Panini Argentina"
-      : u.includes("ivrea")
-        ? "Ivrea Argentina"
-        : u.includes("ovni")
-          ? "Ovni Press"
-          : null;
-    if (publisher) {
-      const r = await prisma.publisherEdition.deleteMany({ where: { publisher } });
-      console.log(`  Reset: borradas ${r.count} entradas viejas de ${publisher}.`);
-    }
+  if (reset && publisher) {
+    const r = await prisma.publisherEdition.deleteMany({ where: { publisher } });
+    console.log(`  Reset: borradas ${r.count} entradas viejas de ${publisher}.`);
   }
 
   console.log(`  Enumerando ediciones de ${allUrl}…`);
@@ -290,7 +302,15 @@ async function crawlWhakoomPublisher(allUrl: string, reset: boolean) {
     startedAt,
   });
   console.log("  Motivos de skip:", reasons);
-  await notifyNewVolumes();
+
+  if (baseline) {
+    // Corrección de conteos viejos malos: re-baselinamos sin notificar para no
+    // spamear "tomo nuevo" por tomos que ya existían (solo el dato estaba mal).
+    const n = await baselineNotifiedVolumes(publisher ?? undefined);
+    console.log(`  Baseline: ${n} ediciones re-baselizadas (sin notificar).`);
+  } else {
+    await notifyNewVolumes();
+  }
 }
 
 async function main() {
@@ -333,7 +353,8 @@ async function main() {
       );
       process.exit(1);
     }
-    await crawlWhakoomPublisher(url, process.argv[4] === "reset");
+    const mods = process.argv.slice(4);
+    await crawlWhakoomPublisher(url, mods.includes("reset"), mods.includes("baseline"));
     console.log("\nListo.");
     return;
   }

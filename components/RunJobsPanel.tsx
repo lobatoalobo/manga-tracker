@@ -6,6 +6,16 @@ import { runCrawlAction } from "@/app/actions";
 const JOBS: { id: string; label: string; desc: string }[] = [
   { id: "whakoom-ovni", label: "Ovni (Whakoom)", desc: "Import completo de Ovni" },
   { id: "whakoom-panini", label: "Panini (Whakoom)", desc: "Import completo de Panini" },
+  {
+    id: "whakoom-panini-baseline",
+    label: "Panini (Whakoom · baseline)",
+    desc: "Re-import + re-baseline SIN notificar (corrige conteos viejos malos)",
+  },
+  {
+    id: "whakoom-ovni-baseline",
+    label: "Ovni (Whakoom · baseline)",
+    desc: "Re-import + re-baseline SIN notificar (corrige conteos viejos malos)",
+  },
   { id: "ivrea", label: "Ivrea", desc: "Crawl del sitio de Ivrea" },
   { id: "panini", label: "Panini", desc: "Crawl del sitio de Panini" },
   { id: "ovni", label: "Ovni", desc: "Crawl del sitio de Ovni" },
