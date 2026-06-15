@@ -30,6 +30,14 @@ export default function MappingRow({
   const [volumes, setVolumes] = useState(row.volumes.toString());
   const [pending, start] = useTransition();
 
+  // La URL de la ficha debería ser de la editorial. Si es de Whakoom/AniList
+  // está mal (sobró del import) → la resaltamos para corregirla.
+  const badHost = /whakoom\.com/i.test(row.url)
+    ? "Whakoom"
+    : /anilist\.co/i.test(row.url)
+      ? "AniList"
+      : null;
+
   const run = (action: () => Promise<void>) =>
     start(async () => {
       await action();
@@ -60,23 +68,15 @@ export default function MappingRow({
             {row.title}
           </p>
           <p className="mt-0.5 text-xs text-muted">
-            {row.publisher} ·{" "}
-            <span
-              className={
-                anilistVolumes != null && row.volumes > anilistVolumes
-                  ? "font-medium text-red-400"
-                  : ""
-              }
-              title={
-                anilistVolumes != null && row.volumes > anilistVolumes
-                  ? "Tenemos más tomos que el total de AniList: probable error"
-                  : undefined
-              }
-            >
-              {row.volumes} tomos
-            </span>
-            {anilistVolumes != null && (
-              <span className="text-muted"> (AniList: {anilistVolumes})</span>
+            {row.publisher} · {row.volumes} tomos
+            {anilistVolumes != null && anilistVolumes !== row.volumes && (
+              <span
+                className="text-amber-400/80"
+                title="AniList dice otro total (su dato suele estar incompleto). Solo una referencia, no necesariamente un error."
+              >
+                {" "}
+                (AniList: {anilistVolumes})
+              </span>
             )}{" "}
             ·{" "}
             {row.anilistId ? (
@@ -97,9 +97,18 @@ export default function MappingRow({
               href={row.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-accent hover:underline"
+              className={
+                badHost
+                  ? "font-medium text-amber-400 hover:underline"
+                  : "text-accent hover:underline"
+              }
+              title={
+                badHost
+                  ? `El link de la ficha apunta a ${badHost}, no a la editorial. Corregilo con Editar.`
+                  : undefined
+              }
             >
-              ficha ↗
+              {badHost ? `⚠ link ${badHost}` : "ficha"} ↗
             </a>
           </p>
         </div>
