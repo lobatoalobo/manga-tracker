@@ -26,21 +26,29 @@ export default async function NacionalPage({
 
   const row = await prisma.publisherEdition.findUnique({
     where: { id: editionId },
+    include: { work: true },
   });
   if (!row) notFound();
   if (row.anilistId) redirect(`/manga/${row.anilistId}`);
 
+  // Datos LOCALES (catálogo/Work) primero; la ficha de Ivrea solo enriquece
+  // (autor/sinopsis) y solo aplica a ediciones de Ivrea con slug real del sitio.
   const ficha =
     row.publisher === "Ivrea Argentina"
       ? await getIvreaDataBySlug(row.slug).catch(() => null)
       : null;
 
-  const title = ficha?.title || row.title;
-  const cover = ficha?.coverImage ?? null;
+  const title = row.work?.title || ficha?.title || row.title;
+  const cover = row.work?.coverImage ?? ficha?.coverImage ?? null;
   const author = ficha?.author ?? null;
   const synopsis = ficha?.synopsis ?? null;
-  const volumes = ficha?.argentinaVolumes || row.volumes;
-  const status = ficha?.argentinaStatus || null;
+  const volumes = row.volumes || ficha?.argentinaVolumes || 0;
+  const status = row.status || ficha?.argentinaStatus || null;
+  // El link guardado a veces es de Whakoom (fuente del import): lo etiquetamos
+  // honestamente en vez de decir "Ver en Ivrea" y abrir Whakoom.
+  const linkLabel = /whakoom\.com/i.test(row.url)
+    ? "Ver ficha en Whakoom"
+    : `Ver en ${row.publisher}`;
 
   // Id propio (negativo) para la colección, sin chocar con ids de AniList.
   const pseudoId = -editionId;
@@ -111,7 +119,7 @@ export default async function NacionalPage({
             rel="noopener noreferrer"
             className="mt-3 inline-block text-xs text-accent hover:underline"
           >
-            Ver en {row.publisher} ↗
+            {linkLabel} ↗
           </a>
         </div>
       </div>
@@ -132,8 +140,8 @@ export default async function NacionalPage({
       )}
 
       <p className="mt-8 text-xs text-muted">
-        Esta obra no figura en AniList; la información proviene del catálogo de{" "}
-        {row.publisher}.
+        Esta obra no figura en AniList; la información proviene de nuestro catálogo
+        local ({row.publisher}).
       </p>
     </main>
   );
