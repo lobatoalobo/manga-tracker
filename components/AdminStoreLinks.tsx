@@ -21,6 +21,8 @@ const PUBLISHERS = [
   "Panini Argentina",
   "Ovni Press",
   "Kemuri Ediciones",
+  "Utopía Editorial",
+  "Larp Editores",
 ];
 
 export interface EditionLinkRow {

@@ -7,6 +7,8 @@ const PUB_KEY: Record<string, string> = {
   "Panini Argentina": "panini",
   "Ovni Press": "ovni",
   "Kemuri Ediciones": "kemuri",
+  "Utopía Editorial": "utopia",
+  "Larp Editores": "larp",
 };
 
 export interface NewVolumeResult {

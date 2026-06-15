@@ -5,6 +5,8 @@ export const PUBLISHERS = [
   "Panini Argentina",
   "Ovni Press",
   "Kemuri Ediciones",
+  "Utopía Editorial",
+  "Larp Editores",
 ] as const;
 
 /** Editoriales para el browse: slug de URL ↔ nombre en el índice + label corto. */
@@ -13,6 +15,8 @@ export const EDITORIALS = [
   { slug: "panini", publisher: "Panini Argentina", label: "Panini" },
   { slug: "ovni", publisher: "Ovni Press", label: "Ovni" },
   { slug: "kemuri", publisher: "Kemuri Ediciones", label: "Kemuri" },
+  { slug: "utopia", publisher: "Utopía Editorial", label: "Utopía" },
+  { slug: "larp", publisher: "Larp Editores", label: "Larp" },
 ] as const;
 
 export interface IndexedEdition {

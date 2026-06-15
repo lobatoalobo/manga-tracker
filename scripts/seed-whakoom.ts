@@ -39,6 +39,14 @@ const PUBLISHERS: Record<string, { label: string; allUrl: string | null }> = {
     label: "Kemuri Ediciones",
     allUrl: "https://www.whakoom.com/publisher/37785/kemuri_ediciones/all",
   },
+  utopia: {
+    label: "Utopía Editorial",
+    allUrl: "https://www.whakoom.com/publisher/19718/utopia_editorial/all",
+  },
+  larp: {
+    label: "Larp Editores",
+    allUrl: "https://www.whakoom.com/publisher/15398/larp_editores/all",
+  },
 };
 
 const cursorKey = (slug: string) => `seed:whakoom:${slug}`;
