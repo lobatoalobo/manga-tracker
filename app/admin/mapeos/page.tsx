@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { getEditionMappings, EDITORIALS } from "@/lib/catalog";
 import { getMangaVolumes } from "@/lib/anilist";
-import MappingRow from "@/components/MappingRow";
+import MappingList from "@/components/MappingList";
 import Pager from "@/components/Pager";
 
 export const metadata = { title: "Mapeos editoriales (admin) · Nakama" };
@@ -25,14 +25,9 @@ export default async function AdminMapeosPage({
 
   const params = await searchParams;
   const editorial = EDITORIALS.find((e) => e.slug === params.ed);
-  const state =
-    params.estado === "mapped"
-      ? "mapped"
-      : params.estado === "unmapped"
-        ? "unmapped"
-        : params.estado === "national"
-          ? "national"
-          : undefined;
+  const state = (
+    ["mapped", "unmapped", "national", "comic", "nocover"] as const
+  ).find((s) => s === params.estado);
   const q = params.q?.trim() || undefined;
   const whakoomUrl = params.link === "whakoom";
   const page = Math.max(1, Number(params.page) || 1);
@@ -105,6 +100,18 @@ export default async function AdminMapeosPage({
           Nacional-only
         </Chip>
         <Chip
+          href={`/admin/mapeos?estado=nocover${editorial ? `&ed=${editorial.slug}` : ""}`}
+          active={state === "nocover"}
+        >
+          🖼 Sin portada
+        </Chip>
+        <Chip
+          href={`/admin/mapeos?estado=comic${editorial ? `&ed=${editorial.slug}` : ""}`}
+          active={state === "comic"}
+        >
+          🦸 Sospecha cómic
+        </Chip>
+        <Chip
           href={`/admin/mapeos?link=whakoom${editorial ? `&ed=${editorial.slug}` : ""}`}
           active={whakoomUrl}
         >
@@ -129,17 +136,10 @@ export default async function AdminMapeosPage({
 
       <p className="mb-3 text-sm text-muted">{total} entradas</p>
 
-      <ul className="space-y-2">
-        {rows.map((row) => (
-          <MappingRow
-            key={row.id}
-            row={row}
-            anilistVolumes={
-              row.anilistId ? anilistVolumes.get(row.anilistId) ?? null : null
-            }
-          />
-        ))}
-      </ul>
+      <MappingList
+        rows={rows}
+        anilistVolumes={Object.fromEntries(anilistVolumes)}
+      />
 
       {lastPage > 1 && (
         <Pager basePath={base} page={page} lastPage={lastPage} />

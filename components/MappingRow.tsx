@@ -18,9 +18,13 @@ const input =
 export default function MappingRow({
   row,
   anilistVolumes = null,
+  selected,
+  onToggle,
 }: {
   row: EditionMapping;
   anilistVolumes?: number | null;
+  selected?: boolean;
+  onToggle?: (id: number) => void;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -61,9 +65,23 @@ export default function MappingRow({
     });
 
   return (
-    <li className="rounded-xl border border-border bg-surface p-3">
+    <li
+      className={`rounded-xl border bg-surface p-3 ${
+        selected ? "border-accent" : "border-border"
+      }`}
+    >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-start gap-2.5">
+          {onToggle && (
+            <input
+              type="checkbox"
+              checked={!!selected}
+              onChange={() => onToggle(row.id)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-rose-600"
+              aria-label="Seleccionar"
+            />
+          )}
+          <div className="min-w-0">
           <p className="truncate text-sm font-medium" title={row.title}>
             {row.title}
           </p>
@@ -121,6 +139,7 @@ export default function MappingRow({
               {badHost ? `⚠ link ${badHost}` : "ficha"} ↗
             </a>
           </p>
+          </div>
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">

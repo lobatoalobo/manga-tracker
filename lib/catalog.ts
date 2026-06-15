@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { looksLikeComic } from "@/lib/comicTerms";
 
 export const PUBLISHERS = [
   "Ivrea Argentina",
@@ -479,7 +480,7 @@ export interface EditionMapping {
 
 export async function getEditionMappings(opts: {
   publisher?: string;
-  state?: "mapped" | "unmapped" | "national";
+  state?: "mapped" | "unmapped" | "national" | "comic" | "nocover";
   q?: string;
   whakoomUrl?: boolean;
   page?: number;
@@ -494,6 +495,8 @@ export async function getEditionMappings(opts: {
     nationalOnly?: boolean;
     normTitle?: { contains: string };
     url?: { contains: string };
+    volumesList?: { none: { coverImage: { not: null } } };
+    OR?: ({ workId: null } | { work: { coverImage: null } })[];
   } = {};
   if (opts.publisher) where.publisher = opts.publisher;
   if (opts.state === "mapped") where.anilistId = { not: null };
@@ -503,8 +506,41 @@ export async function getEditionMappings(opts: {
     where.nationalOnly = false;
   }
   if (opts.state === "national") where.nationalOnly = true;
+  // "Sin portada" = nacional (sin fallback de AniList) y sin imagen en su Work
+  // ni en sus tomos → la card sale sin imagen. Acá es donde hay que actuar.
+  if (opts.state === "nocover") {
+    where.anilistId = null;
+    where.volumesList = { none: { coverImage: { not: null } } };
+    where.OR = [{ workId: null }, { work: { coverImage: null } }];
+  }
   if (opts.whakoomUrl) where.url = { contains: "whakoom" };
   if (opts.q) where.normTitle = { contains: normalizeTitle(opts.q) };
+
+  const select = {
+    id: true,
+    publisher: true,
+    title: true,
+    slug: true,
+    url: true,
+    volumes: true,
+    anilistId: true,
+    nationalOnly: true,
+  } as const;
+
+  // "Sospecha cómic" no es queryable (lista de términos en JS): traemos las
+  // entradas sin mapear y filtramos/paginamos en memoria.
+  if (opts.state === "comic") {
+    where.anilistId = null;
+    const all = await prisma.publisherEdition.findMany({
+      where,
+      orderBy: { normTitle: "asc" },
+      select,
+    });
+    const hits = all.filter((r) => looksLikeComic(r.title));
+    const total = hits.length;
+    const rows = hits.slice((page - 1) * perPage, page * perPage);
+    return { rows, total, lastPage: Math.max(1, Math.ceil(total / perPage)) };
+  }
 
   const [total, rows] = await Promise.all([
     prisma.publisherEdition.count({ where }),
@@ -513,19 +549,28 @@ export async function getEditionMappings(opts: {
       orderBy: { normTitle: "asc" },
       skip: (page - 1) * perPage,
       take: perPage,
-      select: {
-        id: true,
-        publisher: true,
-        title: true,
-        slug: true,
-        url: true,
-        volumes: true,
-        anilistId: true,
-        nationalOnly: true,
-      },
+      select,
     }),
   ]);
   return { rows, total, lastPage: Math.max(1, Math.ceil(total / perPage)) };
+}
+
+/** Conteos para el panel: posibles cómics y ediciones nacionales sin portada. */
+export async function getCatalogFlags(): Promise<{ comics: number; noCover: number }> {
+  const [unmapped, noCover] = await Promise.all([
+    prisma.publisherEdition.findMany({
+      where: { anilistId: null },
+      select: { title: true },
+    }),
+    prisma.publisherEdition.count({
+      where: {
+        anilistId: null,
+        volumesList: { none: { coverImage: { not: null } } },
+        OR: [{ workId: null }, { work: { coverImage: null } }],
+      },
+    }),
+  ]);
+  return { comics: unmapped.filter((r) => looksLikeComic(r.title)).length, noCover };
 }
 
 export async function setEditionAnilistId(id: number, anilistId: number | null) {

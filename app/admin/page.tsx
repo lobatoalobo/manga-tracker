@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { getMappingHealth } from "@/lib/mappingHealth";
+import { getCatalogFlags } from "@/lib/catalog";
 import { getCatalogIntegrity } from "@/lib/adminChecks";
 import { getJobRuns } from "@/lib/jobs";
 import { countPendingReports } from "@/lib/reports";
@@ -16,7 +17,7 @@ export default async function AdminHome() {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) notFound();
 
-  const [health, integrity, jobs, reports, stores, indie, works, upcoming] =
+  const [health, integrity, jobs, reports, stores, indie, works, upcoming, flags] =
     await Promise.all([
       getMappingHealth(),
       getCatalogIntegrity(),
@@ -26,6 +27,7 @@ export default async function AdminHome() {
       countPendingIndieWorks(),
       prisma.work.count(),
       prisma.work.count({ where: { upcoming: true } }),
+      getCatalogFlags(),
     ]);
 
   const total = health.publishers.reduce((s, p) => s + p.total, 0);
@@ -57,6 +59,20 @@ export default async function AdminHome() {
         <Stat label="Nacionales" value={national + unmapped} />
         <Stat label="Obras" value={works} />
         <Stat label="🔜 Preventas" value={upcoming} />
+      </div>
+      <div className="mb-4 grid grid-cols-2 gap-3">
+        <Stat
+          href="/admin/mapeos?estado=nocover"
+          label="🖼 Sin portada"
+          value={flags.noCover}
+          alert={flags.noCover > 0}
+        />
+        <Stat
+          href="/admin/mapeos?estado=comic"
+          label="🦸 Sospecha cómic"
+          value={flags.comics}
+          alert={flags.comics > 0}
+        />
       </div>
       <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {health.publishers
