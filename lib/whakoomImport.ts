@@ -9,6 +9,27 @@ import { ovniSearchUrl } from "./ovni";
 import { prisma } from "./prisma";
 
 /**
+ * Slug destino para una edición de Whakoom. Si ya existe una fila de esta misma
+ * editorial con este `whakoomId`, devolvemos SU slug para actualizarla (dedup):
+ * así reimportar la misma edición —aunque el título haya cambiado un poco— no
+ * crea un duplicado. Si no, slug nuevo desde el título.
+ */
+async function targetSlug(
+  publisher: string,
+  title: string,
+  whakoomId: string | null,
+): Promise<string> {
+  if (whakoomId) {
+    const existing = await prisma.publisherEdition.findUnique({
+      where: { whakoomId },
+      select: { publisher: true, slug: true },
+    });
+    if (existing && existing.publisher === publisher) return existing.slug;
+  }
+  return slugifyTitle(title);
+}
+
+/**
  * Guarda la identidad de Whakoom (id de edición + tomos individuales) sobre una
  * fila de PublisherEdition ya creada. Best-effort: si el whakoomId choca con otra
  * fila (unique) lo ignoramos en vez de romper el import.
@@ -73,7 +94,7 @@ export async function importWhakoomUrl(
   const anilistId = await resolveByTitleAuthor(ed.title, ed.author).catch(
     () => null,
   );
-  const slug = slugifyTitle(ed.title);
+  const slug = await targetSlug(publisher, ed.title, ed.whakoomId);
   const storeUrl = publisher === "Ovni Press" ? ovniSearchUrl(ed.title) : url;
 
   await upsertPublisherEdition({
@@ -207,7 +228,7 @@ export async function importWhakoomUrls(
       continue;
     }
 
-    const slug = slugifyTitle(ed.title);
+    const slug = await targetSlug(publisher, ed.title, ed.whakoomId);
     // Para Ovni guardamos un link a OvniPress (no a Whakoom, que es solo la
     // fuente del import); para el resto, la URL de la edición.
     const storeUrl =
