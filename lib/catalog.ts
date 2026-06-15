@@ -187,6 +187,42 @@ export async function upsertPublisherEdition(e: {
 }
 
 /**
+ * Encuentra (o crea) la obra del catálogo local para una edición. Agrupa por
+ * `anilistId` cuando existe (referencia fuerte) y, si no, por título normalizado
+ * (varias ediciones de la misma serie comparten título). Devuelve el workId.
+ */
+export async function findOrCreateWork(opts: {
+  title: string;
+  anilistId?: number | null;
+  coverImage?: string | null;
+}): Promise<number> {
+  const normTitle = normalizeTitle(opts.title);
+
+  if (opts.anilistId) {
+    const w = await prisma.work.upsert({
+      where: { anilistId: opts.anilistId },
+      update: {},
+      create: {
+        title: opts.title,
+        normTitle,
+        anilistId: opts.anilistId,
+        coverImage: opts.coverImage ?? null,
+      },
+    });
+    return w.id;
+  }
+
+  // Sin anilistId: reusamos una obra existente con el mismo título normalizado
+  // (puede ser una ya mapeada a AniList: es la misma serie), o creamos una nueva.
+  const existing = await prisma.work.findFirst({ where: { normTitle } });
+  if (existing) return existing.id;
+  const created = await prisma.work.create({
+    data: { title: opts.title, normTitle, coverImage: opts.coverImage ?? null },
+  });
+  return created.id;
+}
+
+/**
  * Backfill del id de AniList en las filas del índice ya matcheadas (y verificadas
  * por autor) para una serie. Permite linkear directo desde el browse por
  * editorial a la ficha. Best-effort.

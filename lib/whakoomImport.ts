@@ -6,7 +6,11 @@ import {
   type WhakoomVolume,
 } from "./providers/whakoom";
 import { resolveByTitleAuthor } from "./resolveSeries";
-import { upsertPublisherEdition, slugifyTitle } from "./catalog";
+import {
+  upsertPublisherEdition,
+  slugifyTitle,
+  findOrCreateWork,
+} from "./catalog";
 import { ovniSearchUrl } from "./ovni";
 import { prisma } from "./prisma";
 
@@ -32,28 +36,38 @@ async function targetSlug(
 }
 
 /**
- * Guarda la identidad de Whakoom (id de edición + tomos individuales) sobre una
- * fila de PublisherEdition ya creada. Best-effort: si el whakoomId choca con otra
- * fila (unique) lo ignoramos en vez de romper el import.
+ * Sobre una fila de PublisherEdition ya creada, guarda: el id de Whakoom, la obra
+ * del catálogo local (workId, agrupando por anilistId/título), y los tomos
+ * individuales. Best-effort: si el whakoomId choca con otra fila lo ignoramos.
  */
-async function persistWhakoomIdentity(
-  publisher: string,
-  slug: string,
-  whakoomId: string | null,
-  volumesList: WhakoomVolume[],
-) {
+async function persistEditionIdentity(opts: {
+  publisher: string;
+  slug: string;
+  title: string;
+  anilistId: number | null;
+  whakoomId: string | null;
+  volumesList: WhakoomVolume[];
+}) {
   const row = await prisma.publisherEdition.findUnique({
-    where: { publisher_slug: { publisher, slug } },
+    where: { publisher_slug: { publisher: opts.publisher, slug: opts.slug } },
     select: { id: true },
   });
   if (!row) return;
 
-  if (whakoomId)
+  const workId = await findOrCreateWork({
+    title: opts.title,
+    anilistId: opts.anilistId,
+  }).catch(() => null);
+
+  const data: { whakoomId?: string; workId?: number } = {};
+  if (opts.whakoomId) data.whakoomId = opts.whakoomId;
+  if (workId) data.workId = workId;
+  if (Object.keys(data).length)
     await prisma.publisherEdition
-      .update({ where: { id: row.id }, data: { whakoomId } })
+      .update({ where: { id: row.id }, data })
       .catch(() => {});
 
-  for (const v of volumesList) {
+  for (const v of opts.volumesList) {
     if (!Number.isFinite(v.number) || v.number <= 0) continue;
     await prisma.volume
       .upsert({
@@ -119,7 +133,14 @@ export async function importWhakoomUrl(
       .updateMany({ where: { publisher, slug }, data: { anilistId } })
       .catch(() => {});
 
-  await persistWhakoomIdentity(publisher, slug, ed.whakoomId, ed.volumesList);
+  await persistEditionIdentity({
+    publisher,
+    slug,
+    title: ed.title,
+    anilistId,
+    whakoomId: ed.whakoomId,
+    volumesList: ed.volumesList,
+  });
 
   const row = await prisma.publisherEdition.findUnique({
     where: { publisher_slug: { publisher, slug } },
@@ -226,16 +247,13 @@ export async function importWhakoomUrls(
       continue;
     }
 
-    // Solo guardamos lo que mapea a AniList (verificado por autor): eso filtra a
-    // manga (AniList es solo manga) y descarta cómics Marvel/DC y homónimos.
+    // Mapeo a AniList opcional (referencia/enriquecimiento): ya NO descartamos
+    // lo que no mapea. El catálogo es local; AniList es solo una referencia. Esto
+    // arregla que el import masivo tiraba la mayoría de las series (AniList no las
+    // tiene o con otro título).
     const anilistId = await resolveByTitleAuthor(ed.title, ed.author).catch(
       () => null,
     );
-    if (!anilistId) {
-      res.skipped.push(`${url} — no mapeó a AniList (${ed.title})`);
-      await sleep(throttle);
-      continue;
-    }
 
     const slug = await targetSlug(publisher, ed.title, ed.whakoomId);
     // Para Ovni guardamos un link a OvniPress (no a Whakoom, que es solo la
@@ -250,14 +268,22 @@ export async function importWhakoomUrls(
       status: "EN CATÁLOGO",
       url: storeUrl,
     });
-    await prisma.publisherEdition
-      .updateMany({ where: { publisher, slug }, data: { anilistId } })
-      .catch(() => {});
+    if (anilistId)
+      await prisma.publisherEdition
+        .updateMany({ where: { publisher, slug }, data: { anilistId } })
+        .catch(() => {});
 
-    await persistWhakoomIdentity(publisher, slug, ed.whakoomId, ed.volumesList);
+    await persistEditionIdentity({
+      publisher,
+      slug,
+      title: ed.title,
+      anilistId,
+      whakoomId: ed.whakoomId,
+      volumesList: ed.volumesList,
+    });
 
     res.imported++;
-    res.mapped++;
+    if (anilistId) res.mapped++;
     opts.onProgress?.({ done: res.processed, total: clean.length, mapped: res.mapped });
     await sleep(throttle);
   }
