@@ -328,33 +328,35 @@ export async function findOrCreateWork(opts: {
   title: string;
   anilistId?: number | null;
   coverImage?: string | null;
+  author?: string | null;
 }): Promise<number> {
   const normTitle = normalizeTitle(opts.title);
 
   // Buscamos la obra existente: por anilistId (fuerte) o por título. Para el
   // matcheo por título usamos la llave ESTRICTA (distingue Citrus de Citrus+):
   // traemos los candidatos por normTitle (indexado) y filtramos por tightTitleKey.
-  // Si no tiene portada y ahora tenemos una, la completamos (sin pisar la actual).
-  let existing: { id: number; coverImage: string | null } | null;
+  // Si le falta portada/autor y ahora lo tenemos, lo completamos (sin pisar).
+  let existing: { id: number; coverImage: string | null; author: string | null } | null;
   if (opts.anilistId) {
     existing = await prisma.work.findUnique({
       where: { anilistId: opts.anilistId },
-      select: { id: true, coverImage: true },
+      select: { id: true, coverImage: true, author: true },
     });
   } else {
     const tight = tightTitleKey(opts.title);
     const cands = await prisma.work.findMany({
       where: { normTitle },
-      select: { id: true, coverImage: true, title: true },
+      select: { id: true, coverImage: true, author: true, title: true },
     });
     existing = cands.find((w) => tightTitleKey(w.title) === tight) ?? null;
   }
 
   if (existing) {
-    if (!existing.coverImage && opts.coverImage)
-      await prisma.work
-        .update({ where: { id: existing.id }, data: { coverImage: opts.coverImage } })
-        .catch(() => {});
+    const patch: { coverImage?: string; author?: string } = {};
+    if (!existing.coverImage && opts.coverImage) patch.coverImage = opts.coverImage;
+    if (!existing.author && opts.author) patch.author = opts.author;
+    if (Object.keys(patch).length)
+      await prisma.work.update({ where: { id: existing.id }, data: patch }).catch(() => {});
     return existing.id;
   }
 
@@ -364,6 +366,7 @@ export async function findOrCreateWork(opts: {
       normTitle,
       anilistId: opts.anilistId ?? null,
       coverImage: opts.coverImage ?? null,
+      author: opts.author ?? null,
     },
   });
   return created.id;

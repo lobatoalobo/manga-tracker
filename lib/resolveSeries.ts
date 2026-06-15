@@ -2,6 +2,7 @@ import { searchMangaList, searchStaffManga } from "./anilist";
 import { getIvreaDataBySlug } from "./providers/ivrea";
 import { authorMatches } from "./authorMatch";
 import { searchableTitle, normalizeTitle } from "./catalog";
+import { prisma } from "./prisma";
 
 interface EditionRow {
   publisher: string;
@@ -99,8 +100,17 @@ async function publisherInfo(row: EditionRow): Promise<{
       originalTitle: ficha?.originalTitle ?? null,
     };
   }
-  // Panini no expone autor; Ovni requeriría una ficha de producto (TODO).
-  return { author: null, title: null, originalTitle: null };
+  // Las demás editoriales no exponen ficha propia (Utopía ni siquiera tiene
+  // sitio usable), pero el import de Whakoom guardó el autor en el Work: lo
+  // usamos como señal de autor. Sin esto el botón "Auto" solo matcheaba por
+  // título exacto y nunca resolvía los títulos en español.
+  const ed = await prisma.publisherEdition
+    .findUnique({
+      where: { publisher_slug: { publisher: row.publisher, slug: row.slug } },
+      select: { work: { select: { author: true } } },
+    })
+    .catch(() => null);
+  return { author: ed?.work?.author ?? null, title: null, originalTitle: null };
 }
 
 /**
@@ -145,6 +155,15 @@ export async function resolveEditionSeries(
       const m = byAuthor(cands, info.author);
       if (m) return m;
     }
+  }
+
+  // 3) Fallback potente para títulos solo en español: búsqueda por AUTOR (Staff)
+  //    y su obra con más coincidencia de palabras. Reusa resolveByTitleAuthor.
+  if (info.author) {
+    const viaAuthor = await resolveByTitleAuthor(row.title, info.author).catch(
+      () => null,
+    );
+    if (viaAuthor) return viaAuthor;
   }
 
   return null;
