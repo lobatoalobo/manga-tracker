@@ -353,10 +353,33 @@ model PublisherEdition {
   notifiedVolumes Int     @default(0)
   status          String?
   url             String
+  // Id de la edición en Whakoom (de /ediciones/<id>/…). Identidad fuerte: sus
+  // relaciones ya están debugueadas, así desambiguamos sin depender del título.
+  whakoomId       String?  @unique
   updatedAt       DateTime @updatedAt
+
+  volumesList Volume[]
 
   @@unique([publisher, slug])
   @@index([normTitle])
+}
+
+// Tomo individual de una edición. Per-tomo guardamos el id de Whakoom (llave
+// estable) y dejamos `isbn` listo para llenar desde las páginas de la editorial
+// (Whakoom no publica ISBN; las editoriales sí suelen tenerlo).
+model Volume {
+  id        Int              @id @default(autoincrement())
+  editionId Int
+  edition   PublisherEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  number         Int
+  whakoomComicId String? // id del tomo en Whakoom (/comics/<id>/…)
+  isbn           String?
+  coverImage     String?
+  updatedAt      DateTime @updatedAt
+
+  @@unique([editionId, number])
+  @@index([isbn])
 }
 
 // "Esta editorial NO va en esta serie": para desvincular ediciones que la

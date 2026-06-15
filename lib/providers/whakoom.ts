@@ -1,9 +1,16 @@
+export interface WhakoomVolume {
+  number: number;
+  comicId: string; // id del tomo en Whakoom (/comics/<id>/…)
+}
+
 export interface WhakoomEdition {
   title: string;
   author: string | null;
   publisher: string; // editorial tal como la lista Whakoom
   volumes: number;
   url: string;
+  whakoomId: string | null; // id de la edición (/ediciones/<id>/…)
+  volumesList: WhakoomVolume[]; // tomos individuales con su id de Whakoom
 }
 
 /** Mapea la editorial de Whakoom a nuestras editoriales argentinas (o null). */
@@ -68,13 +75,34 @@ export function parseWhakoomEdition(
   // Cada tomo es un link /comics/<id>/<slug>[/<n>]. Las ediciones de varios
   // tomos numeran el último segmento; las de 1 tomo no lo tienen. Tomamos el
   // número más alto, o contamos los comics distintos si no hay numeración.
-  const issues = [
-    ...t.matchAll(/\/comics\/[A-Za-z0-9]+\/[^"/]+\/(\d+)/g),
-  ].map((m) => Number(m[1]));
+  const numbered = [
+    ...t.matchAll(/\/comics\/([A-Za-z0-9]+)\/[^"/]+\/(\d+)/g),
+  ];
   const comicIds = new Set(
     [...t.matchAll(/\/comics\/([A-Za-z0-9]+)\//g)].map((m) => m[1]),
   );
-  const volumes = issues.length ? Math.max(...issues) : comicIds.size || 0;
 
-  return { title, author, publisher, volumes, url };
+  // Lista de tomos con su id de Whakoom. Si están numerados, uno por número
+  // (deduplicado); si no, es una edición de 1 tomo (number = 1).
+  const byNumber = new Map<number, string>();
+  for (const m of numbered) {
+    const n = Number(m[2]);
+    if (!byNumber.has(n)) byNumber.set(n, m[1]);
+  }
+  let volumesList: WhakoomVolume[];
+  if (byNumber.size > 0) {
+    volumesList = [...byNumber.entries()]
+      .map(([number, comicId]) => ({ number, comicId }))
+      .sort((a, b) => a.number - b.number);
+  } else {
+    const only = [...comicIds][0];
+    volumesList = only ? [{ number: 1, comicId: only }] : [];
+  }
+  const volumes = volumesList.length
+    ? Math.max(...volumesList.map((v) => v.number))
+    : 0;
+
+  const whakoomId = url.match(/\/ediciones\/(\d+)/)?.[1] ?? null;
+
+  return { title, author, publisher, volumes, url, whakoomId, volumesList };
 }

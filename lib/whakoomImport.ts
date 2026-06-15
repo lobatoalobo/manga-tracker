@@ -1,8 +1,46 @@
-import { getWhakoomEdition, mapWhakoomPublisher } from "./providers/whakoom";
+import {
+  getWhakoomEdition,
+  mapWhakoomPublisher,
+  type WhakoomVolume,
+} from "./providers/whakoom";
 import { resolveByTitleAuthor } from "./resolveSeries";
 import { upsertPublisherEdition, slugifyTitle } from "./catalog";
 import { ovniSearchUrl } from "./ovni";
 import { prisma } from "./prisma";
+
+/**
+ * Guarda la identidad de Whakoom (id de edición + tomos individuales) sobre una
+ * fila de PublisherEdition ya creada. Best-effort: si el whakoomId choca con otra
+ * fila (unique) lo ignoramos en vez de romper el import.
+ */
+async function persistWhakoomIdentity(
+  publisher: string,
+  slug: string,
+  whakoomId: string | null,
+  volumesList: WhakoomVolume[],
+) {
+  const row = await prisma.publisherEdition.findUnique({
+    where: { publisher_slug: { publisher, slug } },
+    select: { id: true },
+  });
+  if (!row) return;
+
+  if (whakoomId)
+    await prisma.publisherEdition
+      .update({ where: { id: row.id }, data: { whakoomId } })
+      .catch(() => {});
+
+  for (const v of volumesList) {
+    if (!Number.isFinite(v.number) || v.number <= 0) continue;
+    await prisma.volume
+      .upsert({
+        where: { editionId_number: { editionId: row.id, number: v.number } },
+        update: { whakoomComicId: v.comicId },
+        create: { editionId: row.id, number: v.number, whakoomComicId: v.comicId },
+      })
+      .catch(() => {});
+  }
+}
 
 export interface SingleImportResult {
   ok: boolean;
@@ -50,6 +88,8 @@ export async function importWhakoomUrl(
     await prisma.publisherEdition
       .updateMany({ where: { publisher, slug }, data: { anilistId } })
       .catch(() => {});
+
+  await persistWhakoomIdentity(publisher, slug, ed.whakoomId, ed.volumesList);
 
   const row = await prisma.publisherEdition.findUnique({
     where: { publisher_slug: { publisher, slug } },
@@ -183,6 +223,8 @@ export async function importWhakoomUrls(
     await prisma.publisherEdition
       .updateMany({ where: { publisher, slug }, data: { anilistId } })
       .catch(() => {});
+
+    await persistWhakoomIdentity(publisher, slug, ed.whakoomId, ed.volumesList);
 
     res.imported++;
     res.mapped++;
