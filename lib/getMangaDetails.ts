@@ -143,15 +143,22 @@ async function resolveEditionsLive(
   // 1) Ediciones nacionales desde el MAPEO VERIFICADO (anilistId), no por
   //    título: así no se mezclan obras homónimas y es consistente con el badge.
   const [mappedRows, exclusionRows] = await Promise.all([
-    prisma.publisherEdition.findMany({ where: { anilistId: anilist.id } }),
+    prisma.publisherEdition.findMany({
+      where: { anilistId: anilist.id },
+      include: { work: { select: { upcoming: true } } },
+    }),
     prisma.editionExclusion.findMany({ where: { anilistId: anilist.id } }),
   ]);
   // Editoriales desvinculadas a mano de esta serie: ni se muestran ni se
   // re-enganchan en vivo (p. ej. ids duplicados de AniList con mismo título).
   const excluded = new Set(exclusionRows.map((e) => e.publisher));
   // Puede haber varias ediciones por editorial (regular + deluxe/kanzenban).
+  // Las "próximo a salir" se muestran aunque tengan 0 tomos (preventa AR).
   const all: IndexedEdition[] = mappedRows
-    .filter((e) => e.volumes > 0 && !excluded.has(e.publisher))
+    .filter(
+      (e) =>
+        (e.volumes > 0 || e.work?.upcoming) && !excluded.has(e.publisher),
+    )
     .map((e) => ({
       publisher: e.publisher,
       slug: e.slug,

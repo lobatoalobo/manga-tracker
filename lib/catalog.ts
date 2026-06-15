@@ -534,6 +534,7 @@ export async function updatePublisherEditionFields(
     normTitle?: string;
     url?: string;
     volumes?: number;
+    notifiedVolumes?: number;
     anilistId?: number | null;
   } = {};
   if (data.title !== undefined) {
@@ -541,8 +542,13 @@ export async function updatePublisherEditionFields(
     patch.normTitle = normalizeTitle(data.title);
   }
   if (data.url !== undefined) patch.url = data.url.trim();
-  if (data.volumes !== undefined && Number.isFinite(data.volumes))
+  if (data.volumes !== undefined && Number.isFinite(data.volumes)) {
     patch.volumes = data.volumes;
+    // Re-baselineamos el conteo notificado al valor que setea el admin: una
+    // corrección manual no debe spamear "tomo nuevo", y deja el 0→1 de una
+    // preventa listo para que el crawl lo detecte como lanzamiento real.
+    patch.notifiedVolumes = data.volumes;
+  }
   if (data.anilistId !== undefined) patch.anilistId = data.anilistId;
   await prisma.publisherEdition.update({ where: { id }, data: patch });
 }
