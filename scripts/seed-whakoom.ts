@@ -32,7 +32,8 @@ const PUBLISHERS: Record<string, { label: string; allUrl: string | null }> = {
   },
   panini: {
     label: "Panini Argentina",
-    allUrl: null, // TODO: id de publisher de Panini Argentina en Whakoom
+    allUrl:
+      "https://www.whakoom.com/publisher/20930/panini_comics_argentina/all",
   },
 };
 
