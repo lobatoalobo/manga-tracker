@@ -40,6 +40,8 @@ const PUBLISHER_ID: Record<string, string> = {
   "Panini Argentina": "panini",
   "Ovni Press": "ovni",
   "Kemuri Ediciones": "kemuri",
+  "Utopía Editorial": "utopia",
+  "Larp Editores": "larp",
 };
 
 /**

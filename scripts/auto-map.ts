@@ -22,7 +22,7 @@ async function main() {
   const limIdx = args.indexOf("--limit");
   const limit = limIdx >= 0 ? Number(args[limIdx + 1]) || null : null;
   const pubArg = args.find((a) =>
-    ["ivrea", "panini", "ovni", "kemuri"].includes(a),
+    ["ivrea", "panini", "ovni", "kemuri", "utopia", "larp"].includes(a),
   );
   const publisher = pubArg
     ? {
@@ -30,6 +30,8 @@ async function main() {
         panini: "Panini Argentina",
         ovni: "Ovni Press",
         kemuri: "Kemuri Ediciones",
+        utopia: "Utopía Editorial",
+        larp: "Larp Editores",
       }[pubArg]
     : undefined;
 
