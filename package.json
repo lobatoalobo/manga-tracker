@@ -15,6 +15,7 @@
     "import:whakoom": "tsx scripts/import-whakoom.ts",
     "seed:whakoom": "tsx scripts/seed-whakoom.ts",
     "depurate": "tsx scripts/depurate-catalog.ts",
+    "consolidate-dups": "tsx scripts/consolidate-dups.ts",
     "flag-comics": "tsx scripts/flag-comics.ts",
     "enrich-covers": "tsx scripts/enrich-covers.ts",
     "dedup-sources": "tsx scripts/dedup-sources.ts",
