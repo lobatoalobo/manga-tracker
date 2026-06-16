@@ -111,8 +111,8 @@ export default function MappingRow({
               </Link>
             ) : (
               <>
-                <span className={row.nationalOnly ? "text-sky-300" : "text-amber-400"}>
-                  {row.nationalOnly ? "🇦🇷 nacional-only" : "sin mapear"}
+                <span className={row.nationalOnly ? "text-sky-300" : "text-muted"}>
+                  {row.nationalOnly ? "🇦🇷 nacional-only" : "sin AniList (opcional)"}
                 </span>{" "}
                 ·{" "}
                 <Link
