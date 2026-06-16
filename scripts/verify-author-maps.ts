@@ -61,11 +61,15 @@ async function main() {
   console.log(`Sospechosas (autor no coincide): ${bad.length}\n`);
 
   let fixed = 0;
-  let cleared = 0;
+  let skipped = 0;
   for (const e of bad) {
     const old = e.anilistId!;
     const newId = await resolveEditionSeries(e).catch(() => null);
     await sleep(400);
+    // SOLO aplicamos si re-resuelve a OTRO id (corrección verificada por autor,
+    // ej. Adabana → 115790). Nunca desmapeamos: el staff de AniList viene por
+    // relevancia con traductores primero, así que "autor no coincide" tiene
+    // muchos falsos positivos (Hikaru/Uketsu son válidos). Mejor dejar el mapeo.
     if (newId && newId !== old) {
       console.log(`✓ #${e.id} "${e.title}" [${e.publisher}] ${old} → ${newId} (autor ok)`);
       if (apply) {
@@ -75,16 +79,11 @@ async function main() {
       }
       fixed++;
     } else {
-      console.log(`· #${e.id} "${e.title}" [${e.publisher}] ${old} → desmapear (autor ${e.work!.author})`);
-      if (apply) {
-        await prisma.publisherEdition.update({ where: { id: e.id }, data: { anilistId: null } });
-        await invalidateEditionsCache(old).catch(() => {});
-      }
-      cleared++;
+      skipped++;
     }
   }
 
-  console.log(`\n${fixed} re-resueltas, ${cleared} desmapeadas${apply ? " (aplicado)" : ""}.`);
+  console.log(`\n${fixed} corregidas, ${skipped} sin tocar (posible falso positivo)${apply ? " (aplicado)" : ""}.`);
   if (!apply) console.log("DRY-RUN: corré con --apply.");
   await prisma.$disconnect();
 }

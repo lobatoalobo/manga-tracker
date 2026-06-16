@@ -165,31 +165,34 @@ export async function resolveEditionSeries(
     searches.push({ term, cands });
   }
 
-  // Con autor conocido: EXIGIMOS que coincida (evita homónimos, ej. el hentai
-  // "Adabana" vs el de NON). Si no se puede verificar, NO mapeamos por título solo.
+  // 1) Título exacto + autor (máxima confianza): GANA sobre los homónimos. Acá
+  //    es donde se desambigua "Adabana" de NON vs el hentai homónimo.
   if (info.author) {
-    // 1) título exacto + autor (máxima confianza).
     for (const { term, cands } of searches) {
       const m = byExactTitleAndAuthor(cands, term, info.author);
       if (m) return m;
     }
-    // 2) autor entre los candidatos (títulos solo en español que no matchean).
+  }
+
+  // 2) Título exacto a secas (best-effort). NO exigimos autor acá: el staff de
+  //    AniList suele venir por relevancia con traductores primero, así que el
+  //    autor real puede no aparecer (Hikaru/Uketsu) → exigirlo descartaría
+  //    mapeos válidos. El paso 1 ya cubrió los homónimos verificables.
+  for (const { term, cands } of searches) {
+    const exact = byExactTitle(cands, term);
+    if (exact) return exact;
+  }
+
+  // 3) Sin match por título: por AUTOR (títulos solo en español, Staff search).
+  if (info.author) {
     for (const { cands } of searches) {
       const m = byAuthor(cands, info.author);
       if (m) return m;
     }
-    // 3) búsqueda por AUTOR (Staff) y su obra con más coincidencia de palabras.
     const viaAuthor = await resolveByTitleAuthor(row.title, info.author).catch(
       () => null,
     );
     if (viaAuthor) return viaAuthor;
-    return null;
-  }
-
-  // Sin autor (ej. Panini, que no expone autor): título exacto, best-effort.
-  for (const { term, cands } of searches) {
-    const exact = byExactTitle(cands, term);
-    if (exact) return exact;
   }
   return null;
 }
