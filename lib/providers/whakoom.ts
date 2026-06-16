@@ -123,9 +123,21 @@ export async function fetchWhakoomHtml(
  * si no, es una edición de 1 tomo. El conteo de tomos = `.length` de esto.
  */
 export function parseVolumesList(t: string): WhakoomVolume[] {
+  // Tomos anunciados pero NO publicados: Whakoom los marca con la clase
+  // "not-published" en su <li>. Están en el listado pero todavía no salieron,
+  // así que NO los contamos (si no, el total queda inflado en 1).
+  const notPublished = new Set<string>();
+  for (const m of t.matchAll(
+    /<li[^>]*class="[^"]*not-published[^"]*"[^>]*>([\s\S]*?)<\/li>/gi,
+  )) {
+    const num = m[1].match(/\/comics\/[A-Za-z0-9]+\/[^"/]+\/(\d+)/);
+    if (num) notPublished.add(num[1]);
+  }
+
   const numbered = [...t.matchAll(/\/comics\/([A-Za-z0-9]+)\/[^"/]+\/(\d+)/g)];
   const byNumber = new Map<number, string>();
   for (const m of numbered) {
+    if (notPublished.has(m[2])) continue;
     const n = Number(m[2]);
     if (!byNumber.has(n)) byNumber.set(n, m[1]);
   }

@@ -72,6 +72,22 @@ describe("parseWhakoomEdition", () => {
   });
 });
 
+describe("not-published (tomo anunciado no se cuenta)", () => {
+  it("excluye el tomo con class not-published del conteo", () => {
+    const html = `
+      <meta property="og:title" content="El incidente Darwin (Distrito)" />
+      <ul>
+        <li id="comicA" class=" get-it"><a href="/comics/A/el_incidente_darwin/1" class="title"></a></li>
+        <li id="comicB" class=" get-it"><a href="/comics/B/el_incidente_darwin/2" class="title"></a></li>
+        <li id="comicC" class=" not-published get-it"><a href="/comics/C/el_incidente_darwin/3" class="title"></a></li>
+      </ul>
+    `;
+    const ed = parseWhakoomEdition(html, "https://www.whakoom.com/ediciones/625589/x");
+    expect(ed!.volumes).toBe(2); // el #3 (not-published) no cuenta
+    expect(ed!.volumesList.map((v) => v.number)).toEqual([1, 2]);
+  });
+});
+
 describe("parseWhakoomDate", () => {
   it("'Julio 2026' → 1 de julio de 2026", () => {
     expect(parseWhakoomDate("Julio 2026")).toEqual(new Date(2026, 6, 1));
