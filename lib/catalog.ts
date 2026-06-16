@@ -489,17 +489,20 @@ export async function getEditorialAll(
   return rows.map(toEditorialWork);
 }
 
-/** Dedupe de ediciones a "una card por obra" (por anilistId, o título si no). */
+/**
+ * Dedupe de ediciones a "una card por obra" (por anilistId, o título si no).
+ * Si dos editoriales tienen la misma serie (ej. One Piece Ivrea vs Larp), nos
+ * quedamos con la de MÁS tomos (la más completa). El Map preserva el orden
+ * alfabético de entrada (rows vienen ordenadas por normTitle).
+ */
 function dedupeWorks(rows: EditorialWork[]): EditorialWork[] {
-  const seen = new Set<string>();
-  const out: EditorialWork[] = [];
+  const best = new Map<string, EditorialWork>();
   for (const w of rows) {
     const key = w.anilistId ? `a${w.anilistId}` : `t${normalizeTitle(w.title)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(w);
+    const cur = best.get(key);
+    if (!cur || w.volumes > cur.volumes) best.set(key, w);
   }
-  return out;
+  return [...best.values()];
 }
 
 /**
