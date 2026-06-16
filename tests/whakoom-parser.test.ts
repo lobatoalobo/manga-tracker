@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parseWhakoomEdition } from "@/lib/providers/whakoom";
+import { parseWhakoomEdition, parseWhakoomDate } from "@/lib/providers/whakoom";
 
 const fixture = (name: string) =>
   readFileSync(
@@ -60,5 +60,29 @@ describe("parseWhakoomEdition", () => {
       "https://www.whakoom.com/ediciones/1/x",
     );
     expect(ed!.synopsis).toBeNull();
+  });
+
+  it("extrae la fecha de publicación (preventa → badge Pronto)", () => {
+    const html = `
+      <meta property="og:title" content="Ichi the Witch #1 (Ivrea)" />
+      <div class="info-item"><h3>Fecha de publicación</h3><p itemprop="" content=""> Julio 2026</p></div>
+    `;
+    const ed = parseWhakoomEdition(html, "https://www.whakoom.com/ediciones/693897/x");
+    expect(ed!.releaseDate).toEqual(new Date(2026, 6, 1)); // julio = mes 6
+  });
+});
+
+describe("parseWhakoomDate", () => {
+  it("'Julio 2026' → 1 de julio de 2026", () => {
+    expect(parseWhakoomDate("Julio 2026")).toEqual(new Date(2026, 6, 1));
+  });
+  it("decodifica entidades y tildes ('Setiembre')", () => {
+    expect(parseWhakoomDate("Setiembre 2025")).toEqual(new Date(2025, 8, 1));
+  });
+  it("año suelto → enero de ese año", () => {
+    expect(parseWhakoomDate("2027")).toEqual(new Date(2027, 0, 1));
+  });
+  it("texto no reconocido → null", () => {
+    expect(parseWhakoomDate("próximamente")).toBeNull();
   });
 });

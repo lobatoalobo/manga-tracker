@@ -11,6 +11,7 @@ export interface WhakoomEdition {
   url: string;
   cover: string | null; // portada (og:image)
   synopsis: string | null; // "Argumento" de la ficha (para obras no-AniList)
+  releaseDate: Date | null; // "Fecha de publicación" (futura = preventa → "Pronto")
   whakoomId: string | null; // id de la edición (/ediciones/<id>/…)
   volumesList: WhakoomVolume[]; // tomos individuales con su id de Whakoom
 }
@@ -26,6 +27,29 @@ function decodeEntities(s: string): string {
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&nbsp;/g, " ");
+}
+
+const MONTHS: Record<string, number> = {
+  enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5, julio: 6,
+  agosto: 7, septiembre: 8, setiembre: 8, octubre: 9, noviembre: 10, diciembre: 11,
+};
+
+/**
+ * Parsea la "Fecha de publicación" de Whakoom ("Julio 2026", "2026", "15 de
+ * julio de 2026") al primer día de ese mes. Granularidad de mes (Whakoom no da
+ * día en preventas). Devuelve null si no la entiende.
+ */
+export function parseWhakoomDate(label: string): Date | null {
+  const t = decodeEntities(label)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim();
+  const ym = t.match(/([a-z]+)\s+(\d{4})/); // "julio 2026"
+  if (ym && ym[1] in MONTHS) return new Date(Number(ym[2]), MONTHS[ym[1]], 1);
+  const yOnly = t.match(/\b(\d{4})\b/); // "2026" suelto → enero de ese año
+  if (yOnly) return new Date(Number(yOnly[1]), 0, 1);
+  return null;
 }
 
 /** Mapea la editorial de Whakoom a nuestras editoriales argentinas (o null). */
@@ -201,7 +225,14 @@ export function parseWhakoomEdition(
         .trim() || null
     : null;
 
+  // "Fecha de publicación": si es futura, la obra es preventa → badge "Pronto".
+  const dateMatch = t.match(
+    /Fecha de publicaci[^<]*<\/h3>\s*<p[^>]*>([^<]+)<\/p>/i,
+  );
+  const releaseDate = dateMatch ? parseWhakoomDate(dateMatch[1]) : null;
+
   return {
-    title, author, publisher, volumes, url, cover, synopsis, whakoomId, volumesList,
+    title, author, publisher, volumes, url, cover, synopsis, releaseDate,
+    whakoomId, volumesList,
   };
 }
