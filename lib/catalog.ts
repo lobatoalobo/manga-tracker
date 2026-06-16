@@ -285,18 +285,34 @@ export async function upcomingForIds(ids: number[]): Promise<Set<number>> {
   return out;
 }
 
-/** Cover nacional + flag "próximo a salir" por anilistId (vía edición→work). */
+/**
+ * Datos locales (del Work) por anilistId, vía edición→work: portada nacional,
+ * flag "próximo a salir", y la info que copiamos de Whakoom (sinopsis/autor) para
+ * preferirla a la de AniList en la ficha. AniList queda para los EXTRAS
+ * (géneros, personajes, relaciones, score).
+ */
 export async function workMetaByAnilist(
   anilistId: number,
-): Promise<{ coverImage: string | null; upcoming: boolean } | null> {
+): Promise<{
+  coverImage: string | null;
+  upcoming: boolean;
+  synopsis: string | null;
+  author: string | null;
+} | null> {
   const eds = await prisma.publisherEdition.findMany({
     where: { anilistId },
-    select: { work: { select: { coverImage: true, upcoming: true } } },
+    select: {
+      work: {
+        select: { coverImage: true, upcoming: true, synopsis: true, author: true },
+      },
+    },
   });
   if (eds.length === 0) return null;
   return {
     coverImage: eds.map((e) => e.work?.coverImage).find(Boolean) ?? null,
     upcoming: eds.some((e) => e.work?.upcoming),
+    synopsis: eds.map((e) => e.work?.synopsis).find(Boolean) ?? null,
+    author: eds.map((e) => e.work?.author).find(Boolean) ?? null,
   };
 }
 

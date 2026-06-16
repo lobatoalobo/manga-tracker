@@ -51,6 +51,10 @@ export default async function Page({
   // Para coleccionistas locales: si tenemos la portada de la edición nacional
   // (del catálogo), la preferimos a la japonesa de AniList.
   const cover = workMeta?.coverImage ?? anilist.coverImage;
+  // Sinopsis local-first: preferimos la nuestra (Whakoom/Ivrea, en español) y
+  // caemos a la de AniList solo si todavía no la tenemos. AniList se usa para
+  // los extras (géneros, personajes, relaciones, score).
+  const synopsis = workMeta?.synopsis ?? anilist.description;
   // "Próximo a salir": flag manual (preventa AR) o estado global no-publicado.
   const upcoming = workMeta?.upcoming || anilist.status === "NOT_YET_RELEASED";
 
@@ -204,9 +208,9 @@ export default async function Page({
         </div>
       </div>
 
-      {anilist.description && (
+      {synopsis && (
         <p className="mt-6 whitespace-pre-wrap text-sm leading-relaxed text-muted">
-          {anilist.description}
+          {synopsis}
         </p>
       )}
 
@@ -298,6 +302,9 @@ export default async function Page({
                   </p>
                 </>
               );
+              // El manga relacionado linkea a su ficha nuestra; el anime queda
+              // como card informativa SIN link (no mandamos a AniList y no
+              // tenemos páginas de anime).
               return r.mediaType === "MANGA" ? (
                 <Link
                   key={`${r.mediaType}-${r.id}`}
@@ -307,15 +314,9 @@ export default async function Page({
                   {card}
                 </Link>
               ) : (
-                <a
-                  key={`${r.mediaType}-${r.id}`}
-                  href={`https://anilist.co/anime/${r.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group block"
-                >
+                <div key={`${r.mediaType}-${r.id}`} className="group block">
                   {card}
-                </a>
+                </div>
               );
             })}
           </div>
