@@ -5,6 +5,7 @@ import Link from "next/link";
 import MangaCard from "./MangaCard";
 import RemoveEditionButton from "./RemoveEditionButton";
 import { displayTitle } from "@/lib/title";
+import { editionProgress } from "@/services/collectionService";
 import type { CollectionItem } from "@/lib/collection";
 
 type SortKey = "title" | "progress" | "volumes";
@@ -172,9 +173,8 @@ function CollectionRow({
   hrefBase: string;
 }) {
   const { edition } = item;
-  const owned = edition.ownedVolumes.length;
-  const total = edition.totalVolumes;
-  const pct = total > 0 ? Math.floor((owned / total) * 100) : 0;
+  const prog = editionProgress(edition);
+  const { owned, total, read, status } = prog;
   const href =
     item.anilistId < 0
       ? `/nacional/${-item.anilistId}`
@@ -201,12 +201,33 @@ function CollectionRow({
             {edition.readingStatus === "READING" && " · 📖 Leyendo"}
             {edition.readingStatus === "READ" && " · ✅ Leído"}
           </p>
+          {/* Barra fina: completitud (color = estado) + avance de lectura. */}
+          {total > 0 && (
+            <div className="mt-1.5 h-1 w-full max-w-40 overflow-hidden rounded-full bg-surface-2">
+              <div
+                className={`h-full rounded-full ${
+                  status === "al-dia" ? "bg-emerald-500" : "bg-amber-400/80"
+                }`}
+                style={{ width: `${prog.ownedPct}%` }}
+              />
+            </div>
+          )}
         </div>
-        <div className="shrink-0 text-right text-xs text-muted">
-          <span className="tabular-nums">
+        <div className="shrink-0 text-right text-xs">
+          <span className="tabular-nums text-muted">
             {owned}/{total || "?"}
           </span>
-          <span className="ml-2 tabular-nums">{pct}%</span>
+          {status === "al-dia" && (
+            <span className="ml-2 text-emerald-400">✓ al día</span>
+          )}
+          {status === "incompleta" && (
+            <span className="ml-2 text-amber-400/90">faltan {total - owned}</span>
+          )}
+          {read > 0 && (
+            <p className="mt-0.5 tabular-nums text-muted">
+              leídos {read}/{owned}
+            </p>
+          )}
         </div>
       </Link>
       {!readOnly && (

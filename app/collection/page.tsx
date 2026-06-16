@@ -43,16 +43,30 @@ export default async function CollectionPage() {
       <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Series" value={stats.series} />
         <Stat label="Ediciones" value={stats.editions} />
-        <Stat
-          label="Tomos"
-          value={`${stats.ownedVolumes} / ${stats.totalVolumes}`}
-        />
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <p className="text-xs text-muted">Tomos</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums">
+            {stats.ownedVolumes} / {stats.totalVolumes}
+          </p>
+          <p className="mt-0.5 text-xs text-muted tabular-nums">
+            leídos {stats.readVolumes} / {stats.ownedVolumes}
+          </p>
+        </div>
         <div className="flex flex-col justify-center rounded-xl border border-border bg-surface p-4">
-          <p className="text-xs text-muted">Progreso · {stats.percentage}%</p>
-          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-2">
+          <p className="text-xs text-muted">
+            Colección · {stats.percentage}%
+          </p>
+          <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-surface-2">
             <div
               className="h-full rounded-full bg-accent transition-all"
               style={{ width: `${stats.percentage}%` }}
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted">Leído · {stats.readPercentage}%</p>
+          <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-surface-2">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-all"
+              style={{ width: `${stats.readPercentage}%` }}
             />
           </div>
         </div>
