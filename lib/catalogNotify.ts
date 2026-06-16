@@ -60,6 +60,11 @@ export async function detectAndNotifyNewVolumes(
   let notifications = 0;
   const samples: string[] = [];
 
+  // Acumulador para AGRUPAR el push: 1 push por usuario (no N), así una colección
+  // grande no recibe decenas de push de golpe. Las notis in-app siguen por ítem.
+  type Ev = { title: string; volumes: number; publisher: string; anilistId: number; releasing: boolean };
+  const pushByUser = new Map<string, Ev[]>();
+
   for (const r of increased) {
     const anilistId = r.anilistId as number;
 
@@ -106,6 +111,7 @@ export async function detectAndNotifyNewVolumes(
 
     if (!dryRun) {
       if (userIds.length) {
+        // In-app: una noti por ítem (el detalle vive en /notificaciones).
         await prisma.notification.createMany({
           data: userIds.map((userId) => ({
             userId,
@@ -117,11 +123,12 @@ export async function detectAndNotifyNewVolumes(
               : `Tomo ${r.volumes} · ${r.publisher}`,
           })),
         });
-        await sendPushToUsers(userIds, {
-          title: releasing ? "🎉 ¡Ya salió!" : "📖 Tomo nuevo",
-          body: `${r.title} — Tomo ${r.volumes} (${r.publisher})`,
-          url: `/manga/${anilistId}`,
-        });
+        // Push: acumulamos para mandar UNO agrupado por usuario al final.
+        for (const userId of userIds) {
+          const arr = pushByUser.get(userId) ?? [];
+          arr.push({ title: r.title, volumes: r.volumes, publisher: r.publisher, anilistId, releasing });
+          pushByUser.set(userId, arr);
+        }
       }
       await prisma.publisherEdition.update({
         where: { id: r.id },
@@ -133,6 +140,27 @@ export async function detectAndNotifyNewVolumes(
         where: { editions: { some: { id: r.id } }, upcoming: true },
         data: { upcoming: false },
       });
+    }
+  }
+
+  // Un solo push por usuario, resumiendo sus novedades.
+  if (!dryRun) {
+    for (const [userId, evs] of pushByUser) {
+      if (evs.length === 1) {
+        const e = evs[0];
+        await sendPushToUsers([userId], {
+          title: e.releasing ? "🎉 ¡Ya salió!" : "📖 Tomo nuevo",
+          body: `${e.title} — Tomo ${e.volumes} (${e.publisher})`,
+          url: `/manga/${e.anilistId}`,
+        });
+      } else {
+        const sample = evs.slice(0, 3).map((e) => e.title).join(", ");
+        await sendPushToUsers([userId], {
+          title: "📖 Novedades de tu colección",
+          body: `${evs.length} novedades · ${sample}${evs.length > 3 ? "…" : ""}`,
+          url: `/notificaciones`,
+        });
+      }
     }
   }
 
