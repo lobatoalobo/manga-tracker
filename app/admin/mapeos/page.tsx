@@ -16,7 +16,6 @@ export default async function AdminMapeosPage({
     ed?: string;
     estado?: string;
     q?: string;
-    link?: string;
     page?: string;
   }>;
 }) {
@@ -29,14 +28,12 @@ export default async function AdminMapeosPage({
     ["mapped", "unmapped", "national", "comic", "nocover"] as const
   ).find((s) => s === params.estado);
   const q = params.q?.trim() || undefined;
-  const whakoomUrl = params.link === "whakoom";
   const page = Math.max(1, Number(params.page) || 1);
 
   const { rows, total, lastPage } = await getEditionMappings({
     publisher: editorial?.publisher,
     state,
     q,
-    whakoomUrl,
     page,
   });
 
@@ -50,7 +47,6 @@ export default async function AdminMapeosPage({
     [
       editorial ? `ed=${editorial.slug}` : "",
       state ? `estado=${state}` : "",
-      whakoomUrl ? "link=whakoom" : "",
       q ? `q=${encodeURIComponent(q)}` : "",
     ]
       .filter(Boolean)
@@ -110,12 +106,6 @@ export default async function AdminMapeosPage({
           active={state === "comic"}
         >
           🦸 Sospecha cómic
-        </Chip>
-        <Chip
-          href={`/admin/mapeos?link=whakoom${editorial ? `&ed=${editorial.slug}` : ""}`}
-          active={whakoomUrl}
-        >
-          ⚠ Link Whakoom
         </Chip>
       </div>
 

@@ -11,7 +11,6 @@ import {
   setEditionNationalOnlyAction,
 } from "@/app/actions";
 import type { EditionMapping } from "@/lib/catalog";
-import { isWhakoomNative } from "@/lib/publishers";
 
 const input =
   "rounded-lg border border-border bg-surface-2 px-2 py-1 text-sm outline-none focus:border-accent";
@@ -34,17 +33,6 @@ export default function MappingRow({
   const [url, setUrl] = useState(row.url);
   const [volumes, setVolumes] = useState(row.volumes.toString());
   const [pending, start] = useTransition();
-
-  // La URL de la ficha debería ser de la editorial. Si es de Whakoom/AniList
-  // está mal (sobró del import) → la resaltamos para corregirla. Excepción:
-  // editoriales nativas de Whakoom (Utopía) no tienen sitio propio, así que su
-  // link de Whakoom es el correcto y no se marca.
-  const badHost =
-    /whakoom\.com/i.test(row.url) && !isWhakoomNative(row.publisher)
-      ? "Whakoom"
-      : /anilist\.co/i.test(row.url)
-        ? "AniList"
-        : null;
 
   const run = (action: () => Promise<void>) =>
     start(async () => {
@@ -129,18 +117,9 @@ export default function MappingRow({
               href={row.url}
               target="_blank"
               rel="noopener noreferrer"
-              className={
-                badHost
-                  ? "font-medium text-amber-400 hover:underline"
-                  : "text-accent hover:underline"
-              }
-              title={
-                badHost
-                  ? `El link de la ficha apunta a ${badHost}, no a la editorial. Corregilo con Editar.`
-                  : undefined
-              }
+              className="text-accent hover:underline"
             >
-              {badHost ? `⚠ link ${badHost}` : "ficha"} ↗
+              ficha ↗
             </a>
           </p>
           </div>
