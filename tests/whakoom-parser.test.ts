@@ -86,6 +86,18 @@ describe("not-published (tomo anunciado no se cuenta)", () => {
     expect(ed!.volumes).toBe(2); // el #3 (not-published) no cuenta
     expect(ed!.volumesList.map((v) => v.number)).toEqual([1, 2]);
   });
+
+  it("preventa de 1 tomo (link sin número, not-published) cuenta 0", () => {
+    const html = `
+      <meta property="og:title" content="Cyberpunk Edgerunners (Panini)" />
+      <ul>
+        <li id="comicZ" class=" not-published get-it"><a href="/comics/Z/cyberpunk_edgerunners" class="title"></a></li>
+      </ul>
+    `;
+    const ed = parseWhakoomEdition(html, "https://www.whakoom.com/ediciones/681249/x");
+    expect(ed!.volumes).toBe(0);
+    expect(ed!.hasUnreleased).toBe(true);
+  });
 });
 
 describe("parseWhakoomDate", () => {

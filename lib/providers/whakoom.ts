@@ -147,8 +147,16 @@ export function parseVolumesList(t: string): WhakoomVolume[] {
       .map(([number, comicId]) => ({ number, comicId }))
       .sort((a, b) => a.number - b.number);
 
+  // Edición de 1 tomo: el link puede venir SIN número (/comics/<id>/<slug>).
   const only = [...t.matchAll(/\/comics\/([A-Za-z0-9]+)\//g)].map((m) => m[1])[0];
-  return only ? [{ number: 1, comicId: only }] : [];
+  if (!only) return [];
+  // Si ese único tomo está en un <li not-published>, está anunciado y no salió
+  // todavía → no cuenta (preventa de 1 tomo, ej. Cyberpunk Edgerunners).
+  const onlyNotPublished = new RegExp(
+    `<li[^>]*class="[^"]*not-published[^"]*"[^>]*>[\\s\\S]*?/comics/${only}/`,
+    "i",
+  ).test(t);
+  return onlyNotPublished ? [] : [{ number: 1, comicId: only }];
 }
 
 /**
