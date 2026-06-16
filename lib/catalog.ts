@@ -523,6 +523,15 @@ export async function getCatalogByLetter(letter: string): Promise<EditorialWork[
   return dedupeWorks(rows.map(toEditorialWork));
 }
 
+/** Todo el catálogo local (una card por obra) para el modo Nacional A-Z "All". */
+export async function getCatalogAll(): Promise<EditorialWork[]> {
+  const rows = await prisma.publisherEdition.findMany({
+    orderBy: { normTitle: "asc" },
+    select: editorialSelect,
+  });
+  return dedupeWorks(rows.map(toEditorialWork));
+}
+
 /** Obras "próximo a salir" (preventa) para el modo Próximos del browse. */
 export async function getUpcomingWorks(): Promise<EditorialWork[]> {
   const rows = await prisma.publisherEdition.findMany({

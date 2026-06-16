@@ -16,6 +16,7 @@ import {
   getEditorialAll,
   getUpcomingWorks,
   getCatalogByLetter,
+  getCatalogAll,
   editorialCounts,
   searchPublisherEditions,
   EDITORIALS,
@@ -79,7 +80,9 @@ export default async function Home({
             : params.tab === "proximos"
               ? "proximos"
               : "hot";
-  const letra = (params.letra || "a").slice(0, 1);
+  // Modo Nacional A-Z: "all" (default, para buscar global) o una letra.
+  const letra =
+    params.letra && params.letra !== "all" ? params.letra.slice(0, 1) : "all";
   const page = Math.max(1, Number(params.page) || 1);
   const onlyFinished = params.finished === "1";
   const editorial =
@@ -135,7 +138,10 @@ export default async function Home({
   } else if (tab === "proximos") {
     editorialWorks = await getUpcomingWorks().catch(() => []);
   } else if (tab === "nacional") {
-    editorialWorks = await getCatalogByLetter(letra).catch(() => []);
+    editorialWorks = await (letra === "all"
+      ? getCatalogAll()
+      : getCatalogByLetter(letra)
+    ).catch(() => []);
   } else if (tab === "az") {
     const res = await getMangaPage(page, admin, onlyFinished);
     mangas = res.media;
@@ -278,12 +284,14 @@ export default async function Home({
       ) : tab === "nacional" ? (
         <>
           <p className="mb-3 text-sm text-muted">
-            🇦🇷 Catálogo en Argentina · navegá por letra.
+            🇦🇷 Catálogo en Argentina · buscá arriba (All) o filtrá por letra.
           </p>
           <LetterIndex active={letra} />
           {editorialWorks.length === 0 ? (
             <p className="mt-5 text-sm text-muted">
-              No hay obras que empiecen con “{letra.toUpperCase()}”.
+              {letra === "all"
+                ? "No hay obras en el catálogo todavía."
+                : `No hay obras que empiecen con “${letra.toUpperCase()}”.`}
             </p>
           ) : (
             <EditorialBrowser works={editorialWorks} />
