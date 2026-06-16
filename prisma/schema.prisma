@@ -56,6 +56,7 @@ model PushSubscription {
 model NotificationPref {
   userId    String  @id
   newVolume Boolean @default(true) // "tomo nuevo" de tus series
+  wishlist  Boolean @default(true) // novedades de tus deseados (salió en AR)
   social    Boolean @default(true) // reacciones y comentarios en tu actividad
   friends   Boolean @default(true) // solicitudes / aceptaciones de amistad
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -155,6 +156,9 @@ model WishlistItem {
   anilistId  Int
   title      String
   coverImage String
+  // Ya avisamos "salió en Argentina" por esta deseada (idempotente, evita
+  // re-notificar y la tormenta retroactiva en la 1ra corrida).
+  notifiedAvailable Boolean @default(false)
   createdAt  DateTime @default(now())
 
   @@unique([userId, anilistId])

@@ -11,6 +11,11 @@ const ROWS: { key: keyof NotifPrefs; label: string; desc: string }[] = [
     desc: "Cuando sale un tomo de una serie que coleccionás.",
   },
   {
+    key: "wishlist",
+    label: "Novedades de tus deseados",
+    desc: "Cuando una serie que deseás sale en edición argentina.",
+  },
+  {
     key: "social",
     label: "Reacciones y comentarios",
     desc: "Cuando alguien reacciona o comenta tu actividad.",

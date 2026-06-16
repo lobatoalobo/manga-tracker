@@ -171,3 +171,80 @@ export async function detectAndNotifyNewVolumes(
     samples,
   };
 }
+
+/**
+ * Avisa "🆕 Salió en Argentina" a quienes tienen una serie en DESEADOS que ahora
+ * tiene edición AR disponible y todavía no fue avisada. Idempotente vía
+ * `WishlistItem.notifiedAvailable` (no re-notifica; sin tormenta retroactiva
+ * porque las ya-disponibles al agregar se marcan en `addWish`/backfill).
+ * Push agrupado: 1 por usuario.
+ */
+export async function detectAndNotifyWishlistAvailable(
+  dryRun = false,
+): Promise<{ scanned: number; notifications: number; samples: string[] }> {
+  const pending = await prisma.wishlistItem.findMany({
+    where: { notifiedAvailable: false },
+    select: { id: true, userId: true, anilistId: true, title: true },
+  });
+  if (pending.length === 0) return { scanned: 0, notifications: 0, samples: [] };
+
+  // ¿Cuáles de esas series ya tienen edición AR disponible (mapeada, volumes>0)?
+  const ids = [...new Set(pending.map((p) => p.anilistId))];
+  const avail = await prisma.publisherEdition.findMany({
+    where: { anilistId: { in: ids }, volumes: { gt: 0 } },
+    select: { anilistId: true },
+    distinct: ["anilistId"],
+  });
+  const availSet = new Set(avail.map((a) => a.anilistId as number));
+  const ready = pending.filter((p) => availSet.has(p.anilistId));
+  if (ready.length === 0) return { scanned: pending.length, notifications: 0, samples: [] };
+
+  // Filtro por preferencia de "deseados".
+  const users = [...new Set(ready.map((r) => r.userId))];
+  const enabled = new Set(await filterNotifEnabled(users, "WISHLIST_AVAILABLE"));
+
+  const samples: string[] = [];
+  const pushByUser = new Map<string, string[]>(); // userId → títulos
+  let notifications = 0;
+
+  for (const it of ready) {
+    if (!dryRun)
+      // Marcamos avisado SIEMPRE (aunque la pref esté off): no re-evaluar.
+      await prisma.wishlistItem.update({
+        where: { id: it.id },
+        data: { notifiedAvailable: true },
+      });
+    if (!enabled.has(it.userId)) continue;
+    notifications++;
+    if (samples.length < 20) samples.push(`${it.title} → ${it.userId}`);
+    if (!dryRun) {
+      await prisma.notification.create({
+        data: {
+          userId: it.userId,
+          type: "WISHLIST_AVAILABLE",
+          actorName: it.title,
+          anilistId: it.anilistId,
+          text: "🆕 Salió en Argentina (de tus deseados)",
+        },
+      });
+      const arr = pushByUser.get(it.userId) ?? [];
+      arr.push(it.title);
+      pushByUser.set(it.userId, arr);
+    }
+  }
+
+  if (!dryRun) {
+    for (const [userId, titles] of pushByUser) {
+      await sendPushToUsers([userId], {
+        title: "🆕 Salió en Argentina",
+        body:
+          titles.length === 1
+            ? `${titles[0]} (de tus deseados) ya tiene edición argentina`
+            : `${titles.length} de tus deseados salieron en Argentina · ${titles.slice(0, 3).join(", ")}${titles.length > 3 ? "…" : ""}`,
+        url: titles.length === 1 ? `/deseados` : `/notificaciones`,
+      });
+    }
+  }
+
+  return { scanned: pending.length, notifications, samples };
+}

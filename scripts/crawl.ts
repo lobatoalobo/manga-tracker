@@ -10,6 +10,7 @@ import {
 import { logJobRun, groupSkipReasons } from "../lib/jobs";
 import {
   detectAndNotifyNewVolumes,
+  detectAndNotifyWishlistAvailable,
   baselineNotifiedVolumes,
 } from "../lib/catalogNotify";
 import { prisma } from "../lib/prisma";
@@ -323,7 +324,7 @@ async function main() {
   console.log("\nListo.");
 }
 
-/** Tras actualizar conteos, avisa "tomo nuevo" a los coleccionistas. */
+/** Tras actualizar conteos: avisa "tomo nuevo" (colección) y "salió en AR" (deseados). */
 async function notifyNewVolumes() {
   try {
     const nv = await detectAndNotifyNewVolumes();
@@ -332,6 +333,14 @@ async function notifyNewVolumes() {
     );
   } catch (e) {
     console.error("  notifyNewVolumes falló (no frena el crawl):", e);
+  }
+  try {
+    const w = await detectAndNotifyWishlistAvailable();
+    console.log(
+      `  Deseados salieron en AR: ${w.notifications} notificaciones (${w.scanned} pendientes).`,
+    );
+  } catch (e) {
+    console.error("  notifyWishlist falló (no frena el crawl):", e);
   }
 }
 
