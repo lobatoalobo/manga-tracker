@@ -18,7 +18,6 @@
     "consolidate-dups": "tsx scripts/consolidate-dups.ts",
     "flag-comics": "tsx scripts/flag-comics.ts",
     "enrich-covers": "tsx scripts/enrich-covers.ts",
-    "dedup-sources": "tsx scripts/dedup-sources.ts",
     "split-homonyms": "tsx scripts/split-homonyms.ts",
     "fix-ivrea-urls": "tsx scripts/fix-ivrea-urls.ts",
     "auto-map": "tsx scripts/auto-map.ts",

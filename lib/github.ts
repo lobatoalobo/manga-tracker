@@ -4,8 +4,6 @@ const REPO = process.env.GITHUB_REPO || "lobatoalobo/manga-tracker";
 // desde acá (Whakoom bloquea a los runners); se corre local (ver /admin/scripts).
 export const CRAWL_JOBS = [
   "ivrea",
-  "panini",
-  "ovni",
   "mangakas",
   "resolve",
 ] as const;

@@ -43,10 +43,6 @@ const GROUPS: Group[] = [
         desc: "Deja 1 edición regular por (obra, editorial); borra specials/duplicados + works huérfanos.",
       },
       {
-        cmd: "npx tsx scripts/dedup-sources.ts --apply",
-        desc: "Dedup crawl↔Whakoom (misma serie cargada por dos fuentes, mismo título).",
-      },
-      {
         cmd: "npx tsx scripts/consolidate-dups.ts --apply",
         desc: "Consolida 'Posibles duplicados' (misma editorial+título+tomos): junta anilistId + link real de la editorial en una, borra la sobrante.",
       },
