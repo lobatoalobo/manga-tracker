@@ -10,23 +10,42 @@ interface EditionRow {
   title: string;
 }
 
+function titleMatches(c: any, nc: string): boolean {
+  return (
+    normalizeTitle(c.title?.romaji ?? "") === nc ||
+    normalizeTitle(c.title?.english ?? "") === nc
+  );
+}
+
+const staffNames = (c: any): string[] =>
+  (c.staff?.nodes ?? []).map((n: any) => n?.name?.full).filter(Boolean);
+
 /** Candidato cuyo título normalizado coincide EXACTO con el término. */
 function byExactTitle(candidates: any[], term: string): number | null {
   const nc = normalizeTitle(term);
+  const m = candidates.find((c) => titleMatches(c, nc));
+  return m?.id ?? null;
+}
+
+/**
+ * Candidato con título exacto Y autor que coincide. Alta confianza: evita mapear
+ * a un homónimo (ej. "Adabana" de NON vs el hentai homónimo de otro autor).
+ */
+function byExactTitleAndAuthor(
+  candidates: any[],
+  term: string,
+  author: string,
+): number | null {
+  const nc = normalizeTitle(term);
   const m = candidates.find(
-    (c) =>
-      normalizeTitle(c.title?.romaji ?? "") === nc ||
-      normalizeTitle(c.title?.english ?? "") === nc,
+    (c) => titleMatches(c, nc) && authorMatches(staffNames(c), author),
   );
   return m?.id ?? null;
 }
 
 /** Primer candidato cuyo autor coincide con `author`. */
 function byAuthor(candidates: any[], author: string): number | null {
-  const m = candidates.find((c) => {
-    const a = c.staff?.nodes?.[0]?.name?.full;
-    return a && authorMatches([a], author);
-  });
+  const m = candidates.find((c) => authorMatches(staffNames(c), author));
   return m?.id ?? null;
 }
 
@@ -140,31 +159,37 @@ export async function resolveEditionSeries(
     ),
   ];
 
-  // 1) Título exacto, probando todos los términos.
   const searches: { term: string; cands: any[] }[] = [];
   for (const term of terms) {
     const cands = await searchMangaList(term, true).catch(() => []);
     searches.push({ term, cands });
-    const exact = byExactTitle(cands, term);
-    if (exact) return exact;
   }
 
-  // 2) Autor (fallback) sobre los candidatos ya buscados.
+  // Con autor conocido: EXIGIMOS que coincida (evita homónimos, ej. el hentai
+  // "Adabana" vs el de NON). Si no se puede verificar, NO mapeamos por título solo.
   if (info.author) {
+    // 1) título exacto + autor (máxima confianza).
+    for (const { term, cands } of searches) {
+      const m = byExactTitleAndAuthor(cands, term, info.author);
+      if (m) return m;
+    }
+    // 2) autor entre los candidatos (títulos solo en español que no matchean).
     for (const { cands } of searches) {
       const m = byAuthor(cands, info.author);
       if (m) return m;
     }
-  }
-
-  // 3) Fallback potente para títulos solo en español: búsqueda por AUTOR (Staff)
-  //    y su obra con más coincidencia de palabras. Reusa resolveByTitleAuthor.
-  if (info.author) {
+    // 3) búsqueda por AUTOR (Staff) y su obra con más coincidencia de palabras.
     const viaAuthor = await resolveByTitleAuthor(row.title, info.author).catch(
       () => null,
     );
     if (viaAuthor) return viaAuthor;
+    return null;
   }
 
+  // Sin autor (ej. Panini, que no expone autor): título exacto, best-effort.
+  for (const { term, cands } of searches) {
+    const exact = byExactTitle(cands, term);
+    if (exact) return exact;
+  }
   return null;
 }
