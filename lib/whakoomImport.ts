@@ -59,13 +59,15 @@ async function persistEditionIdentity(opts: {
   });
   if (!row) return;
 
+  // OJO: NO guardamos releaseDate desde Whakoom. Su "Fecha de publicación" es la
+  // fecha PASADA del tomo, no un lanzamiento futuro → inútil para "sale en X". La
+  // fecha de salida es MANUAL (editor). Acá solo la usamos para detectar preventa.
   const workId = await findOrCreateWork({
     title: opts.title,
     anilistId: opts.anilistId,
     coverImage: opts.cover,
     author: opts.author,
     synopsis: opts.synopsis,
-    releaseDate: opts.releaseDate,
   }).catch(() => null);
 
   const data: { whakoomId?: string; workId?: number } = {};

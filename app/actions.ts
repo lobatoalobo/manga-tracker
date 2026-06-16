@@ -561,6 +561,7 @@ export async function updateWorkAction(
     coverImage?: string | null;
     genres?: string[];
     upcoming?: boolean;
+    releaseMonth?: string | null; // "YYYY-MM" (de <input type="month">) o "" para limpiar
   },
 ) {
   await assertAdmin();
@@ -572,6 +573,7 @@ export async function updateWorkAction(
     coverImage?: string | null;
     genres?: string[];
     upcoming?: boolean;
+    releaseDate?: Date | null;
   } = {};
   if (data.title !== undefined && data.title.trim()) {
     patch.title = data.title.trim();
@@ -584,6 +586,10 @@ export async function updateWorkAction(
   if (data.genres !== undefined)
     patch.genres = data.genres.map((g) => g.trim()).filter(Boolean);
   if (data.upcoming !== undefined) patch.upcoming = data.upcoming;
+  if (data.releaseMonth !== undefined) {
+    const m = data.releaseMonth?.match(/^(\d{4})-(\d{2})$/);
+    patch.releaseDate = m ? new Date(Number(m[1]), Number(m[2]) - 1, 1) : null;
+  }
 
   const work = await prisma.work.update({
     where: { id: workId },

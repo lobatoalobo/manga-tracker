@@ -28,6 +28,7 @@ export default function AdminNacionalEdit({
   coverImage,
   genres,
   upcoming,
+  releaseMonth,
   volumes,
   url,
   crumbInitial,
@@ -41,6 +42,7 @@ export default function AdminNacionalEdit({
   coverImage: string;
   genres: string[];
   upcoming: boolean;
+  releaseMonth: string;
   volumes: number;
   url: string;
   crumbInitial: string;
@@ -53,6 +55,7 @@ export default function AdminNacionalEdit({
   const [cov, setCov] = useState(coverImage);
   const [gen, setGen] = useState(genres.join(", "));
   const [up, setUp] = useState(upcoming);
+  const [rel, setRel] = useState(releaseMonth);
   const [v, setV] = useState(String(volumes));
   const [u, setU] = useState(url);
   const [crumb, setCrumb] = useState(crumbInitial);
@@ -80,6 +83,7 @@ export default function AdminNacionalEdit({
           coverImage: cov,
           genres: gen.split(",").map((g) => g.trim()).filter(Boolean),
           upcoming: up,
+          releaseMonth: rel,
         });
       await updateEditionAction(editionId, {
         title: t.trim() || title,
@@ -146,6 +150,17 @@ export default function AdminNacionalEdit({
           />
           Próximo a salir (preventa / anunciada en AR)
         </label>
+        {up && (
+          <label className="text-xs text-muted">
+            Fecha estimada de salida (opcional)
+            <input
+              type="month"
+              value={rel}
+              onChange={(e) => setRel(e.target.value)}
+              className={`mt-1 ${input}`}
+            />
+          </label>
+        )}
         <div className="flex gap-2">
           <label className="flex-1 text-xs text-muted">
             Tomos

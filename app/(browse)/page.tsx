@@ -103,11 +103,9 @@ export default async function Home({
       searchPublisherEditions(query).catch(() => [] as LocalCatalogHit[]),
     ]);
     searchInfo = res.pageInfo;
-    mangas = admin
-      ? res.media
-      : res.media.filter(
-          (m: any) => !m.isAdult || isExactTitleMatch(m.title, query),
-        );
+    // Hentai/R18 bloqueado en búsqueda (incluso por nombre exacto), como Whakoom.
+    // El admin sí lo ve (para curar/decidir mapeos).
+    mangas = admin ? res.media : res.media.filter((m: any) => !m.isAdult);
     // Catálogo local: lo que AniList no encuentra por título en español. Saca
     // los que ya aparecen en los resultados de AniList.
     const anilistIds = new Set(mangas.map((m: any) => m.id));

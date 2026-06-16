@@ -61,7 +61,9 @@ export async function resolveByTitleAuthor(
   const cleaned = searchableTitle(title);
   if (!cleaned) return null;
 
-  const candidates: any[] = await searchMangaList(cleaned, true).catch(() => []);
+  // includeAdult=false: NUNCA mapeamos a hentai/R18 (evita homónimos como
+  // "Adabana" de NON vs el hentai homónimo). Las editoriales AR no venden eso.
+  const candidates: any[] = await searchMangaList(cleaned, false).catch(() => []);
 
   // 1) Título exacto + autor (gana sobre homónimos: "Adabana" de NON vs hentai).
   if (author) {
@@ -168,7 +170,7 @@ export async function resolveEditionSeries(
 
   const searches: { term: string; cands: any[] }[] = [];
   for (const term of terms) {
-    const cands = await searchMangaList(term, true).catch(() => []);
+    const cands = await searchMangaList(term, false).catch(() => []); // sin hentai/R18
     searches.push({ term, cands });
   }
 
