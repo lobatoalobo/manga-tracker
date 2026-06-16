@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
 import { getIvreaDataBySlug } from "../lib/providers/ivrea";
-import { upsertPublisherEdition } from "../lib/catalog";
+import { upsertPublisherEdition, findOrCreateWork } from "../lib/catalog";
 import { seedMangakaIndex } from "../lib/mangakas";
 import { resolveEditionSeries } from "../lib/resolveSeries";
 import {
@@ -104,6 +104,24 @@ async function crawlIvrea() {
         status: d.argentinaStatus,
         url: d.url,
       });
+      // Copiamos autor/sinopsis/portada de Ivrea al Work (somos dueños del dato,
+      // sin fetch en vivo). findOrCreateWork completa sin pisar lo editado a mano.
+      const row = await prisma.publisherEdition.findUnique({
+        where: { publisher_slug: { publisher: "Ivrea Argentina", slug } },
+        select: { id: true, workId: true },
+      });
+      if (row) {
+        const workId = await findOrCreateWork({
+          title: d.title || title,
+          coverImage: d.coverImage,
+          author: d.author,
+          synopsis: d.synopsis,
+        }).catch(() => null);
+        if (workId && row.workId !== workId)
+          await prisma.publisherEdition
+            .update({ where: { id: row.id }, data: { workId } })
+            .catch(() => {});
+      }
       saved++;
     }
     if (done % 50 === 0) console.log(`  ${done}/${entries.length} (guardados: ${saved})`);

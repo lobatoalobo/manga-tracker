@@ -59,6 +59,7 @@ import {
 } from "@/lib/getMangaDetails";
 import { dispatchCrawl } from "@/lib/github";
 import { importWhakoomUrl } from "@/lib/whakoomImport";
+import { getWhakoomEdition } from "@/lib/providers/whakoom";
 import { runAdminTask } from "@/lib/adminTasks";
 import { setNotifPref, type NotifCategory } from "@/lib/notificationPrefs";
 import {
@@ -597,6 +598,36 @@ export async function updateWorkAction(
   });
   if (work.anilistId) await invalidateEditionsCache(work.anilistId);
   return { ok: true as const };
+}
+
+/**
+ * Admin: trae autor/sinopsis/portada de una URL de Whakoom y los copia al Work
+ * (one-shot, no guarda el link). Tapagujeros para series sin datos. SOLO admin;
+ * a los usuarios Whakoom nunca se les pide ni se les muestra.
+ */
+export async function enrichWorkFromWhakoomAction(
+  workId: number,
+  whakoomUrl: string,
+): Promise<{ ok: true; applied: string[] } | { ok: false; error: string }> {
+  await assertAdmin();
+  const url = whakoomUrl.trim();
+  if (!/whakoom\.com\/ediciones\//i.test(url))
+    return { ok: false, error: "Pegá una URL de edición de Whakoom (/ediciones/…)." };
+  const ed = await getWhakoomEdition(url).catch(() => null);
+  if (!ed) return { ok: false, error: "No se pudo leer esa página de Whakoom." };
+  const work = await prisma.work.findUnique({
+    where: { id: workId },
+    select: { author: true, synopsis: true, coverImage: true, anilistId: true },
+  });
+  if (!work) return { ok: false, error: "Obra no encontrada." };
+  const patch: { author?: string; synopsis?: string; coverImage?: string } = {};
+  if (!work.author && ed.author?.trim()) patch.author = ed.author.trim();
+  if (!work.synopsis && ed.synopsis?.trim()) patch.synopsis = ed.synopsis.trim();
+  if (!work.coverImage && ed.cover) patch.coverImage = ed.cover;
+  if (Object.keys(patch).length)
+    await prisma.work.update({ where: { id: workId }, data: patch });
+  if (work.anilistId) await invalidateEditionsCache(work.anilistId);
+  return { ok: true, applied: Object.keys(patch) };
 }
 
 /**
