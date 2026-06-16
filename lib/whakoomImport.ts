@@ -49,6 +49,7 @@ async function persistEditionIdentity(opts: {
   synopsis: string | null;
   volumes: number;
   releaseDate: Date | null;
+  hasUnreleased: boolean;
   whakoomId: string | null;
   volumesList: WhakoomVolume[];
 }) {
@@ -74,16 +75,18 @@ async function persistEditionIdentity(opts: {
       .update({ where: { id: row.id }, data })
       .catch(() => {});
 
-  // Preventa: NADA publicado todavía (0 tomos tras excluir los not-published) y
-  // fecha de salida futura → marcamos la obra "próximo a salir" (badge Pronto).
-  // El release real lo detecta el flujo 0→1 (cuando sale el 1er tomo), no el
-  // calendario: así un atraso no dispara "¡Ya salió!" antes de tiempo.
-  if (
-    workId &&
+  // "Próximo a salir" (badge Pronto) en dos casos:
+  //  - PREVENTA: nada publicado (0 tomos tras excluir not-published) + fecha futura.
+  //  - EN CURSO con TOMO NUEVO anunciado: hay un tomo not-published (aunque haya
+  //    tomos publicados).
+  // Es aditivo (solo marca true): cuando el tomo sale, el conteo sube y el flujo
+  // de "¡Ya salió!" (catalogNotify) lo desmarca solo. Así un atraso no rompe nada
+  // ni pisamos un flag manual.
+  const isPreorder =
     opts.volumes === 0 &&
     opts.releaseDate != null &&
-    opts.releaseDate.getTime() > Date.now()
-  )
+    opts.releaseDate.getTime() > Date.now();
+  if (workId && (isPreorder || opts.hasUnreleased))
     await prisma.work
       .update({ where: { id: workId }, data: { upcoming: true } })
       .catch(() => {});
@@ -167,6 +170,7 @@ export async function importWhakoomUrl(
     synopsis: ed.synopsis,
     volumes: ed.volumes,
     releaseDate: ed.releaseDate,
+    hasUnreleased: ed.hasUnreleased,
     whakoomId: ed.whakoomId,
     volumesList: ed.volumesList,
   });
@@ -313,6 +317,7 @@ export async function importWhakoomUrls(
       synopsis: ed.synopsis,
       volumes: ed.volumes,
       releaseDate: ed.releaseDate,
+    hasUnreleased: ed.hasUnreleased,
       whakoomId: ed.whakoomId,
       volumesList: ed.volumesList,
     });
