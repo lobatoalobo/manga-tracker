@@ -617,30 +617,28 @@ export async function getMangaById(
     }
   `;
 
-  const response =
-    await fetch(
-      "https://graphql.anilist.co",
-      {
-        method: "POST",
+  const body = JSON.stringify({ query, variables: { id } });
 
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
+  // Resiliente: reintenta ante 429 (rate-limit) y cachea. Sin esto, navegar
+  // rápido entre series tumbaba AniList → la ficha hacía notFound() (404/400)
+  // sobre series VÁLIDAS. Devuelve null si AniList falla (la página decide 404).
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const response = await fetch("https://graphql.anilist.co", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      next: { revalidate: 60 * 60 * 24 },
+    }).catch(() => null);
 
-        body: JSON.stringify(
-          {
-            query,
-            variables: {
-              id,
-            },
-      }),
-})
-      
-    
+    if (!response) return null;
+    if (response.status === 429 && attempt < 2) {
+      const retryAfter = Number(response.headers.get("retry-after")) || 2;
+      await new Promise((r) => setTimeout(r, (retryAfter + 1) * 1000));
+      continue;
+    }
 
-  const json =
-    await response.json();
-
-  return json.data.Media;
+    const json = await response.json().catch(() => null);
+    return json?.data?.Media ?? null;
+  }
+  return null;
 }
