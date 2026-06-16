@@ -65,6 +65,7 @@ async function persistEditionIdentity(opts: {
     coverImage: opts.cover,
     author: opts.author,
     synopsis: opts.synopsis,
+    releaseDate: opts.releaseDate,
   }).catch(() => null);
 
   const data: { whakoomId?: string; workId?: number } = {};

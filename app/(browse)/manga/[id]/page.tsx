@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { getSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
 import { workMetaByAnilist } from "@/lib/catalog";
+import { formatReleaseDate } from "@/lib/releaseDate";
 import { isWished } from "@/lib/wishlist";
 import { getNote, getSeriesNotes } from "@/lib/notes";
 import { displayTitle } from "@/lib/title";
@@ -107,6 +108,8 @@ export default async function Page({
             {upcoming && (
               <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-300">
                 🔜 Próximo a salir
+                {formatReleaseDate(workMeta?.releaseDate) &&
+                  ` · ${formatReleaseDate(workMeta?.releaseDate)}`}
               </span>
             )}
           </div>
