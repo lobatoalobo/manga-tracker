@@ -180,6 +180,16 @@ export async function setSharingAction(enable: boolean) {
   return { slug };
 }
 
+/** Marca (o desmarca) la serie preferida del usuario (1 por usuario). */
+export async function setFavoriteAction(anilistId: number, makeFavorite: boolean) {
+  const userId = await requireUserId();
+  await prisma.user.update({
+    where: { id: userId },
+    data: { favoriteAnilistId: makeFavorite ? anilistId : null },
+  });
+  revalidatePath("/collection");
+}
+
 export async function createReportAction(input: {
   mangaId?: number | null;
   mangaTitle: string;

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import MangaCard from "./MangaCard";
 import RemoveEditionButton from "./RemoveEditionButton";
+import FavoriteButton from "./FavoriteButton";
 import { displayTitle } from "@/lib/title";
 import { editionProgress } from "@/services/collectionService";
 import type { CollectionItem } from "@/lib/collection";
@@ -24,10 +25,12 @@ export default function CollectionGrid({
   items,
   readOnly = false,
   hrefBase = "/manga",
+  favoriteId = null,
 }: {
   items: CollectionItem[];
   readOnly?: boolean;
   hrefBase?: string;
+  favoriteId?: number | null;
 }) {
   const [search, setSearch] = useState("");
   const [publisher, setPublisher] = useState("all");
@@ -63,13 +66,17 @@ export default function CollectionGrid({
     });
 
     out.sort((a, b) => {
+      // La preferida va siempre primera, ignorando el orden elegido.
+      const fa = favoriteId != null && a.anilistId === favoriteId ? 0 : 1;
+      const fb = favoriteId != null && b.anilistId === favoriteId ? 0 : 1;
+      if (fa !== fb) return fa - fb;
       if (sort === "title") return a.title.romaji.localeCompare(b.title.romaji);
       if (sort === "progress") return progressOf(b) - progressOf(a);
       return b.edition.totalVolumes - a.edition.totalVolumes;
     });
 
     return out;
-  }, [items, search, publisher, reading, sort]);
+  }, [items, search, publisher, reading, sort, favoriteId]);
 
   if (items.length === 0) {
     return (
@@ -144,6 +151,7 @@ export default function CollectionGrid({
               item={i}
               readOnly={readOnly}
               hrefBase={hrefBase}
+              isFavorite={favoriteId != null && i.anilistId === favoriteId}
             />
           ))}
         </div>
@@ -155,6 +163,7 @@ export default function CollectionGrid({
               item={i}
               readOnly={readOnly}
               hrefBase={hrefBase}
+              isFavorite={favoriteId != null && i.anilistId === favoriteId}
             />
           ))}
         </ul>
@@ -167,10 +176,12 @@ function CollectionRow({
   item,
   readOnly,
   hrefBase,
+  isFavorite,
 }: {
   item: CollectionItem;
   readOnly: boolean;
   hrefBase: string;
+  isFavorite: boolean;
 }) {
   const { edition } = item;
   const prog = editionProgress(edition);
@@ -181,7 +192,11 @@ function CollectionRow({
       : `${hrefBase}/${item.anilistId}`;
 
   return (
-    <li className="flex items-center gap-3 px-3 py-2 transition hover:bg-surface-2">
+    <li
+      className={`flex items-center gap-3 px-3 py-2 transition hover:bg-surface-2 ${
+        isFavorite ? "bg-amber-400/10" : ""
+      }`}
+    >
       <Link href={href} className="flex min-w-0 flex-1 items-center gap-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -230,6 +245,15 @@ function CollectionRow({
           )}
         </div>
       </Link>
+      {!readOnly && (
+        <FavoriteButton
+          anilistId={item.anilistId}
+          isFavorite={isFavorite}
+          className={`shrink-0 px-1 text-base transition disabled:opacity-50 ${
+            isFavorite ? "text-amber-400" : "text-muted hover:text-amber-400"
+          }`}
+        />
+      )}
       {!readOnly && (
         <RemoveEditionButton
           anilistId={item.anilistId}

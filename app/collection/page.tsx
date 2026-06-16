@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
-import { getCollectionItems, getShareSlug } from "@/lib/collection";
+import { getCollectionItems, getShareSlug, getFavoriteId } from "@/lib/collection";
 import CollectionGrid from "@/components/CollectionGrid";
 import ShareToggle from "@/components/ShareToggle";
 import ImportExport from "@/components/ImportExport";
@@ -15,9 +15,10 @@ export default async function CollectionPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/");
 
-  const [items, shareSlug] = await Promise.all([
+  const [items, shareSlug, favoriteId] = await Promise.all([
     getCollectionItems(session.user.id),
     getShareSlug(session.user.id),
+    getFavoriteId(session.user.id),
   ]);
   const stats = getCollectionStats(items);
 
@@ -87,7 +88,7 @@ export default async function CollectionPage() {
         </Link>
       )}
 
-      <CollectionGrid items={items} />
+      <CollectionGrid items={items} favoriteId={favoriteId} />
     </main>
   );
 }
