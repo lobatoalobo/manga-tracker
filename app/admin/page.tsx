@@ -69,9 +69,8 @@ export default async function AdminHome() {
         />
         <Stat
           href="/admin/mapeos?estado=comic"
-          label="🦸 Sospecha cómic"
+          label="🦸 Cómics (info)"
           value={flags.comics}
-          alert={flags.comics > 0}
         />
       </div>
       <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3">

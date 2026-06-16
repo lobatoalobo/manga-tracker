@@ -35,8 +35,8 @@ const GROUPS: Group[] = [
     title: "Depuración",
     scripts: [
       {
-        cmd: "npx tsx scripts/flag-comics.ts --apply",
-        desc: "Saca cómics occidentales (Marvel/DC/Star Wars) del catálogo. Sin --apply: lista.",
+        cmd: "npx tsx scripts/flag-comics.ts",
+        desc: "LISTA (sin --apply) los posibles cómics occidentales. Ya NO se recomienda borrarlos: los cómics se quedan; a futuro se clasifican con un campo de tipo (manga/cómic/novela/artbook/databook).",
       },
       {
         cmd: "npx tsx scripts/depurate-catalog.ts --apply",
