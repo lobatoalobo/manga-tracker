@@ -184,6 +184,11 @@ export default async function NacionalPage({
               coverImage={cover ?? ""}
               genres={row.work?.genres ?? []}
               upcoming={row.work?.upcoming ?? false}
+              releaseMonth={
+                row.work?.releaseDate
+                  ? row.work.releaseDate.toISOString().slice(0, 7)
+                  : ""
+              }
               volumes={row.volumes}
               url={row.url}
               crumbInitial={crumbInitial}
