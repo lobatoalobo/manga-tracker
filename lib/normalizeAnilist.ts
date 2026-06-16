@@ -81,8 +81,13 @@ export function normalizeAnilist(manga: any) {
           native?: string | null;
         },
         coverImage: e.node.coverImage?.large ?? null,
+        isAdult: e.node.isAdult ?? false,
       }))
-      .filter((r: any) => r.mediaType === "MANGA" || r.mediaType === "ANIME"),
+      // Solo manga/anime, y NUNCA relacionados hentai/R18 (bloqueo total).
+      .filter(
+        (r: any) =>
+          (r.mediaType === "MANGA" || r.mediaType === "ANIME") && !r.isAdult,
+      ),
   };
 }
 

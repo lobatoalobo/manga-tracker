@@ -48,6 +48,7 @@ export default function AdminStoreLinks({
   excludedPublishers = [],
   defaultVolumes = 0,
   upcoming = false,
+  releaseMonth = "",
 }: {
   anilistId: number;
   seriesTitle: string;
@@ -56,10 +57,12 @@ export default function AdminStoreLinks({
   excludedPublishers?: string[];
   defaultVolumes?: number;
   upcoming?: boolean;
+  releaseMonth?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [up, setUp] = useState(upcoming);
+  const [rel, setRel] = useState(releaseMonth);
   const [crumb, setCrumb] = useState(crumbInitial);
   const [urls, setUrls] = useState<Record<number, string>>(
     Object.fromEntries(editions.map((e) => [e.id, e.url])),
@@ -124,7 +127,7 @@ export default function AdminStoreLinks({
             setUp(value);
             save(
               () =>
-                setWorkUpcomingAction(anilistId, value).then(() => {
+                setWorkUpcomingAction(anilistId, value, rel).then(() => {
                   router.refresh();
                 }),
               "Guardado",
@@ -135,6 +138,28 @@ export default function AdminStoreLinks({
         />
         🔜 Próximo a salir (preventa / anunciada en AR)
       </label>
+      {up && (
+        <label className="mb-3 block text-xs text-muted">
+          Fecha estimada de salida (opcional)
+          <input
+            type="month"
+            value={rel}
+            onChange={(e) => {
+              const value = e.target.value;
+              setRel(value);
+              save(
+                () =>
+                  setWorkUpcomingAction(anilistId, true, value).then(() => {
+                    router.refresh();
+                  }),
+                "Guardado",
+              );
+            }}
+            disabled={pending}
+            className="mt-1 block rounded-lg border border-border bg-surface-2 px-2 py-1 text-sm text-foreground outline-none focus:border-accent"
+          />
+        </label>
+      )}
 
       {/* Crumb */}
       <label className="text-xs text-muted">Búsqueda en Crumb</label>
