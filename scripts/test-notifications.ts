@@ -62,7 +62,7 @@ async function main() {
     `  → ${nv.notifications} noti(s). ${eds.length > 1 ? "Debería llegarte 1 PUSH agrupado." : "1 push."}`,
   );
 
-  // === B) Salió en Argentina (deseados) ===
+  // === B) Deseados que YA están disponibles (no preventa) → "🆕 Salió en AR" ===
   const wishes = await prisma.wishlistItem.findMany({
     where: { userId: user.id },
     select: { id: true, anilistId: true, title: true },
@@ -77,11 +77,7 @@ async function main() {
     ).map((a) => a.anilistId as number),
   );
   const cand = wishes.find((w) => wishAvail.has(w.anilistId));
-  if (!cand) {
-    console.log(
-      `\n[B] No tenés deseados disponibles en AR. Agregá a Deseados una serie que tenga edición argentina y re-corré.`,
-    );
-  } else {
+  if (cand) {
     await prisma.wishlistItem.update({
       where: { id: cand.id },
       data: { notifiedAvailable: false },
@@ -89,6 +85,32 @@ async function main() {
     console.log(`\n[B] Salió en AR — simulando para tu deseada "${cand.title}":`);
     const w = await detectAndNotifyWishlistAvailable(false);
     console.log(`  → ${w.notifications} noti(s). Debería llegarte "🆕 Salió en Argentina".`);
+  } else {
+    console.log(`\n[B] No tenés deseados YA disponibles (no preventa) para testear.`);
+  }
+
+  // === C) Deseado en PREVENTA que se lanza → "🎉 ¡Ya salió!" (camino de tomos) ===
+  const preventaEd = await prisma.publisherEdition.findFirst({
+    where: {
+      work: { upcoming: true, editions: { some: {} } },
+      anilistId: { in: wishes.map((w) => w.anilistId) },
+    },
+    select: { id: true, anilistId: true, title: true },
+  });
+  if (preventaEd) {
+    // Simular el lanzamiento: 0 tomos → 1, sin re-baselinear (upcoming sigue true).
+    await prisma.publisherEdition.update({
+      where: { id: preventaEd.id },
+      data: { volumes: 1, notifiedVolumes: 0 },
+    });
+    console.log(`\n[C] Lanzamiento de preventa deseada "${preventaEd.title}" (0→1 tomo):`);
+    const nv2 = await detectAndNotifyNewVolumes(false);
+    console.log(`  → ${nv2.notifications} noti(s). Debería llegarte "🎉 ¡Ya salió!".`);
+    console.log(
+      `  (restaurá la preventa con: npx tsx scripts/reset-preventa.ts ${preventaEd.anilistId})`,
+    );
+  } else {
+    console.log(`\n[C] No tenés deseados en preventa para testear el "¡Ya salió!".`);
   }
 
   console.log(
