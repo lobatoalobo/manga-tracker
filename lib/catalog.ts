@@ -489,6 +489,25 @@ export async function getEditorialAll(
   return rows.map(toEditorialWork);
 }
 
+/** Obras "próximo a salir" (preventa) para el modo Próximos del browse. */
+export async function getUpcomingWorks(): Promise<EditorialWork[]> {
+  const rows = await prisma.publisherEdition.findMany({
+    where: { work: { upcoming: true } },
+    orderBy: { normTitle: "asc" },
+    select: editorialSelect,
+  });
+  // Dedupe: varias ediciones de la misma preventa → una card.
+  const seen = new Set<string>();
+  const out: EditorialWork[] = [];
+  for (const w of rows.map(toEditorialWork)) {
+    const key = w.anilistId ? `a${w.anilistId}` : `t${normalizeTitle(w.title)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(w);
+  }
+  return out;
+}
+
 // --- Curación admin de mapeos editorial ↔ serie ---
 
 export interface EditionMapping {

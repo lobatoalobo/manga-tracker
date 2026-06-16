@@ -14,6 +14,7 @@ import {
   nationalCoversByAnilist,
   upcomingByAnilist,
   getEditorialAll,
+  getUpcomingWorks,
   editorialCounts,
   searchPublisherEditions,
   EDITORIALS,
@@ -29,7 +30,7 @@ import Dashboard from "@/components/Dashboard";
 import CatalogRefreshBanner from "@/components/CatalogRefreshBanner";
 import Link from "next/link";
 
-type Tab = "hot" | "az" | "mangaka" | "editoriales";
+type Tab = "hot" | "az" | "mangaka" | "editoriales" | "proximos";
 
 export default async function Home({
   searchParams,
@@ -69,7 +70,9 @@ export default async function Home({
         ? "mangaka"
         : params.tab === "editoriales"
           ? "editoriales"
-          : "hot";
+          : params.tab === "proximos"
+            ? "proximos"
+            : "hot";
   const page = Math.max(1, Number(params.page) || 1);
   const onlyFinished = params.finished === "1";
   const editorial =
@@ -122,6 +125,8 @@ export default async function Home({
     } catch {
       editorialWorks = [];
     }
+  } else if (tab === "proximos") {
+    editorialWorks = await getUpcomingWorks().catch(() => []);
   } else if (tab === "az") {
     const res = await getMangaPage(page, admin, onlyFinished);
     mangas = res.media;
@@ -133,6 +138,16 @@ export default async function Home({
   const nationalEditions = await nationalEditionsByManga(mangas).catch(
     () => new Map<number, string[]>(),
   );
+  // En búsqueda: primero las que tienen edición nacional (🇦🇷), después el resto
+  // alfabético. (Ordena dentro de la página traída de AniList.)
+  if (query) {
+    mangas = [...mangas].sort((a: any, b: any) => {
+      const na = nationalEditions.has(a.id) ? 0 : 1;
+      const nb = nationalEditions.has(b.id) ? 0 : 1;
+      if (na !== nb) return na - nb;
+      return displayTitle(a.title).localeCompare(displayTitle(b.title), "es");
+    });
+  }
   // Portada nacional (cuando la tenemos) para identificar mejor en las listas.
   const nationalCovers = await nationalCoversByAnilist(
     mangas.map((m: any) => m.id),
@@ -241,6 +256,14 @@ export default async function Home({
         </>
       ) : tab === "mangaka" ? (
         <MangakaList all={allMangakas} />
+      ) : tab === "proximos" ? (
+        editorialWorks.length === 0 ? (
+          <p className="mt-5 text-sm text-muted">
+            No hay series marcadas como próximas a salir por ahora.
+          </p>
+        ) : (
+          <EditorialBrowser works={editorialWorks} />
+        )
       ) : (
         <>
           <div className="flex flex-wrap gap-2">
