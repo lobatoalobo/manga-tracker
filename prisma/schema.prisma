@@ -350,6 +350,7 @@ model Work {
   synopsis   String? // sinopsis, editable
   genres     String[] // géneros, editables a mano (no hay fuente para no-AniList)
   upcoming   Boolean  @default(false) // "Próximo a salir" en AR (preventa/anunciada)
+  releaseDate DateTime? // fecha estimada de salida (de Whakoom), para mostrar "sale en mes/año"
   anilistId  Int?     @unique // referencia externa opcional (snapshot/enriquecimiento)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
