@@ -1,8 +1,9 @@
 /**
- * Rellena `Work.author` desde Whakoom para las ediciones ya importadas cuyo Work
- * quedó sin autor (el import viejo no lo guardaba). El autor habilita el match
- * por autor del botón "Auto" / auto-map, clave para editoriales sin sitio propio
- * (Utopía) y títulos en español que no matchean por título exacto.
+ * Rellena `Work.author` y `Work.synopsis` desde Whakoom para las ediciones ya
+ * importadas cuyo Work quedó incompleto (el import viejo no los guardaba). El
+ * autor habilita el match por autor del botón "Auto" / auto-map (clave para
+ * editoriales sin sitio propio como Utopía); la sinopsis enriquece la ficha
+ * nacional de las obras que no están en AniList.
  *
  *   npx tsx scripts/backfill-work-authors.ts [utopia|kemuri|…]        # dry-run
  *   npx tsx scripts/backfill-work-authors.ts utopia --apply
@@ -36,13 +37,16 @@ async function main() {
     where: {
       url: { contains: "whakoom" },
       workId: { not: null },
-      work: { author: null },
+      work: { OR: [{ author: null }, { synopsis: null }] },
       ...(publisher ? { publisher } : {}),
     },
-    select: { id: true, title: true, url: true, workId: true, publisher: true },
+    select: {
+      id: true, title: true, url: true, workId: true, publisher: true,
+      work: { select: { author: true, synopsis: true } },
+    },
     orderBy: { publisher: "asc" },
   });
-  console.log(`Works sin autor (con link Whakoom): ${rows.length}`);
+  console.log(`Works incompletos (con link Whakoom): ${rows.length}`);
 
   let done = 0;
   let miss = 0;
@@ -53,21 +57,26 @@ async function main() {
 
     const ed = await getWhakoomEdition(r.url).catch(() => null);
     await sleep(500);
-    const author = ed?.author?.trim();
-    if (!author) {
+    // Solo completamos lo que falta (no pisamos lo editado a mano).
+    const patch: { author?: string; synopsis?: string } = {};
+    if (!r.work?.author && ed?.author?.trim()) patch.author = ed.author.trim();
+    if (!r.work?.synopsis && ed?.synopsis?.trim()) patch.synopsis = ed.synopsis.trim();
+    if (!Object.keys(patch).length) {
       miss++;
       continue;
     }
-    console.log(`#${r.workId} [${r.publisher}] "${r.title}" → ${author}`);
+    console.log(
+      `#${r.workId} [${r.publisher}] "${r.title}" →${patch.author ? " autor" : ""}${patch.synopsis ? " sinopsis" : ""}`,
+    );
     if (apply)
       await prisma.work
-        .update({ where: { id: r.workId! }, data: { author } })
+        .update({ where: { id: r.workId! }, data: patch })
         .catch(() => {});
     done++;
   }
 
   console.log(
-    `\n${done} works con autor${apply ? " (aplicado)" : ""}; ${miss} sin autor en Whakoom.`,
+    `\n${done} works completados${apply ? " (aplicado)" : ""}; ${miss} sin datos nuevos en Whakoom.`,
   );
   if (!apply) console.log("DRY-RUN: corré con --apply.");
   await prisma.$disconnect();

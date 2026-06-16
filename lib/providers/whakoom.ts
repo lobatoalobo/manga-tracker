@@ -10,6 +10,7 @@ export interface WhakoomEdition {
   volumes: number;
   url: string;
   cover: string | null; // portada (og:image)
+  synopsis: string | null; // "Argumento" de la ficha (para obras no-AniList)
   whakoomId: string | null; // id de la edición (/ediciones/<id>/…)
   volumesList: WhakoomVolume[]; // tomos individuales con su id de Whakoom
 }
@@ -191,5 +192,16 @@ export function parseWhakoomEdition(
     t.match(/<meta property="og:image" content="([^"]+)"/i)?.[1]?.trim() ||
     null;
 
-  return { title, author, publisher, volumes, url, cover, whakoomId, volumesList };
+  // "Argumento" (sinopsis): bloque <div class="wiki-text"><h2>Argumento</h2>…
+  // hasta el </div>. Sirve para enriquecer las obras que NO están en AniList.
+  const argMatch = t.match(/<h2>\s*Argumento\s*<\/h2>([\s\S]*?)<\/div>/i);
+  const synopsis = argMatch
+    ? decodeEntities(argMatch[1].replace(/<[^>]+>/g, " "))
+        .replace(/\s+/g, " ")
+        .trim() || null
+    : null;
+
+  return {
+    title, author, publisher, volumes, url, cover, synopsis, whakoomId, volumesList,
+  };
 }

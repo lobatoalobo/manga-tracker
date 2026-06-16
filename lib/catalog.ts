@@ -330,32 +330,36 @@ export async function findOrCreateWork(opts: {
   anilistId?: number | null;
   coverImage?: string | null;
   author?: string | null;
+  synopsis?: string | null;
 }): Promise<number> {
   const normTitle = normalizeTitle(opts.title);
 
   // Buscamos la obra existente: por anilistId (fuerte) o por título. Para el
   // matcheo por título usamos la llave ESTRICTA (distingue Citrus de Citrus+):
   // traemos los candidatos por normTitle (indexado) y filtramos por tightTitleKey.
-  // Si le falta portada/autor y ahora lo tenemos, lo completamos (sin pisar).
-  let existing: { id: number; coverImage: string | null; author: string | null } | null;
+  // Si le falta portada/autor/sinopsis y ahora lo tenemos, lo completamos (sin pisar).
+  let existing:
+    | { id: number; coverImage: string | null; author: string | null; synopsis: string | null }
+    | null;
   if (opts.anilistId) {
     existing = await prisma.work.findUnique({
       where: { anilistId: opts.anilistId },
-      select: { id: true, coverImage: true, author: true },
+      select: { id: true, coverImage: true, author: true, synopsis: true },
     });
   } else {
     const tight = tightTitleKey(opts.title);
     const cands = await prisma.work.findMany({
       where: { normTitle },
-      select: { id: true, coverImage: true, author: true, title: true },
+      select: { id: true, coverImage: true, author: true, synopsis: true, title: true },
     });
     existing = cands.find((w) => tightTitleKey(w.title) === tight) ?? null;
   }
 
   if (existing) {
-    const patch: { coverImage?: string; author?: string } = {};
+    const patch: { coverImage?: string; author?: string; synopsis?: string } = {};
     if (!existing.coverImage && opts.coverImage) patch.coverImage = opts.coverImage;
     if (!existing.author && opts.author) patch.author = opts.author;
+    if (!existing.synopsis && opts.synopsis) patch.synopsis = opts.synopsis;
     if (Object.keys(patch).length)
       await prisma.work.update({ where: { id: existing.id }, data: patch }).catch(() => {});
     return existing.id;
@@ -368,6 +372,7 @@ export async function findOrCreateWork(opts: {
       anilistId: opts.anilistId ?? null,
       coverImage: opts.coverImage ?? null,
       author: opts.author ?? null,
+      synopsis: opts.synopsis ?? null,
     },
   });
   return created.id;
