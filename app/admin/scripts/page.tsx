@@ -92,6 +92,14 @@ const GROUPS: Group[] = [
         cmd: "npx tsx scripts/push-test.ts [email]",
         desc: "Manda un push de prueba a un usuario para verificar la entrega con la app cerrada.",
       },
+      {
+        cmd: "npx tsx scripts/test-notifications.ts <email>",
+        desc: "Prueba los 2 flujos contra tu cuenta: tomos nuevos (1 push AGRUPADO) y 'Salió en Argentina' (deseados). Revertir con reset-notifications.",
+      },
+      {
+        cmd: "npx tsx scripts/reset-notifications.ts <email>",
+        desc: "Revierte test-notifications: re-baseliza conteos, marca deseados disponibles como avisados y borra las notis de prueba.",
+      },
     ],
   },
 ];

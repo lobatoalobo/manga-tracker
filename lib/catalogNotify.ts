@@ -101,7 +101,19 @@ export async function detectAndNotifyNewVolumes(
       audience.push(...wished.map((w) => w.userId));
     }
     const allUsers = [...new Set(audience)];
-    const userIds = await filterNotifEnabled(allUsers, "NEW_VOLUME");
+    const enabled = await filterNotifEnabled(allUsers, "NEW_VOLUME");
+    // Excluir a quienes silenciaron ESTA serie puntual (override del global).
+    const muted = enabled.length
+      ? new Set(
+          (
+            await prisma.seriesNotifMute.findMany({
+              where: { anilistId, userId: { in: enabled } },
+              select: { userId: true },
+            })
+          ).map((m) => m.userId),
+        )
+      : new Set<string>();
+    const userIds = enabled.filter((u) => !muted.has(u));
 
     if (userIds.length && samples.length < 20)
       samples.push(

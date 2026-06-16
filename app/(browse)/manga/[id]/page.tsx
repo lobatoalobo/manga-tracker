@@ -6,6 +6,8 @@ import { getSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
 import { workMetaByAnilist } from "@/lib/catalog";
 import { formatReleaseLabel } from "@/lib/releaseDate";
+import { isSeriesMuted } from "@/lib/notificationPrefs";
+import SeriesMuteToggle from "@/components/SeriesMuteToggle";
 import { isWished } from "@/lib/wishlist";
 import { getNote, getSeriesNotes } from "@/lib/notes";
 import { displayTitle } from "@/lib/title";
@@ -41,12 +43,13 @@ export default async function Page({
   const anilist = await getMangaCore(mangaId).catch(() => null);
   if (!anilist) notFound();
 
-  const [series, wished, note, reviews, workMeta] = await Promise.all([
+  const [series, wished, note, reviews, workMeta, muted] = await Promise.all([
     userId ? getSeries(userId, mangaId) : Promise.resolve(null),
     userId ? isWished(userId, mangaId) : Promise.resolve(false),
     userId ? getNote(userId, mangaId) : Promise.resolve(null),
     getSeriesNotes(mangaId),
     workMetaByAnilist(mangaId).catch(() => null),
+    userId ? isSeriesMuted(userId, mangaId) : Promise.resolve(false),
   ]);
 
   // Para coleccionistas locales: si tenemos la portada de la edición nacional
@@ -193,6 +196,9 @@ export default async function Page({
             <Suspense fallback={null}>
               <CrumbBuyButton anilist={anilist} />
             </Suspense>
+            {canTrack && (
+              <SeriesMuteToggle anilistId={mangaId} muted={muted} />
+            )}
           </div>
 
           {adminStore && (
