@@ -205,6 +205,11 @@ export default async function Page({
                 excludedPublishers={adminStore.excluded}
                 defaultVolumes={anilist.volumes ?? 0}
                 upcoming={workMeta?.upcoming ?? false}
+                releaseMonth={
+                  workMeta?.releaseDate
+                    ? workMeta.releaseDate.toISOString().slice(0, 7)
+                    : ""
+                }
               />
             </div>
           )}

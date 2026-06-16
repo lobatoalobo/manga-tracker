@@ -600,10 +600,14 @@ export async function updateWorkAction(
   return { ok: true as const };
 }
 
-/** Admin: marca/desmarca una serie mapeada como "próximo a salir" (preventa AR). */
+/**
+ * Admin: marca/desmarca una serie mapeada como "próximo a salir" (preventa AR) y
+ * opcionalmente fija la fecha estimada ("YYYY-MM"; "" la limpia).
+ */
 export async function setWorkUpcomingAction(
   anilistId: number,
   upcoming: boolean,
+  releaseMonth?: string | null,
 ) {
   await assertAdmin();
   // Vía edición→work (el work puede tener anilistId null aunque la edición no).
@@ -614,10 +618,15 @@ export async function setWorkUpcomingAction(
   const workIds = [
     ...new Set(eds.map((e) => e.workId).filter((x): x is number => x != null)),
   ];
+  const data: { upcoming: boolean; releaseDate?: Date | null } = { upcoming };
+  if (releaseMonth !== undefined) {
+    const m = releaseMonth?.match(/^(\d{4})-(\d{2})$/);
+    data.releaseDate = m ? new Date(Number(m[1]), Number(m[2]) - 1, 1) : null;
+  }
   if (workIds.length)
     await prisma.work.updateMany({
       where: { id: { in: workIds } },
-      data: { upcoming },
+      data,
     });
   await invalidateEditionsCache(anilistId);
   revalidatePath(`/manga/${anilistId}`);

@@ -584,6 +584,7 @@ export async function getMangaById(
               id
               type
               format
+              isAdult
               title {
                 romaji
                 english
