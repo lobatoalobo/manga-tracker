@@ -65,7 +65,7 @@ const GROUPS: Group[] = [
       },
       {
         cmd: "npx tsx scripts/backfill-work-authors.ts [utopia|…] --apply",
-        desc: "Rellena Work.author desde Whakoom (el import viejo no lo guardaba). Necesario para que Auto/auto-map resuelvan por autor. Correr ANTES de auto-map.",
+        desc: "Rellena Work.author + sinopsis desde Whakoom (el import viejo no los guardaba). Necesario para que Auto/auto-map resuelvan por autor. Correr ANTES de auto-map.",
       },
       {
         cmd: "npx tsx scripts/fix-broken-maps.ts --apply",
@@ -73,15 +73,11 @@ const GROUPS: Group[] = [
       },
       {
         cmd: "npx tsx scripts/enrich-covers.ts",
-        desc: "Rellena portadas de AniList en works mapeados que no tienen foto.",
+        desc: "Rellena portadas de AniList en works mapeados sin foto (la portada nacional manda; esto es fallback). Para nacionales-only la portada sale de Whakoom (re-import).",
       },
       {
         cmd: "npx tsx scripts/fix-ivrea-urls.ts --apply",
         desc: "Corrige URLs de Ivrea (de Whakoom → sitio real, validado) y sincroniza el conteo de tomos.",
-      },
-      {
-        cmd: "npx tsx scripts/fix-panini-urls.ts --apply",
-        desc: "Pone el link de búsqueda de Panini (solo URL, no toca tomos).",
       },
     ],
   },
