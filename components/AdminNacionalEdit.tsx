@@ -9,6 +9,7 @@ import {
   updateWorkAction,
 } from "@/app/actions";
 import { crumbSearch } from "@/lib/crumb";
+import ReleaseDatePicker from "@/components/ReleaseDatePicker";
 
 const input =
   "w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent";
@@ -28,7 +29,7 @@ export default function AdminNacionalEdit({
   coverImage,
   genres,
   upcoming,
-  releaseMonth,
+  releaseLabel,
   volumes,
   url,
   crumbInitial,
@@ -42,7 +43,7 @@ export default function AdminNacionalEdit({
   coverImage: string;
   genres: string[];
   upcoming: boolean;
-  releaseMonth: string;
+  releaseLabel: string;
   volumes: number;
   url: string;
   crumbInitial: string;
@@ -55,7 +56,7 @@ export default function AdminNacionalEdit({
   const [cov, setCov] = useState(coverImage);
   const [gen, setGen] = useState(genres.join(", "));
   const [up, setUp] = useState(upcoming);
-  const [rel, setRel] = useState(releaseMonth);
+  const [rel, setRel] = useState(releaseLabel);
   const [v, setV] = useState(String(volumes));
   const [u, setU] = useState(url);
   const [crumb, setCrumb] = useState(crumbInitial);
@@ -83,7 +84,7 @@ export default function AdminNacionalEdit({
           coverImage: cov,
           genres: gen.split(",").map((g) => g.trim()).filter(Boolean),
           upcoming: up,
-          releaseMonth: rel,
+          releaseLabel: rel,
         });
       await updateEditionAction(editionId, {
         title: t.trim() || title,
@@ -151,15 +152,10 @@ export default function AdminNacionalEdit({
           Próximo a salir (preventa / anunciada en AR)
         </label>
         {up && (
-          <label className="text-xs text-muted">
+          <div className="text-xs text-muted">
             Fecha estimada de salida (opcional)
-            <input
-              type="month"
-              value={rel}
-              onChange={(e) => setRel(e.target.value)}
-              className={`mt-1 ${input}`}
-            />
-          </label>
+            <ReleaseDatePicker value={rel} onChange={setRel} />
+          </div>
         )}
         <div className="flex gap-2">
           <label className="flex-1 text-xs text-muted">

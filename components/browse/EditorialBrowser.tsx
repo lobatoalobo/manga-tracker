@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useBrowse } from "./BrowseProvider";
 import { ClientPager } from "@/components/MangakaBrowser";
-import { formatReleaseDate } from "@/lib/releaseDate";
+import { formatReleaseLabel } from "@/lib/releaseDate";
 import type { EditorialWork } from "@/lib/catalog";
 
 const PER_PAGE = 30;
@@ -81,8 +81,8 @@ export default function EditorialBrowser({
                 {w.upcoming && (
                   <span className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300">
                     🔜 Pronto
-                    {formatReleaseDate(w.releaseDate) && (
-                      <> · {formatReleaseDate(w.releaseDate)}</>
+                    {formatReleaseLabel(w.releaseLabel) && (
+                      <> · {formatReleaseLabel(w.releaseLabel)}</>
                     )}
                   </span>
                 )}

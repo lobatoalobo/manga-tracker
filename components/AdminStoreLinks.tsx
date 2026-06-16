@@ -11,6 +11,7 @@ import {
   deleteSeriesEditionAction,
   setWorkUpcomingAction,
 } from "@/app/actions";
+import ReleaseDatePicker from "@/components/ReleaseDatePicker";
 import { crumbSearch } from "@/lib/crumb";
 
 const input =
@@ -48,7 +49,7 @@ export default function AdminStoreLinks({
   excludedPublishers = [],
   defaultVolumes = 0,
   upcoming = false,
-  releaseMonth = "",
+  releaseLabel = "",
 }: {
   anilistId: number;
   seriesTitle: string;
@@ -57,12 +58,12 @@ export default function AdminStoreLinks({
   excludedPublishers?: string[];
   defaultVolumes?: number;
   upcoming?: boolean;
-  releaseMonth?: string;
+  releaseLabel?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [up, setUp] = useState(upcoming);
-  const [rel, setRel] = useState(releaseMonth);
+  const [rel, setRel] = useState(releaseLabel);
   const [crumb, setCrumb] = useState(crumbInitial);
   const [urls, setUrls] = useState<Record<number, string>>(
     Object.fromEntries(editions.map((e) => [e.id, e.url])),
@@ -139,13 +140,12 @@ export default function AdminStoreLinks({
         🔜 Próximo a salir (preventa / anunciada en AR)
       </label>
       {up && (
-        <label className="mb-3 block text-xs text-muted">
+        <div className="mb-3 text-xs text-muted">
           Fecha estimada de salida (opcional)
-          <input
-            type="month"
+          <ReleaseDatePicker
             value={rel}
-            onChange={(e) => {
-              const value = e.target.value;
+            disabled={pending}
+            onChange={(value) => {
               setRel(value);
               save(
                 () =>
@@ -155,10 +155,8 @@ export default function AdminStoreLinks({
                 "Guardado",
               );
             }}
-            disabled={pending}
-            className="mt-1 block rounded-lg border border-border bg-surface-2 px-2 py-1 text-sm text-foreground outline-none focus:border-accent"
           />
-        </label>
+        </div>
       )}
 
       {/* Crumb */}

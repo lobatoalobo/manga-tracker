@@ -297,7 +297,7 @@ export async function workMetaByAnilist(
   upcoming: boolean;
   synopsis: string | null;
   author: string | null;
-  releaseDate: Date | null;
+  releaseLabel: string | null;
 } | null> {
   const eds = await prisma.publisherEdition.findMany({
     where: { anilistId },
@@ -305,7 +305,7 @@ export async function workMetaByAnilist(
       work: {
         select: {
           coverImage: true, upcoming: true, synopsis: true, author: true,
-          releaseDate: true,
+          releaseLabel: true,
         },
       },
     },
@@ -316,7 +316,7 @@ export async function workMetaByAnilist(
     upcoming: eds.some((e) => e.work?.upcoming),
     synopsis: eds.map((e) => e.work?.synopsis).find(Boolean) ?? null,
     author: eds.map((e) => e.work?.author).find(Boolean) ?? null,
-    releaseDate: eds.map((e) => e.work?.releaseDate).find(Boolean) ?? null,
+    releaseLabel: eds.map((e) => e.work?.releaseLabel).find(Boolean) ?? null,
   };
 }
 
@@ -351,7 +351,6 @@ export async function findOrCreateWork(opts: {
   coverImage?: string | null;
   author?: string | null;
   synopsis?: string | null;
-  releaseDate?: Date | null;
 }): Promise<number> {
   const normTitle = normalizeTitle(opts.title);
 
@@ -377,17 +376,10 @@ export async function findOrCreateWork(opts: {
   }
 
   if (existing) {
-    const patch: {
-      coverImage?: string;
-      author?: string;
-      synopsis?: string;
-      releaseDate?: Date;
-    } = {};
+    const patch: { coverImage?: string; author?: string; synopsis?: string } = {};
     if (!existing.coverImage && opts.coverImage) patch.coverImage = opts.coverImage;
     if (!existing.author && opts.author) patch.author = opts.author;
     if (!existing.synopsis && opts.synopsis) patch.synopsis = opts.synopsis;
-    // La fecha de salida SÍ se pisa con la última (puede atrasarse → mover).
-    if (opts.releaseDate) patch.releaseDate = opts.releaseDate;
     if (Object.keys(patch).length)
       await prisma.work.update({ where: { id: existing.id }, data: patch }).catch(() => {});
     return existing.id;
@@ -401,7 +393,6 @@ export async function findOrCreateWork(opts: {
       coverImage: opts.coverImage ?? null,
       author: opts.author ?? null,
       synopsis: opts.synopsis ?? null,
-      releaseDate: opts.releaseDate ?? null,
     },
   });
   return created.id;
@@ -438,7 +429,7 @@ export interface EditorialWork {
   url: string;
   coverImage: string | null;
   upcoming: boolean;
-  releaseDate: Date | null;
+  releaseLabel: string | null;
 }
 
 const editorialSelect = {
@@ -447,7 +438,7 @@ const editorialSelect = {
   anilistId: true,
   volumes: true,
   url: true,
-  work: { select: { coverImage: true, upcoming: true, releaseDate: true } },
+  work: { select: { coverImage: true, upcoming: true, releaseLabel: true } },
 } as const;
 
 type EditorialRow = {
@@ -459,7 +450,7 @@ type EditorialRow = {
   work: {
     coverImage: string | null;
     upcoming: boolean;
-    releaseDate: Date | null;
+    releaseLabel: string | null;
   } | null;
 };
 
@@ -471,7 +462,7 @@ const toEditorialWork = (r: EditorialRow): EditorialWork => ({
   url: r.url,
   coverImage: r.work?.coverImage ?? null,
   upcoming: r.work?.upcoming ?? false,
-  releaseDate: r.work?.releaseDate ?? null,
+  releaseLabel: r.work?.releaseLabel ?? null,
 });
 
 /** Página del catálogo de una editorial (orden alfabético). */
