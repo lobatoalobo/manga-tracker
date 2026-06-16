@@ -63,11 +63,18 @@ export async function resolveByTitleAuthor(
 
   const candidates: any[] = await searchMangaList(cleaned, true).catch(() => []);
 
-  // 1) Título exacto (evita agarrar el spin-off / la principal por error).
+  // 1) Título exacto + autor (gana sobre homónimos: "Adabana" de NON vs hentai).
+  if (author) {
+    const m = byExactTitleAndAuthor(candidates, cleaned, author);
+    if (m) return m;
+  }
+
+  // 2) Título exacto a secas (best-effort; el staff de AniList suele venir con
+  //    traductores primero, así que no exigimos autor para no descartar válidos).
   const exact = byExactTitle(candidates, cleaned);
   if (exact) return exact;
 
-  // 2) Autor entre los candidatos de la búsqueda por título.
+  // 3) Autor entre los candidatos de la búsqueda por título.
   if (author) {
     const m = byAuthor(candidates, author);
     if (m) return m;
