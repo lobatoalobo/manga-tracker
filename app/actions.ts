@@ -52,6 +52,7 @@ import {
 } from "@/lib/purchases";
 import { searchMangaList } from "@/lib/anilist";
 import { setCrumbQuery, setEditionUrl } from "@/lib/storeLinks";
+import { normalizeReleaseLabel } from "@/lib/releaseDate";
 import {
   invalidateEditionsCache,
   clearAllEditionsCache,
@@ -561,7 +562,7 @@ export async function updateWorkAction(
     coverImage?: string | null;
     genres?: string[];
     upcoming?: boolean;
-    releaseMonth?: string | null; // "YYYY-MM" (de <input type="month">) o "" para limpiar
+    releaseLabel?: string | null; // "YYYY" o "YYYY-MM"; "" para limpiar
   },
 ) {
   await assertAdmin();
@@ -573,7 +574,7 @@ export async function updateWorkAction(
     coverImage?: string | null;
     genres?: string[];
     upcoming?: boolean;
-    releaseDate?: Date | null;
+    releaseLabel?: string | null;
   } = {};
   if (data.title !== undefined && data.title.trim()) {
     patch.title = data.title.trim();
@@ -586,10 +587,8 @@ export async function updateWorkAction(
   if (data.genres !== undefined)
     patch.genres = data.genres.map((g) => g.trim()).filter(Boolean);
   if (data.upcoming !== undefined) patch.upcoming = data.upcoming;
-  if (data.releaseMonth !== undefined) {
-    const m = data.releaseMonth?.match(/^(\d{4})-(\d{2})$/);
-    patch.releaseDate = m ? new Date(Number(m[1]), Number(m[2]) - 1, 1) : null;
-  }
+  if (data.releaseLabel !== undefined)
+    patch.releaseLabel = normalizeReleaseLabel(data.releaseLabel);
 
   const work = await prisma.work.update({
     where: { id: workId },
@@ -607,7 +606,7 @@ export async function updateWorkAction(
 export async function setWorkUpcomingAction(
   anilistId: number,
   upcoming: boolean,
-  releaseMonth?: string | null,
+  releaseLabel?: string | null,
 ) {
   await assertAdmin();
   // Vía edición→work (el work puede tener anilistId null aunque la edición no).
@@ -618,11 +617,9 @@ export async function setWorkUpcomingAction(
   const workIds = [
     ...new Set(eds.map((e) => e.workId).filter((x): x is number => x != null)),
   ];
-  const data: { upcoming: boolean; releaseDate?: Date | null } = { upcoming };
-  if (releaseMonth !== undefined) {
-    const m = releaseMonth?.match(/^(\d{4})-(\d{2})$/);
-    data.releaseDate = m ? new Date(Number(m[1]), Number(m[2]) - 1, 1) : null;
-  }
+  const data: { upcoming: boolean; releaseLabel?: string | null } = { upcoming };
+  if (releaseLabel !== undefined)
+    data.releaseLabel = normalizeReleaseLabel(releaseLabel);
   if (workIds.length)
     await prisma.work.updateMany({
       where: { id: { in: workIds } },

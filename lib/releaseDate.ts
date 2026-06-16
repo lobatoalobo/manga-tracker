@@ -3,10 +3,28 @@ const MONTHS = [
   "jul", "ago", "sep", "oct", "nov", "dic",
 ];
 
-/** Formatea una fecha de salida a "mes año" (ej. "jul 2026"). Client-safe. */
-export function formatReleaseDate(d: Date | string | null | undefined): string | null {
-  if (!d) return null;
-  const date = typeof d === "string" ? new Date(d) : d;
-  if (isNaN(date.getTime())) return null;
-  return `${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+/**
+ * Formatea la etiqueta de salida borrosa para mostrar. Client-safe.
+ *   "2026"    → "2026"
+ *   "2026-07" → "jul 2026"
+ */
+export function formatReleaseLabel(label: string | null | undefined): string | null {
+  if (!label) return null;
+  const ym = label.match(/^(\d{4})-(\d{2})$/);
+  if (ym) {
+    const m = Number(ym[2]) - 1;
+    return MONTHS[m] ? `${MONTHS[m]} ${ym[1]}` : ym[1];
+  }
+  const y = label.match(/^(\d{4})$/);
+  return y ? y[1] : null;
+}
+
+/** Normaliza un input a "YYYY" o "YYYY-MM" válido, o null si no se entiende. */
+export function normalizeReleaseLabel(
+  label: string | null | undefined,
+): string | null {
+  if (!label) return null;
+  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(label)) return label;
+  if (/^\d{4}$/.test(label)) return label;
+  return null;
 }

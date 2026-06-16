@@ -11,7 +11,7 @@ import WishButton from "@/components/WishButton";
 import { SignIn } from "@/components/AuthButtons";
 import { isWished } from "@/lib/wishlist";
 import { crumbSearch } from "@/lib/crumb";
-import { formatReleaseDate } from "@/lib/releaseDate";
+import { formatReleaseLabel } from "@/lib/releaseDate";
 import { getCrumbQuery } from "@/lib/storeLinks";
 import type { Edition } from "@/lib/editions";
 
@@ -108,8 +108,8 @@ export default async function NacionalPage({
             {row.work?.upcoming && (
               <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-300">
                 🔜 Próximo a salir
-                {formatReleaseDate(row.work.releaseDate) &&
-                  ` · ${formatReleaseDate(row.work.releaseDate)}`}
+                {formatReleaseLabel(row.work.releaseLabel) &&
+                  ` · ${formatReleaseLabel(row.work.releaseLabel)}`}
               </span>
             )}
           </div>
@@ -184,11 +184,7 @@ export default async function NacionalPage({
               coverImage={cover ?? ""}
               genres={row.work?.genres ?? []}
               upcoming={row.work?.upcoming ?? false}
-              releaseMonth={
-                row.work?.releaseDate
-                  ? row.work.releaseDate.toISOString().slice(0, 7)
-                  : ""
-              }
+              releaseLabel={row.work?.releaseLabel ?? ""}
               volumes={row.volumes}
               url={row.url}
               crumbInitial={crumbInitial}
