@@ -36,6 +36,18 @@ model User {
   notifications     Notification[]
   notifPref         NotificationPref?
   pushSubs          PushSubscription[]
+  seriesMutes       SeriesNotifMute[]
+}
+
+// Silenciar notis de UNA serie puntual (override del toggle global "tomos
+// nuevos"). Si hay fila → el usuario NO quiere notis de esa serie.
+model SeriesNotifMute {
+  userId    String
+  anilistId Int
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, anilistId])
+  @@index([anilistId])
 }
 
 // Suscripción Web Push (un dispositivo/navegador del usuario).

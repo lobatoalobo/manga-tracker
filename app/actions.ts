@@ -182,6 +182,19 @@ export async function setSharingAction(enable: boolean) {
   return { slug };
 }
 
+/** Silencia (o reactiva) las notificaciones de UNA serie para el usuario. */
+export async function setSeriesMutedAction(anilistId: number, muted: boolean) {
+  const userId = await requireUserId();
+  if (muted)
+    await prisma.seriesNotifMute.upsert({
+      where: { userId_anilistId: { userId, anilistId } },
+      create: { userId, anilistId },
+      update: {},
+    });
+  else await prisma.seriesNotifMute.deleteMany({ where: { userId, anilistId } });
+  revalidatePath(`/manga/${anilistId}`);
+}
+
 /** Marca (o desmarca) la serie preferida del usuario (1 por usuario). */
 export async function setFavoriteAction(anilistId: number, makeFavorite: boolean) {
   const userId = await requireUserId();

@@ -49,6 +49,18 @@ export async function setNotifPref(
   });
 }
 
+/** ¿El usuario silenció las notis de esta serie puntual? */
+export async function isSeriesMuted(
+  userId: string,
+  anilistId: number,
+): Promise<boolean> {
+  const row = await prisma.seriesNotifMute.findUnique({
+    where: { userId_anilistId: { userId, anilistId } },
+    select: { userId: true },
+  });
+  return !!row;
+}
+
 /** ¿El usuario quiere recibir notificaciones de este tipo? (default sí). */
 export async function notifEnabled(
   userId: string,
