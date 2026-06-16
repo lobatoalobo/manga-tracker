@@ -489,6 +489,37 @@ export async function getEditorialAll(
   return rows.map(toEditorialWork);
 }
 
+/** Dedupe de ediciones a "una card por obra" (por anilistId, o título si no). */
+function dedupeWorks(rows: EditorialWork[]): EditorialWork[] {
+  const seen = new Set<string>();
+  const out: EditorialWork[] = [];
+  for (const w of rows) {
+    const key = w.anilistId ? `a${w.anilistId}` : `t${normalizeTitle(w.title)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(w);
+  }
+  return out;
+}
+
+/**
+ * Catálogo local (todas las editoriales) cuyas obras empiezan con una letra, para
+ * el modo "Nacional A-Z" con índice alfabético. "#" agrupa las que empiezan con
+ * número. Una card por obra.
+ */
+export async function getCatalogByLetter(letter: string): Promise<EditorialWork[]> {
+  const l = letter.toLowerCase();
+  const where = /^[a-z]$/.test(l)
+    ? { normTitle: { startsWith: l } }
+    : { OR: "0123456789".split("").map((d) => ({ normTitle: { startsWith: d } })) };
+  const rows = await prisma.publisherEdition.findMany({
+    where,
+    orderBy: { normTitle: "asc" },
+    select: editorialSelect,
+  });
+  return dedupeWorks(rows.map(toEditorialWork));
+}
+
 /** Obras "próximo a salir" (preventa) para el modo Próximos del browse. */
 export async function getUpcomingWorks(): Promise<EditorialWork[]> {
   const rows = await prisma.publisherEdition.findMany({
@@ -496,16 +527,7 @@ export async function getUpcomingWorks(): Promise<EditorialWork[]> {
     orderBy: { normTitle: "asc" },
     select: editorialSelect,
   });
-  // Dedupe: varias ediciones de la misma preventa → una card.
-  const seen = new Set<string>();
-  const out: EditorialWork[] = [];
-  for (const w of rows.map(toEditorialWork)) {
-    const key = w.anilistId ? `a${w.anilistId}` : `t${normalizeTitle(w.title)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(w);
-  }
-  return out;
+  return dedupeWorks(rows.map(toEditorialWork));
 }
 
 // --- Curación admin de mapeos editorial ↔ serie ---
