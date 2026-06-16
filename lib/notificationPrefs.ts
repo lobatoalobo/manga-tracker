@@ -1,18 +1,25 @@
 import { prisma } from "@/lib/prisma";
 
-export type NotifCategory = "newVolume" | "social" | "friends";
+export type NotifCategory = "newVolume" | "wishlist" | "social" | "friends";
 
 export interface NotifPrefs {
   newVolume: boolean;
+  wishlist: boolean;
   social: boolean;
   friends: boolean;
 }
 
-const DEFAULTS: NotifPrefs = { newVolume: true, social: true, friends: true };
+const DEFAULTS: NotifPrefs = {
+  newVolume: true,
+  wishlist: true,
+  social: true,
+  friends: true,
+};
 
 /** Mapea un tipo de notificación a su categoría de preferencia. */
 export function notifCategory(type: string): NotifCategory | null {
   if (type === "NEW_VOLUME") return "newVolume";
+  if (type === "WISHLIST_AVAILABLE") return "wishlist";
   if (type === "REACTION" || type === "COMMENT") return "social";
   if (type === "FRIEND_REQUEST" || type === "FRIEND_ACCEPTED") return "friends";
   return null;
@@ -21,7 +28,12 @@ export function notifCategory(type: string): NotifCategory | null {
 export async function getNotifPrefs(userId: string): Promise<NotifPrefs> {
   const row = await prisma.notificationPref.findUnique({ where: { userId } });
   return row
-    ? { newVolume: row.newVolume, social: row.social, friends: row.friends }
+    ? {
+        newVolume: row.newVolume,
+        wishlist: row.wishlist,
+        social: row.social,
+        friends: row.friends,
+      }
     : DEFAULTS;
 }
 
@@ -56,7 +68,9 @@ export async function filterNotifEnabled(
   if (!cat || userIds.length === 0) return userIds;
   const rows = await prisma.notificationPref.findMany({
     where: { userId: { in: userIds } },
-    select: { userId: true, newVolume: true, social: true, friends: true },
+    select: {
+      userId: true, newVolume: true, wishlist: true, social: true, friends: true,
+    },
   });
   const off = new Set(rows.filter((r) => !r[cat]).map((r) => r.userId));
   return userIds.filter((u) => !off.has(u)); // sin fila = default activado
