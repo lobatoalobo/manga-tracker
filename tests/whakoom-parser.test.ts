@@ -44,4 +44,21 @@ describe("parseWhakoomEdition", () => {
   it("devuelve null si no hay título", () => {
     expect(parseWhakoomEdition("<html></html>", "u")).toBeNull();
   });
+
+  it("extrae la sinopsis del bloque Argumento (obras no-AniList)", () => {
+    const html = `
+      <meta property="og:title" content="Sacerdotisa de la Oscuridad (Utopía)" />
+      <div class="wiki-text"><h2>Argumento</h2><p>Shun Sugawa en su niñez defiende a una compa&#241;era.</p></div>
+    `;
+    const ed = parseWhakoomEdition(html, "https://www.whakoom.com/ediciones/626848/x");
+    expect(ed!.synopsis).toBe("Shun Sugawa en su niñez defiende a una compañera.");
+  });
+
+  it("synopsis es null si no hay Argumento", () => {
+    const ed = parseWhakoomEdition(
+      `<meta property="og:title" content="X" />`,
+      "https://www.whakoom.com/ediciones/1/x",
+    );
+    expect(ed!.synopsis).toBeNull();
+  });
 });

@@ -84,9 +84,12 @@ export default async function AdminHome() {
               className="rounded-xl border border-border bg-surface p-3 transition hover:border-accent"
             >
               <p className="text-sm font-medium">{p.label}</p>
-              <p className="mt-1 text-sm text-muted">
-                <span className="text-emerald-300">{p.mapped}</span> mapeadas /{" "}
-                {p.total}
+              <p className="mt-1 text-sm">
+                <span className="font-semibold">{p.total}</span>{" "}
+                <span className="text-muted">en catálogo</span>
+              </p>
+              <p className="mt-0.5 text-xs text-muted">
+                {p.mapped} con AniList (extras)
               </p>
             </Link>
           ))}
