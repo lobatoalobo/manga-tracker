@@ -489,17 +489,20 @@ export async function getEditorialAll(
   return rows.map(toEditorialWork);
 }
 
-/** Dedupe de ediciones a "una card por obra" (por anilistId, o título si no). */
+/**
+ * Dedupe de ediciones a "una card por obra" (por anilistId, o título si no).
+ * Si dos editoriales tienen la misma serie (ej. One Piece Ivrea vs Larp), nos
+ * quedamos con la de MÁS tomos (la más completa). El Map preserva el orden
+ * alfabético de entrada (rows vienen ordenadas por normTitle).
+ */
 function dedupeWorks(rows: EditorialWork[]): EditorialWork[] {
-  const seen = new Set<string>();
-  const out: EditorialWork[] = [];
+  const best = new Map<string, EditorialWork>();
   for (const w of rows) {
     const key = w.anilistId ? `a${w.anilistId}` : `t${normalizeTitle(w.title)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(w);
+    const cur = best.get(key);
+    if (!cur || w.volumes > cur.volumes) best.set(key, w);
   }
-  return out;
+  return [...best.values()];
 }
 
 /**
@@ -514,6 +517,15 @@ export async function getCatalogByLetter(letter: string): Promise<EditorialWork[
     : { OR: "0123456789".split("").map((d) => ({ normTitle: { startsWith: d } })) };
   const rows = await prisma.publisherEdition.findMany({
     where,
+    orderBy: { normTitle: "asc" },
+    select: editorialSelect,
+  });
+  return dedupeWorks(rows.map(toEditorialWork));
+}
+
+/** Todo el catálogo local (una card por obra) para el modo Nacional A-Z "All". */
+export async function getCatalogAll(): Promise<EditorialWork[]> {
+  const rows = await prisma.publisherEdition.findMany({
     orderBy: { normTitle: "asc" },
     select: editorialSelect,
   });

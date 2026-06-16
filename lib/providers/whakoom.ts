@@ -12,6 +12,7 @@ export interface WhakoomEdition {
   cover: string | null; // portada (og:image)
   synopsis: string | null; // "Argumento" de la ficha (para obras no-AniList)
   releaseDate: Date | null; // "Fecha de publicación" (futura = preventa → "Pronto")
+  hasUnreleased: boolean; // hay un tomo anunciado/no publicado (class not-published)
   whakoomId: string | null; // id de la edición (/ediciones/<id>/…)
   volumesList: WhakoomVolume[]; // tomos individuales con su id de Whakoom
 }
@@ -243,8 +244,13 @@ export function parseWhakoomEdition(
   );
   const releaseDate = dateMatch ? parseWhakoomDate(dateMatch[1]) : null;
 
+  // ¿Hay un tomo ANUNCIADO pero no publicado? Whakoom lo marca con la clase
+  // "not-published" en su <li>. Sirve para "Próximos a salir" también en series
+  // en curso (tienen tomos publicados + un tomo nuevo en camino).
+  const hasUnreleased = /<li[^>]*class="[^"]*not-published/i.test(t);
+
   return {
     title, author, publisher, volumes, url, cover, synopsis, releaseDate,
-    whakoomId, volumesList,
+    hasUnreleased, whakoomId, volumesList,
   };
 }

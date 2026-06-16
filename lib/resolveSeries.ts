@@ -10,23 +10,42 @@ interface EditionRow {
   title: string;
 }
 
+function titleMatches(c: any, nc: string): boolean {
+  return (
+    normalizeTitle(c.title?.romaji ?? "") === nc ||
+    normalizeTitle(c.title?.english ?? "") === nc
+  );
+}
+
+const staffNames = (c: any): string[] =>
+  (c.staff?.nodes ?? []).map((n: any) => n?.name?.full).filter(Boolean);
+
 /** Candidato cuyo título normalizado coincide EXACTO con el término. */
 function byExactTitle(candidates: any[], term: string): number | null {
   const nc = normalizeTitle(term);
+  const m = candidates.find((c) => titleMatches(c, nc));
+  return m?.id ?? null;
+}
+
+/**
+ * Candidato con título exacto Y autor que coincide. Alta confianza: evita mapear
+ * a un homónimo (ej. "Adabana" de NON vs el hentai homónimo de otro autor).
+ */
+function byExactTitleAndAuthor(
+  candidates: any[],
+  term: string,
+  author: string,
+): number | null {
+  const nc = normalizeTitle(term);
   const m = candidates.find(
-    (c) =>
-      normalizeTitle(c.title?.romaji ?? "") === nc ||
-      normalizeTitle(c.title?.english ?? "") === nc,
+    (c) => titleMatches(c, nc) && authorMatches(staffNames(c), author),
   );
   return m?.id ?? null;
 }
 
 /** Primer candidato cuyo autor coincide con `author`. */
 function byAuthor(candidates: any[], author: string): number | null {
-  const m = candidates.find((c) => {
-    const a = c.staff?.nodes?.[0]?.name?.full;
-    return a && authorMatches([a], author);
-  });
+  const m = candidates.find((c) => authorMatches(staffNames(c), author));
   return m?.id ?? null;
 }
 
@@ -44,11 +63,18 @@ export async function resolveByTitleAuthor(
 
   const candidates: any[] = await searchMangaList(cleaned, true).catch(() => []);
 
-  // 1) Título exacto (evita agarrar el spin-off / la principal por error).
+  // 1) Título exacto + autor (gana sobre homónimos: "Adabana" de NON vs hentai).
+  if (author) {
+    const m = byExactTitleAndAuthor(candidates, cleaned, author);
+    if (m) return m;
+  }
+
+  // 2) Título exacto a secas (best-effort; el staff de AniList suele venir con
+  //    traductores primero, así que no exigimos autor para no descartar válidos).
   const exact = byExactTitle(candidates, cleaned);
   if (exact) return exact;
 
-  // 2) Autor entre los candidatos de la búsqueda por título.
+  // 3) Autor entre los candidatos de la búsqueda por título.
   if (author) {
     const m = byAuthor(candidates, author);
     if (m) return m;
@@ -140,31 +166,40 @@ export async function resolveEditionSeries(
     ),
   ];
 
-  // 1) Título exacto, probando todos los términos.
   const searches: { term: string; cands: any[] }[] = [];
   for (const term of terms) {
     const cands = await searchMangaList(term, true).catch(() => []);
     searches.push({ term, cands });
+  }
+
+  // 1) Título exacto + autor (máxima confianza): GANA sobre los homónimos. Acá
+  //    es donde se desambigua "Adabana" de NON vs el hentai homónimo.
+  if (info.author) {
+    for (const { term, cands } of searches) {
+      const m = byExactTitleAndAuthor(cands, term, info.author);
+      if (m) return m;
+    }
+  }
+
+  // 2) Título exacto a secas (best-effort). NO exigimos autor acá: el staff de
+  //    AniList suele venir por relevancia con traductores primero, así que el
+  //    autor real puede no aparecer (Hikaru/Uketsu) → exigirlo descartaría
+  //    mapeos válidos. El paso 1 ya cubrió los homónimos verificables.
+  for (const { term, cands } of searches) {
     const exact = byExactTitle(cands, term);
     if (exact) return exact;
   }
 
-  // 2) Autor (fallback) sobre los candidatos ya buscados.
+  // 3) Sin match por título: por AUTOR (títulos solo en español, Staff search).
   if (info.author) {
     for (const { cands } of searches) {
       const m = byAuthor(cands, info.author);
       if (m) return m;
     }
-  }
-
-  // 3) Fallback potente para títulos solo en español: búsqueda por AUTOR (Staff)
-  //    y su obra con más coincidencia de palabras. Reusa resolveByTitleAuthor.
-  if (info.author) {
     const viaAuthor = await resolveByTitleAuthor(row.title, info.author).catch(
       () => null,
     );
     if (viaAuthor) return viaAuthor;
   }
-
   return null;
 }

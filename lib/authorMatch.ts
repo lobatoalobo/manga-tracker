@@ -28,14 +28,19 @@ export function authorMatches(
 
   const series = new Set(seriesAuthors.flatMap(tokenize));
   if (series.size === 0) return true;
+  const seriesTokens = [...series];
 
-  // Señal fuerte: comparten algún token sustancial (apellido/nombre, len ≥ 4).
+  // Señal fuerte: un token sustancial del autor (len ≥ 4) coincide con algún
+  // token de la serie por SUBSTRING. El substring tolera dos cosas comunes:
+  // romanización ("Eiichiro" ⊂ "Eiichirou") y concatenación ("Aida" ⊂ "AidaIro").
+  const matchSub = (t: string) =>
+    seriesTokens.some((s) => s.includes(t) || t.includes(s));
   const pubSub = pub.filter((t) => t.length >= 4);
-  if (pubSub.some((t) => series.has(t))) return true;
+  if (pubSub.some(matchSub)) return true;
 
   // Si ambos lados tienen tokens sustanciales y ninguno coincide, son autores
   // distintos → bloquea (caso homónimo).
-  const seriesHasSub = [...series].some((t) => t.length >= 4);
+  const seriesHasSub = seriesTokens.some((t) => t.length >= 4);
   if (pubSub.length > 0 && seriesHasSub) return false;
 
   // Nombres muy cortos (sin tokens sustanciales): basta un token compartido.
