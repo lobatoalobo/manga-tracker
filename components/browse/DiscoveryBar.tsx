@@ -6,11 +6,13 @@ import Link from "next/link";
 import { useBrowse } from "./BrowseProvider";
 import { EDITORIALS } from "@/lib/catalog";
 
-type Tab = "hot" | "az" | "mangaka" | "editoriales";
+type Tab = "hot" | "az" | "nacional" | "mangaka" | "editoriales" | "proximos";
 
 const MODES: { key: Tab; label: string }[] = [
   { key: "hot", label: "🔥 Hot" },
-  { key: "az", label: "A-Z" },
+  { key: "az", label: "A-Z global" },
+  { key: "nacional", label: "🇦🇷 A-Z nacional" },
+  { key: "proximos", label: "🔜 Próximos" },
   { key: "mangaka", label: "Mangakas" },
   { key: "editoriales", label: "Editoriales" },
 ];
@@ -34,7 +36,12 @@ export default function DiscoveryBar({ loggedIn }: { loggedIn: boolean }) {
   const ed = params.get("ed") ?? EDITORIALS[0].slug;
 
   const filterMode =
-    onHome && !search && (tab === "mangaka" || tab === "editoriales");
+    onHome &&
+    !search &&
+    (tab === "mangaka" ||
+      tab === "editoriales" ||
+      tab === "proximos" ||
+      tab === "nacional");
 
   // Sincroniza el filtro compartido con la navegación: muestra el query en una
   // búsqueda; limpia el filtro al cambiar de modo/editorial.
@@ -61,7 +68,11 @@ export default function DiscoveryBar({ loggedIn }: { loggedIn: boolean }) {
   const placeholder = filterMode
     ? tab === "editoriales"
       ? `Filtrar en ${edLabel}…`
-      : "Filtrar mangakas…"
+      : tab === "proximos"
+        ? "Filtrar próximos…"
+        : tab === "nacional"
+          ? "Filtrar catálogo…"
+          : "Filtrar mangakas…"
     : "Buscar manga…";
 
   return (

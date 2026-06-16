@@ -47,6 +47,8 @@ async function persistEditionIdentity(opts: {
   cover: string | null;
   author: string | null;
   synopsis: string | null;
+  volumes: number;
+  releaseDate: Date | null;
   whakoomId: string | null;
   volumesList: WhakoomVolume[];
 }) {
@@ -70,6 +72,20 @@ async function persistEditionIdentity(opts: {
   if (Object.keys(data).length)
     await prisma.publisherEdition
       .update({ where: { id: row.id }, data })
+      .catch(() => {});
+
+  // Preventa: NADA publicado todavía (0 tomos tras excluir los not-published) y
+  // fecha de salida futura → marcamos la obra "próximo a salir" (badge Pronto).
+  // El release real lo detecta el flujo 0→1 (cuando sale el 1er tomo), no el
+  // calendario: así un atraso no dispara "¡Ya salió!" antes de tiempo.
+  if (
+    workId &&
+    opts.volumes === 0 &&
+    opts.releaseDate != null &&
+    opts.releaseDate.getTime() > Date.now()
+  )
+    await prisma.work
+      .update({ where: { id: workId }, data: { upcoming: true } })
       .catch(() => {});
 
   for (const v of opts.volumesList) {
@@ -149,6 +165,8 @@ export async function importWhakoomUrl(
     cover: ed.cover,
     author: ed.author,
     synopsis: ed.synopsis,
+    volumes: ed.volumes,
+    releaseDate: ed.releaseDate,
     whakoomId: ed.whakoomId,
     volumesList: ed.volumesList,
   });
@@ -293,6 +311,8 @@ export async function importWhakoomUrls(
       cover: ed.cover,
       author: ed.author,
       synopsis: ed.synopsis,
+      volumes: ed.volumes,
+      releaseDate: ed.releaseDate,
       whakoomId: ed.whakoomId,
       volumesList: ed.volumesList,
     });

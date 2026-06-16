@@ -14,6 +14,8 @@ import {
   nationalCoversByAnilist,
   upcomingByAnilist,
   getEditorialAll,
+  getUpcomingWorks,
+  getCatalogByLetter,
   editorialCounts,
   searchPublisherEditions,
   EDITORIALS,
@@ -22,6 +24,8 @@ import {
 } from "@/lib/catalog";
 import { seriesHref } from "@/lib/url";
 import Pager from "@/components/Pager";
+import PageJump from "@/components/browse/PageJump";
+import LetterIndex from "@/components/browse/LetterIndex";
 import FinishedFilterButton from "@/components/FinishedFilterButton";
 import { MangakaList } from "@/components/MangakaBrowser";
 import EditorialBrowser from "@/components/browse/EditorialBrowser";
@@ -29,7 +33,7 @@ import Dashboard from "@/components/Dashboard";
 import CatalogRefreshBanner from "@/components/CatalogRefreshBanner";
 import Link from "next/link";
 
-type Tab = "hot" | "az" | "mangaka" | "editoriales";
+type Tab = "hot" | "az" | "nacional" | "mangaka" | "editoriales" | "proximos";
 
 export default async function Home({
   searchParams,
@@ -40,6 +44,7 @@ export default async function Home({
     page?: string;
     finished?: string;
     ed?: string;
+    letra?: string;
   }>;
 }) {
   const session = await auth();
@@ -65,11 +70,16 @@ export default async function Home({
   const tab: Tab =
     params.tab === "az"
       ? "az"
-      : params.tab === "mangaka"
-        ? "mangaka"
-        : params.tab === "editoriales"
-          ? "editoriales"
-          : "hot";
+      : params.tab === "nacional"
+        ? "nacional"
+        : params.tab === "mangaka"
+          ? "mangaka"
+          : params.tab === "editoriales"
+            ? "editoriales"
+            : params.tab === "proximos"
+              ? "proximos"
+              : "hot";
+  const letra = (params.letra || "a").slice(0, 1);
   const page = Math.max(1, Number(params.page) || 1);
   const onlyFinished = params.finished === "1";
   const editorial =
@@ -122,6 +132,10 @@ export default async function Home({
     } catch {
       editorialWorks = [];
     }
+  } else if (tab === "proximos") {
+    editorialWorks = await getUpcomingWorks().catch(() => []);
+  } else if (tab === "nacional") {
+    editorialWorks = await getCatalogByLetter(letra).catch(() => []);
   } else if (tab === "az") {
     const res = await getMangaPage(page, admin, onlyFinished);
     mangas = res.media;
@@ -133,6 +147,16 @@ export default async function Home({
   const nationalEditions = await nationalEditionsByManga(mangas).catch(
     () => new Map<number, string[]>(),
   );
+  // En búsqueda: primero las que tienen edición nacional (🇦🇷), después el resto
+  // alfabético. (Ordena dentro de la página traída de AniList.)
+  if (query) {
+    mangas = [...mangas].sort((a: any, b: any) => {
+      const na = nationalEditions.has(a.id) ? 0 : 1;
+      const nb = nationalEditions.has(b.id) ? 0 : 1;
+      if (na !== nb) return na - nb;
+      return displayTitle(a.title).localeCompare(displayTitle(b.title), "es");
+    });
+  }
   // Portada nacional (cuando la tenemos) para identificar mejor en las listas.
   const nationalCovers = await nationalCoversByAnilist(
     mangas.map((m: any) => m.id),
@@ -221,7 +245,12 @@ export default async function Home({
         <MangaGrid mangas={mangas} nationalEditions={nationalEditions} nationalCovers={nationalCovers} upcomingIds={upcomingIds} />
       ) : tab === "az" ? (
         <>
-          <FinishedFilterButton enabled active={onlyFinished} />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted">
+              Todo AniList (A-Z) · descubrí series y sumalas a deseados.
+            </p>
+            <FinishedFilterButton enabled active={onlyFinished} />
+          </div>
           <div className="mt-5">
             <MangaGrid
               mangas={mangas}
@@ -231,16 +260,45 @@ export default async function Home({
               byRomaji
             />
           </div>
-          {pageInfo && (
-            <Pager
-              basePath={`/?tab=az` + (onlyFinished ? "&finished=1" : "")}
-              page={page}
-              lastPage={pageInfo.lastPage}
-            />
+          {pageInfo && pageInfo.lastPage > 1 && (
+            <div className="mt-6 flex flex-col items-center gap-3">
+              <PageJump
+                page={page}
+                lastPage={pageInfo.lastPage}
+                basePath={`/?tab=az` + (onlyFinished ? "&finished=1" : "")}
+              />
+              <Pager
+                basePath={`/?tab=az` + (onlyFinished ? "&finished=1" : "")}
+                page={page}
+                lastPage={pageInfo.lastPage}
+              />
+            </div>
+          )}
+        </>
+      ) : tab === "nacional" ? (
+        <>
+          <p className="mb-3 text-sm text-muted">
+            🇦🇷 Catálogo en Argentina · navegá por letra.
+          </p>
+          <LetterIndex active={letra} />
+          {editorialWorks.length === 0 ? (
+            <p className="mt-5 text-sm text-muted">
+              No hay obras que empiecen con “{letra.toUpperCase()}”.
+            </p>
+          ) : (
+            <EditorialBrowser works={editorialWorks} />
           )}
         </>
       ) : tab === "mangaka" ? (
         <MangakaList all={allMangakas} />
+      ) : tab === "proximos" ? (
+        editorialWorks.length === 0 ? (
+          <p className="mt-5 text-sm text-muted">
+            No hay series marcadas como próximas a salir por ahora.
+          </p>
+        ) : (
+          <EditorialBrowser works={editorialWorks} />
+        )
       ) : (
         <>
           <div className="flex flex-wrap gap-2">

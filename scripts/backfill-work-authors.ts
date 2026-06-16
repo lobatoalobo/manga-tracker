@@ -35,18 +35,20 @@ async function main() {
 
   const rows = await prisma.publisherEdition.findMany({
     where: {
-      url: { contains: "whakoom" },
+      // Sirve aunque la URL no sea de Whakoom (ej. Ovni guarda link a OvniPress):
+      // si tiene whakoomId reconstruimos la URL de Whakoom para backfillear.
+      OR: [{ url: { contains: "whakoom" } }, { whakoomId: { not: null } }],
       workId: { not: null },
       work: { OR: [{ author: null }, { synopsis: null }] },
       ...(publisher ? { publisher } : {}),
     },
     select: {
-      id: true, title: true, url: true, workId: true, publisher: true,
+      id: true, title: true, url: true, whakoomId: true, workId: true, publisher: true,
       work: { select: { author: true, synopsis: true } },
     },
     orderBy: { publisher: "asc" },
   });
-  console.log(`Works incompletos (con link Whakoom): ${rows.length}`);
+  console.log(`Works incompletos (resolubles por Whakoom): ${rows.length}`);
 
   let done = 0;
   let miss = 0;
@@ -55,7 +57,10 @@ async function main() {
     if (seen.has(r.workId!)) continue;
     seen.add(r.workId!);
 
-    const ed = await getWhakoomEdition(r.url).catch(() => null);
+    const wkUrl = /whakoom\.com/i.test(r.url)
+      ? r.url
+      : `https://www.whakoom.com/ediciones/${r.whakoomId}/x`;
+    const ed = await getWhakoomEdition(wkUrl).catch(() => null);
     await sleep(500);
     // Solo completamos lo que falta (no pisamos lo editado a mano).
     const patch: { author?: string; synopsis?: string } = {};

@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { looksLikeComic } from "@/lib/comicTerms";
-import { WHAKOOM_NATIVE } from "@/lib/publishers";
 
 export const PUBLISHERS = [
   "Ivrea Argentina",
@@ -490,6 +489,47 @@ export async function getEditorialAll(
   return rows.map(toEditorialWork);
 }
 
+/** Dedupe de ediciones a "una card por obra" (por anilistId, o título si no). */
+function dedupeWorks(rows: EditorialWork[]): EditorialWork[] {
+  const seen = new Set<string>();
+  const out: EditorialWork[] = [];
+  for (const w of rows) {
+    const key = w.anilistId ? `a${w.anilistId}` : `t${normalizeTitle(w.title)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(w);
+  }
+  return out;
+}
+
+/**
+ * Catálogo local (todas las editoriales) cuyas obras empiezan con una letra, para
+ * el modo "Nacional A-Z" con índice alfabético. "#" agrupa las que empiezan con
+ * número. Una card por obra.
+ */
+export async function getCatalogByLetter(letter: string): Promise<EditorialWork[]> {
+  const l = letter.toLowerCase();
+  const where = /^[a-z]$/.test(l)
+    ? { normTitle: { startsWith: l } }
+    : { OR: "0123456789".split("").map((d) => ({ normTitle: { startsWith: d } })) };
+  const rows = await prisma.publisherEdition.findMany({
+    where,
+    orderBy: { normTitle: "asc" },
+    select: editorialSelect,
+  });
+  return dedupeWorks(rows.map(toEditorialWork));
+}
+
+/** Obras "próximo a salir" (preventa) para el modo Próximos del browse. */
+export async function getUpcomingWorks(): Promise<EditorialWork[]> {
+  const rows = await prisma.publisherEdition.findMany({
+    where: { work: { upcoming: true } },
+    orderBy: { normTitle: "asc" },
+    select: editorialSelect,
+  });
+  return dedupeWorks(rows.map(toEditorialWork));
+}
+
 // --- Curación admin de mapeos editorial ↔ serie ---
 
 export interface EditionMapping {
@@ -507,7 +547,6 @@ export async function getEditionMappings(opts: {
   publisher?: string;
   state?: "mapped" | "unmapped" | "national" | "comic" | "nocover";
   q?: string;
-  whakoomUrl?: boolean;
   page?: number;
   perPage?: number;
 }): Promise<{ rows: EditionMapping[]; total: number; lastPage: number }> {
@@ -515,11 +554,10 @@ export async function getEditionMappings(opts: {
   const page = Math.max(1, opts.page ?? 1);
 
   const where: {
-    publisher?: string | { notIn: string[] };
+    publisher?: string;
     anilistId?: { not: null } | null;
     nationalOnly?: boolean;
     normTitle?: { contains: string };
-    url?: { contains: string };
     volumesList?: { none: { coverImage: { not: null } } };
     OR?: ({ workId: null } | { work: { coverImage: null } })[];
   } = {};
@@ -537,13 +575,6 @@ export async function getEditionMappings(opts: {
     where.anilistId = null;
     where.volumesList = { none: { coverImage: { not: null } } };
     where.OR = [{ workId: null }, { work: { coverImage: null } }];
-  }
-  // Link Whakoom = URL que quedó apuntando a Whakoom y debería ser de la
-  // editorial. Excluimos las editoriales nativas de Whakoom (Utopía): ahí el
-  // link de Whakoom es el correcto, no un pendiente.
-  if (opts.whakoomUrl) {
-    where.url = { contains: "whakoom" };
-    if (!opts.publisher) where.publisher = { notIn: [...WHAKOOM_NATIVE] };
   }
   if (opts.q) where.normTitle = { contains: normalizeTitle(opts.q) };
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parseWhakoomEdition } from "@/lib/providers/whakoom";
+import { parseWhakoomEdition, parseWhakoomDate } from "@/lib/providers/whakoom";
 
 const fixture = (name: string) =>
   readFileSync(
@@ -60,5 +60,45 @@ describe("parseWhakoomEdition", () => {
       "https://www.whakoom.com/ediciones/1/x",
     );
     expect(ed!.synopsis).toBeNull();
+  });
+
+  it("extrae la fecha de publicación (preventa → badge Pronto)", () => {
+    const html = `
+      <meta property="og:title" content="Ichi the Witch #1 (Ivrea)" />
+      <div class="info-item"><h3>Fecha de publicación</h3><p itemprop="" content=""> Julio 2026</p></div>
+    `;
+    const ed = parseWhakoomEdition(html, "https://www.whakoom.com/ediciones/693897/x");
+    expect(ed!.releaseDate).toEqual(new Date(2026, 6, 1)); // julio = mes 6
+  });
+});
+
+describe("not-published (tomo anunciado no se cuenta)", () => {
+  it("excluye el tomo con class not-published del conteo", () => {
+    const html = `
+      <meta property="og:title" content="El incidente Darwin (Distrito)" />
+      <ul>
+        <li id="comicA" class=" get-it"><a href="/comics/A/el_incidente_darwin/1" class="title"></a></li>
+        <li id="comicB" class=" get-it"><a href="/comics/B/el_incidente_darwin/2" class="title"></a></li>
+        <li id="comicC" class=" not-published get-it"><a href="/comics/C/el_incidente_darwin/3" class="title"></a></li>
+      </ul>
+    `;
+    const ed = parseWhakoomEdition(html, "https://www.whakoom.com/ediciones/625589/x");
+    expect(ed!.volumes).toBe(2); // el #3 (not-published) no cuenta
+    expect(ed!.volumesList.map((v) => v.number)).toEqual([1, 2]);
+  });
+});
+
+describe("parseWhakoomDate", () => {
+  it("'Julio 2026' → 1 de julio de 2026", () => {
+    expect(parseWhakoomDate("Julio 2026")).toEqual(new Date(2026, 6, 1));
+  });
+  it("decodifica entidades y tildes ('Setiembre')", () => {
+    expect(parseWhakoomDate("Setiembre 2025")).toEqual(new Date(2025, 8, 1));
+  });
+  it("año suelto → enero de ese año", () => {
+    expect(parseWhakoomDate("2027")).toEqual(new Date(2027, 0, 1));
+  });
+  it("texto no reconocido → null", () => {
+    expect(parseWhakoomDate("próximamente")).toBeNull();
   });
 });

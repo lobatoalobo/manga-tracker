@@ -100,6 +100,15 @@ export async function getShareSlug(userId: string): Promise<string | null> {
   return u?.shareSlug ?? null;
 }
 
+/** anilistId de la serie preferida del usuario (1 por usuario), o null. */
+export async function getFavoriteId(userId: string): Promise<number | null> {
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { favoriteAnilistId: true },
+  });
+  return u?.favoriteAnilistId ?? null;
+}
+
 /** Activa o desactiva compartir. Al activar, genera un slug si no existe. */
 export async function setSharing(
   userId: string,
@@ -120,15 +129,19 @@ export async function setSharing(
 /** Colección pública por slug (solo lectura). null si el slug no existe. */
 export async function getPublicCollection(
   slug: string,
-): Promise<{ name: string; items: CollectionItem[] } | null> {
+): Promise<{ name: string; items: CollectionItem[]; favoriteId: number | null } | null> {
   const user = await prisma.user.findUnique({
     where: { shareSlug: slug },
-    select: { id: true, name: true },
+    select: { id: true, name: true, favoriteAnilistId: true },
   });
   if (!user) return null;
 
   const items = await getCollectionItems(user.id);
-  return { name: user.name ?? "Colección", items };
+  return {
+    name: user.name ?? "Colección",
+    items,
+    favoriteId: user.favoriteAnilistId ?? null,
+  };
 }
 
 /** Una serie de una colección pública (solo lectura). */

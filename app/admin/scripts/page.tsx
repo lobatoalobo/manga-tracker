@@ -35,16 +35,12 @@ const GROUPS: Group[] = [
     title: "Depuración",
     scripts: [
       {
-        cmd: "npx tsx scripts/flag-comics.ts --apply",
-        desc: "Saca cómics occidentales (Marvel/DC/Star Wars) del catálogo. Sin --apply: lista.",
+        cmd: "npx tsx scripts/flag-comics.ts",
+        desc: "LISTA (sin --apply) los posibles cómics occidentales. Ya NO se recomienda borrarlos: los cómics se quedan; a futuro se clasifican con un campo de tipo (manga/cómic/novela/artbook/databook).",
       },
       {
         cmd: "npx tsx scripts/depurate-catalog.ts --apply",
         desc: "Deja 1 edición regular por (obra, editorial); borra specials/duplicados + works huérfanos.",
-      },
-      {
-        cmd: "npx tsx scripts/dedup-sources.ts --apply",
-        desc: "Dedup crawl↔Whakoom (misma serie cargada por dos fuentes, mismo título).",
       },
       {
         cmd: "npx tsx scripts/consolidate-dups.ts --apply",
@@ -65,7 +61,7 @@ const GROUPS: Group[] = [
       },
       {
         cmd: "npx tsx scripts/backfill-work-authors.ts [utopia|…] --apply",
-        desc: "Rellena Work.author desde Whakoom (el import viejo no lo guardaba). Necesario para que Auto/auto-map resuelvan por autor. Correr ANTES de auto-map.",
+        desc: "Rellena Work.author + sinopsis desde Whakoom (el import viejo no los guardaba). Necesario para que Auto/auto-map resuelvan por autor. Correr ANTES de auto-map.",
       },
       {
         cmd: "npx tsx scripts/fix-broken-maps.ts --apply",
@@ -73,15 +69,11 @@ const GROUPS: Group[] = [
       },
       {
         cmd: "npx tsx scripts/enrich-covers.ts",
-        desc: "Rellena portadas de AniList en works mapeados que no tienen foto.",
+        desc: "Rellena portadas de AniList en works mapeados sin foto (la portada nacional manda; esto es fallback). Para nacionales-only la portada sale de Whakoom (re-import).",
       },
       {
         cmd: "npx tsx scripts/fix-ivrea-urls.ts --apply",
         desc: "Corrige URLs de Ivrea (de Whakoom → sitio real, validado) y sincroniza el conteo de tomos.",
-      },
-      {
-        cmd: "npx tsx scripts/fix-panini-urls.ts --apply",
-        desc: "Pone el link de búsqueda de Panini (solo URL, no toca tomos).",
       },
     ],
   },

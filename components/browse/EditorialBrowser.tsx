@@ -56,7 +56,7 @@ export default function EditorialBrowser({
         {slice.map((w) => (
           <Link
             key={w.id}
-            href={w.anilistId ? `/manga/${w.anilistId}` : `/r/ed/${w.id}`}
+            href={w.anilistId ? `/manga/${w.anilistId}` : `/nacional/${w.id}`}
             title={w.title}
             className="flex items-center gap-3 rounded-xl border border-border bg-surface p-2 transition hover:border-accent"
           >

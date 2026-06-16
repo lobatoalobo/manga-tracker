@@ -7,8 +7,6 @@ import { runCrawlAction } from "@/app/actions";
 // (`npm run crawl whakoom-all`) porque Whakoom bloquea a los runners — ver Scripts.
 const JOBS: { id: string; label: string; desc: string }[] = [
   { id: "ivrea", label: "Ivrea", desc: "Crawl del sitio de Ivrea" },
-  { id: "panini", label: "Panini", desc: "Crawl del sitio de Panini" },
-  { id: "ovni", label: "Ovni", desc: "Crawl del sitio de Ovni" },
   { id: "mangakas", label: "Mangakas", desc: "Índice de autores" },
   { id: "resolve", label: "Resolver", desc: "Re-mapea las sin mapear por autor" },
 ];
