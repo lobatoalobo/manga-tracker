@@ -197,3 +197,36 @@ Empezar por **Fase 1 (tomos + ISBN)** —vale con el modelo actual y no comprome
 nada— y seguir con Fase 2–3. La Fase 5 (re-key de datos de usuario) se planifica
 aparte y con cuidado: es la única irreversible-ish; se hace conservando la columna
 `anilistId` vieja para poder revertir.
+
+---
+
+## Ejecución acordada (2026-06-17): rebuild limpio, AniList al final
+
+Estamos **pre-launch sin datos de usuario que preservar** → en vez de migrar
+(Fase 5), **wipeamos y reconstruimos limpio**. Más simple y sin la parte
+irreversible. Se prueba TODO **sin AniList** primero (kill-switch), para forzar el
+read-path local y ver al final cómo afecta AniList.
+
+**Esquema:** reusar las tablas actuales (`Work`, `PublisherEdition`), con `Work`
+como centro; dejar de usar `anilistId`; re-keyear colección/deseados/notis/notifs
+a `workId`. Renombrar a `Edition`/`Author` queda para después (cosmético).
+
+**Read-path local:** generalizar el patrón de `/nacional/[id]` (ya es 100% local,
+sin AniList) a un `/serie/[workId]`; browse / A-Z / búsqueda sobre `Work`;
+novedades / próximos tomos / próximas series / reediciones desde `IvreaRelease` +
+ediciones, por `workId`.
+
+**Orden (todo en `staging` primero; prod se resetea recién al final, validado):**
+1. Kill-switch de AniList (flag) — la app no llama AniList en runtime.
+2. **Wipe total** de la base (reset total: catálogo + cuentas + colecciones).
+3. **Crawl limpio de Ivrea** → `Work`/ediciones locales (publicado, próximos,
+   reediciones) por `workId`.
+4. **Read-path local** (`/serie/[workId]`, browse, búsqueda) + colección por
+   `workId`.
+5. Validar novedades / próximos tomos / próximas series / reediciones / notis
+   **solo con Ivrea**.
+6. **Whakoom** para lo viejo despublicado de Ivrea → validar.
+7. **Whakoom de a 1 editorial** (de la más chica a la más grande), validando
+   novedades/próximos/etc. entre cada una.
+8. **Recién al final: AniList** (enriquecimiento offline + match), viendo cómo
+   afecta.
