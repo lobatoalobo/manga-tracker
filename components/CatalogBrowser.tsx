@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { formatProximaDate, formatReleaseLabel } from "@/lib/releaseDate";
 
@@ -25,15 +25,63 @@ const TABS = [
 const norm = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
+type Tab = (typeof TABS)[number]["t"];
+
+function readUrl(): { q: string; tab: Tab; page: number } {
+  if (typeof window === "undefined") return { q: "", tab: "az", page: 1 };
+  const p = new URLSearchParams(window.location.search);
+  const tab = p.get("tab");
+  return {
+    q: p.get("q") ?? "",
+    tab: tab === "series" || tab === "tomos" ? tab : "az",
+    page: Math.max(1, Number(p.get("page")) || 1),
+  };
+}
+
+/** Ventana de hasta 5 números de página alrededor del actual. */
+function pageWindow(cur: number, count: number, size = 5): number[] {
+  let start = Math.max(1, cur - Math.floor(size / 2));
+  const end = Math.min(count, start + size - 1);
+  start = Math.max(1, end - size + 1);
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+}
+
 /**
- * Browse del catálogo local con búsqueda INSTANTÁNEA (filtra en memoria, sin
- * round-trip al server) — como el A-Z nacional de prod. Recibe todas las obras
- * y filtra por tab + texto al instante.
+ * Browse del catálogo local con búsqueda INSTANTÁNEA (filtra en memoria) y
+ * estado sincronizado a la URL vía history (sin re-fetch): así el back/forward y
+ * la restauración de scroll funcionan (volver de una ficha mantiene página y
+ * lugar). Mobile-first.
  */
 export default function CatalogBrowser({ cards }: { cards: BrowseCard[] }) {
-  const [q, setQ] = useState("");
-  const [tab, setTab] = useState<(typeof TABS)[number]["t"]>("az");
-  const [page, setPage] = useState(1);
+  const init = readUrl();
+  const [q, setQ] = useState(init.q);
+  const [tab, setTab] = useState<Tab>(init.tab);
+  const [page, setPage] = useState(init.page);
+
+  // Sincroniza estado → URL. `push` (página/tab) crea entrada de historial para
+  // que el back vuelva un paso; `replace` (tipeo) no ensucia el historial.
+  function syncUrl(next: { q: string; tab: Tab; page: number }, replace: boolean) {
+    const params = new URLSearchParams();
+    if (next.tab !== "az") params.set("tab", next.tab);
+    if (next.q.trim()) params.set("q", next.q.trim());
+    if (next.page > 1) params.set("page", String(next.page));
+    const qs = params.toString();
+    const url = `/catalogo${qs ? `?${qs}` : ""}`;
+    if (replace) window.history.replaceState(null, "", url);
+    else window.history.pushState(null, "", url);
+  }
+
+  // Back/forward del navegador → restaurar estado desde la URL.
+  useEffect(() => {
+    const onPop = () => {
+      const u = readUrl();
+      setQ(u.q);
+      setTab(u.tab);
+      setPage(u.page);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   const filtered = useMemo(() => {
     const nq = norm(q.trim());
@@ -49,15 +97,28 @@ export default function CatalogBrowser({ cards }: { cards: BrowseCard[] }) {
   const cur = Math.min(page, pageCount);
   const shown = filtered.slice((cur - 1) * PER_PAGE, cur * PER_PAGE);
 
+  function changeQ(value: string) {
+    setQ(value);
+    setPage(1);
+    syncUrl({ q: value, tab, page: 1 }, true); // tipeo: replace
+  }
+  function changeTab(t: Tab) {
+    setTab(t);
+    setPage(1);
+    syncUrl({ q, tab: t, page: 1 }, false);
+  }
+  function goPage(p: number) {
+    setPage(p);
+    syncUrl({ q, tab, page: p }, false);
+    window.scrollTo({ top: 0 });
+  }
+
   return (
     <>
       <input
         type="search"
         value={q}
-        onChange={(e) => {
-          setQ(e.target.value);
-          setPage(1);
-        }}
+        onChange={(e) => changeQ(e.target.value)}
         placeholder="Buscar obra…"
         autoComplete="off"
         className="mb-3 w-full rounded-lg border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-accent"
@@ -68,10 +129,7 @@ export default function CatalogBrowser({ cards }: { cards: BrowseCard[] }) {
           <button
             key={t}
             type="button"
-            onClick={() => {
-              setTab(t);
-              setPage(1);
-            }}
+            onClick={() => changeTab(t)}
             className={`rounded-full px-3 py-1 transition ${
               tab === t
                 ? "bg-accent text-white"
@@ -127,28 +185,41 @@ export default function CatalogBrowser({ cards }: { cards: BrowseCard[] }) {
       )}
 
       {pageCount > 1 && (
-        <div className="mt-6 flex items-center justify-center gap-4 text-sm">
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-1.5 text-sm">
           <button
             type="button"
             disabled={cur <= 1}
-            onClick={() => setPage(cur - 1)}
+            onClick={() => goPage(cur - 1)}
             className="rounded-lg border border-border px-3 py-1.5 transition hover:border-accent disabled:opacity-40"
           >
-            ← Anterior
+            ←
           </button>
-          <span className="text-muted">
-            Página {cur} de {pageCount} · {filtered.length} obras
-          </span>
+          {pageWindow(cur, pageCount).map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => goPage(p)}
+              aria-current={p === cur}
+              className={`min-w-9 rounded-lg border px-3 py-1.5 transition ${
+                p === cur
+                  ? "border-accent bg-accent text-white"
+                  : "border-border hover:border-accent"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
           <button
             type="button"
             disabled={cur >= pageCount}
-            onClick={() => setPage(cur + 1)}
+            onClick={() => goPage(cur + 1)}
             className="rounded-lg border border-border px-3 py-1.5 transition hover:border-accent disabled:opacity-40"
           >
-            Siguiente →
+            →
           </button>
         </div>
       )}
+      <p className="mt-2 text-center text-xs text-muted">{filtered.length} obras</p>
     </>
   );
 }

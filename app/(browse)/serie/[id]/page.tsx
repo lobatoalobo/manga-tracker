@@ -4,6 +4,7 @@ import { isAdmin } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { getSeries } from "@/lib/collection";
 import AdminWorkEdit from "@/components/AdminWorkEdit";
+import ExpandableText from "@/components/ExpandableText";
 import { isWished } from "@/lib/wishlist";
 import { crumbSearch } from "@/lib/crumb";
 import { formatReleaseLabel, formatProximaDate } from "@/lib/releaseDate";
@@ -175,7 +176,26 @@ export default async function SeriePage({
               Ediciones
             </h2>
             {work.editions.length === 0 && (
-              <p className="text-sm text-muted">Sin ediciones cargadas.</p>
+              // Debut sin ficha aún: sabemos que es de Ivrea. Mostramos la card
+              // con "Trackear" deshabilitado; se habilita al salir el 1er tomo.
+              <div className="rounded-xl border border-border bg-surface px-4 py-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <span className="font-medium">Ivrea Argentina</span>
+                  <span className="text-sm text-muted">
+                    Próximamente
+                    {formatReleaseLabel(work.releaseLabel)
+                      ? ` · ${formatReleaseLabel(work.releaseLabel)}`
+                      : ""}
+                  </span>
+                </div>
+                <button
+                  disabled
+                  title="Se habilita cuando salga el primer tomo"
+                  className="mt-3 w-full cursor-not-allowed rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted opacity-50"
+                >
+                  + Trackear (cuando salga)
+                </button>
+              </div>
             )}
             {work.editions.map((e) => {
               const next = nextByEdition.get(e.id);
@@ -242,11 +262,13 @@ export default async function SeriePage({
         </div>
       </div>
 
-      {synopsis && (
-        <p className="mt-6 whitespace-pre-wrap text-sm leading-relaxed text-muted">
-          {synopsis}
+      {synopsis ? (
+        <ExpandableText text={synopsis} />
+      ) : work.upcoming ? (
+        <p className="mt-6 text-sm text-muted">
+          📅 La sinopsis y los datos completos se cargan cuando sale la serie.
         </p>
-      )}
+      ) : null}
 
       {series && series.editions.length > 0 && (
         <TrackingPanel
