@@ -369,10 +369,15 @@ model Work {
   id         Int      @id @default(autoincrement())
   title      String // título principal que mostramos
   normTitle  String // normalizado para agrupar ediciones y para búsqueda
+  // Título original (romaji) de la ficha de la editorial: llave de match con
+  // MangaUpdates / MangaDex para enriquecer (géneros, portada de respaldo).
+  originalTitle String?
   coverImage String?
   author     String? // autor(es), editable; semilla de la ficha de la editorial
   synopsis   String? // sinopsis, editable
-  genres     String[] // géneros, editables a mano (no hay fuente para no-AniList)
+  genres     String[] // géneros (enriquecidos de MU/MD o editados a mano); para filtrar
+  // Cuándo se enriqueció desde MU/MD (null = pendiente). Para el job batch.
+  enrichedAt DateTime?
   upcoming   Boolean  @default(false) // "Próximo a salir" en AR (preventa/anunciada)
   // Fecha estimada de salida, BORROSA y manual: "2026" (solo año) o "2026-07"
   // (mes+año). Whakoom/Ivrea a veces solo dan el año o el mes.

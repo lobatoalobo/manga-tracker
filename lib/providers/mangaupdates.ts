@@ -87,6 +87,61 @@ function confidence(d: MangaUpdatesData, expected: number | null): number {
   return score;
 }
 
+export interface MangaUpdatesEnrich {
+  seriesId: number;
+  title: string;
+  year: number | null;
+  genres: string[];
+  description: string | null;
+  coverImage: string | null;
+}
+
+/**
+ * Datos de enriquecimiento de MangaUpdates (géneros, sinopsis, portada del
+ * original). Matchea por título contra `targets` (romaji primero); valida año
+ * (±1) si se conoce. Devuelve null si no hay match confiable.
+ */
+export async function getMangaUpdatesEnrich(
+  targets: string[],
+  opts: { year?: number | null } = {},
+): Promise<MangaUpdatesEnrich | null> {
+  const q = targets.find(Boolean);
+  if (!q) return null;
+  const candidates = await search(q);
+  if (!candidates.length) return null;
+  const wanted = targets.map(normalize).filter(Boolean);
+
+  const matched = candidates
+    .map((c) => ({ c, score: titleScore(c.title, c.associated, wanted) }))
+    .filter((x) => x.score >= 40)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+  if (!matched.length) return null;
+
+  const year = opts.year ?? null;
+  for (const { c } of matched) {
+    const d = await getSeriesFull(c.seriesId);
+    if (!d) continue;
+    if (year && d.year && Math.abs(d.year - year) > 1) continue; // año no cuadra
+    return d;
+  }
+  return null;
+}
+
+async function getSeriesFull(id: number): Promise<MangaUpdatesEnrich | null> {
+  const r = await fetch(`${BASE}/series/${id}`, { next: { revalidate: DAY } });
+  if (!r.ok) return null;
+  const d = await r.json();
+  return {
+    seriesId: id,
+    title: stripHtml(d.title || ""),
+    year: d.year ? Number(d.year) : null,
+    genres: (d.genres || []).map((g: any) => g.genre).filter(Boolean),
+    description: d.description ? stripHtml(d.description) : null,
+    coverImage: d.image?.url?.original ?? null,
+  };
+}
+
 // --- internals -------------------------------------------------------------
 
 interface Candidate {

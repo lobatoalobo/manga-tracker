@@ -141,6 +141,7 @@ async function crawlIvrea() {
           coverImage: d.coverImage,
           author: d.author,
           synopsis: d.synopsis,
+          originalTitle: d.originalTitle,
         }).catch(() => null);
         if (workId && row.workId !== workId)
           await prisma.publisherEdition
