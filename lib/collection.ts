@@ -555,10 +555,14 @@ export async function addPurchaseItemToCollection(
     edition?: string | null;
   },
 ): Promise<void> {
-  if (!item.anilistId || item.anilistId < 0) return;
+  if (!item.anilistId) return;
 
+  // Obra local: id negativo = -workId → buscamos sus ediciones por workId.
   const rows = await prisma.publisherEdition.findMany({
-    where: { anilistId: item.anilistId },
+    where:
+      item.anilistId < 0
+        ? { workId: -item.anilistId }
+        : { anilistId: item.anilistId },
     orderBy: { volumes: "desc" },
   });
 
