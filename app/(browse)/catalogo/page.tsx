@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { browseWorks } from "@/lib/catalog";
-import { formatProximaDate } from "@/lib/releaseDate";
+import { formatProximaDate, formatReleaseLabel } from "@/lib/releaseDate";
 
 export const metadata = { title: "Catálogo · Nakama" };
 
@@ -17,7 +17,8 @@ export default async function CatalogoPage({
 }) {
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
-  const tab = sp.tab === "proximos" ? "proximos" : "az";
+  const tab =
+    sp.tab === "series" ? "series" : sp.tab === "tomos" ? "tomos" : "az";
   const works = await browseWorks({ q, tab, take: 80 });
 
   const tabHref = (t: string) =>
@@ -28,7 +29,7 @@ export default async function CatalogoPage({
       <h1 className="mb-4 text-2xl font-bold">Catálogo</h1>
 
       <form action="/catalogo" className="mb-3 flex gap-2">
-        {tab === "proximos" && <input type="hidden" name="tab" value="proximos" />}
+        {tab !== "az" && <input type="hidden" name="tab" value={tab} />}
         <input
           type="search"
           name="q"
@@ -44,7 +45,8 @@ export default async function CatalogoPage({
       <div className="mb-5 flex gap-2 text-sm">
         {[
           { t: "az", label: "A-Z" },
-          { t: "proximos", label: "🔜 Próximos" },
+          { t: "series", label: "🔜 Series nuevas" },
+          { t: "tomos", label: "📅 Próximos tomos" },
         ].map(({ t, label }) => (
           <Link
             key={t}
@@ -93,7 +95,7 @@ export default async function CatalogoPage({
                 )}
                 {!w.next && w.upcoming && (
                   <span className="absolute bottom-1 left-1 right-1 rounded bg-amber-500/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
-                    🔜 Próximo a salir
+                    🔜 {formatReleaseLabel(w.releaseLabel) ?? "Próximo a salir"}
                   </span>
                 )}
               </div>

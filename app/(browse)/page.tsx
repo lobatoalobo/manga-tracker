@@ -76,7 +76,7 @@ export default async function Home({
     const qs = query
       ? `?q=${encodeURIComponent(query)}`
       : params.tab === "proximos"
-        ? "?tab=proximos"
+        ? "?tab=tomos"
         : "";
     redirect(`/catalogo${qs}`);
   }
