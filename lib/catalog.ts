@@ -320,6 +320,32 @@ export async function workMetaByAnilist(
   };
 }
 
+/**
+ * Búsqueda liviana de obras locales (para pickers/autocomplete). Devuelve el id
+ * como NEGATIVO (-workId) para que el resto del sistema lo trate como obra local
+ * (links a /serie, colección por workId).
+ */
+export async function searchWorksLite(
+  q: string,
+  limit = 8,
+): Promise<{ id: number; title: string; coverImage: string | null }[]> {
+  const term = q.trim();
+  if (term.length < 2) return [];
+  const works = await prisma.work.findMany({
+    where: {
+      OR: [
+        { title: { contains: term, mode: "insensitive" } },
+        { normTitle: { contains: normalizeTitle(term) } },
+        { originalTitle: { contains: term, mode: "insensitive" } },
+      ],
+    },
+    orderBy: { normTitle: "asc" },
+    take: limit,
+    select: { id: true, title: true, coverImage: true },
+  });
+  return works.map((w) => ({ id: -w.id, title: w.title, coverImage: w.coverImage }));
+}
+
 export interface WorkCard {
   id: number;
   title: string;

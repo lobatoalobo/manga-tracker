@@ -36,8 +36,10 @@ import {
   upsertPublisherEdition,
   slugifyTitle,
   normalizeTitle,
+  searchWorksLite,
   EDITORIALS,
 } from "@/lib/catalog";
+import { ANILIST_OFF } from "@/lib/flags";
 import { resolveEditionSeries } from "@/lib/resolveSeries";
 import { isAdmin } from "@/lib/admin";
 import {
@@ -848,6 +850,9 @@ export async function setPurchaseItemStatusAction(
 export async function searchPurchaseSeriesAction(query: string) {
   const q = query.trim();
   if (q.length < 2) return [];
+  // Catálogo local: buscamos en nuestros Works (no AniList). Devuelve id
+  // negativo (-workId), coherente con colección/links a /serie.
+  if (ANILIST_OFF) return searchWorksLite(q, 8);
   const raw = await searchMangaList(q, true).catch(() => []);
   return raw.slice(0, 8).map((m: any) => ({
     id: m.id as number,
