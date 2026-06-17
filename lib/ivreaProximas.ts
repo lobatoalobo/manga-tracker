@@ -4,7 +4,7 @@ import {
   getIvreaNews,
   type IvreaProxima,
 } from "@/lib/providers/ivrea";
-import { findOrCreateWork } from "@/lib/catalog";
+import { findOrCreateWork, normalizeTitle } from "@/lib/catalog";
 
 export interface ProximasResult {
   cards: number; // tarjetas totales en /proximas/
@@ -63,20 +63,48 @@ export async function reconcileIvreaProximas(
     };
   });
 
-  // Próximas series (debuts) desde /news/.
+  // Próximas SERIES (debuts) = tarjetas de /proximas/ marcadas ¡NUEVA SERIE! o
+  // ¡TOMO ÚNICO! (título+portada+fecha limpios, incluye "Historias con aroma de
+  // café") UNIDAS con las de /news/ (que aportan autor). Merge por título norm.
   const news = await getIvreaNews();
+  type Debut = { title: string; cover: string | null; releaseLabel: string | null; author: string | null };
+  const debuts = new Map<string, Debut>();
+  for (const c of cards) {
+    if (!c.isNewSeries && !c.isOneShot) continue;
+    const k = normalizeTitle(c.title);
+    const rl = c.releaseDate ? c.releaseDate.slice(0, 7) : null;
+    const ex = debuts.get(k);
+    if (ex) {
+      if (!ex.cover) ex.cover = c.coverImage;
+      if (!ex.releaseLabel) ex.releaseLabel = rl;
+    } else {
+      debuts.set(k, { title: c.title, cover: c.coverImage, releaseLabel: rl, author: null });
+    }
+  }
+  for (const n of news) {
+    const k = normalizeTitle(n.title);
+    const ex = debuts.get(k);
+    if (ex) {
+      if (!ex.cover) ex.cover = n.coverImage;
+      if (!ex.author) ex.author = n.author;
+      if (!ex.releaseLabel) ex.releaseLabel = n.releaseLabel;
+    } else {
+      debuts.set(k, { title: n.title, cover: n.coverImage, releaseLabel: n.releaseLabel, author: n.author });
+    }
+  }
+
   const debutWorkIds: number[] = [];
   if (!dryRun) {
-    for (const n of news) {
+    for (const d of debuts.values()) {
       const workId = await findOrCreateWork({
-        title: n.title,
-        coverImage: n.coverImage,
-        author: n.author,
+        title: d.title,
+        coverImage: d.cover,
+        author: d.author,
       }).catch(() => null);
       if (workId == null) continue;
       await prisma.work.update({
         where: { id: workId },
-        data: { upcoming: true, releaseLabel: n.releaseLabel ?? undefined },
+        data: { upcoming: true, releaseLabel: d.releaseLabel ?? undefined },
       });
       debutWorkIds.push(workId);
     }
@@ -103,7 +131,7 @@ export async function reconcileIvreaProximas(
     snapshot: rows.length,
     mapped: rows.filter((r) => r.editionId != null).length,
     reissues: cards.filter((c) => c.isReissue).length,
-    newSeries: news.length,
+    newSeries: debuts.size,
     debutWorks: debutWorkIds.length,
     clearedStale: stale,
   };

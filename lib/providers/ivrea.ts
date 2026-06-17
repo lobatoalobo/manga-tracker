@@ -315,56 +315,60 @@ export interface IvreaNewsItem {
  * normal). Cada tarjeta trae mes+año, autor ("DE …"), "Serie de N tomos" y
  * portada. Es la fuente de las "próximas series".
  */
+const NEWS_KEY = (t: string) =>
+  t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "");
+
+const cleanAuthor = (raw: string | undefined | null): string | null => {
+  const a = raw
+    ?.replace(/&amp;/g, "&")
+    .replace(/\s+y\s+/gi, ", ")
+    .replace(/\s*&\s*/g, ", ")
+    .trim();
+  if (!a || a.length > 50 || /\d/.test(a)) return null;
+  // Title-case de nombres en MAYÚSCULAS.
+  return a.replace(/\b([A-ZÁÉÍÓÚÑ])([A-ZÁÉÍÓÚÑ]+)/g, (_, x, y) => x + y.toLowerCase());
+};
+
+/**
+ * Series NUEVAS anunciadas en ivrea.com.ar/news/ ("Próximos lanzamientos"):
+ * debuts que todavía no tienen ficha /titulo/. La página mezcla DOS layouts:
+ *  - tarjetas (imagen + h2/h3 + subtítulo) → traen portada;
+ *  - bloques de texto "Mes Año TÍTULO de Autor …" (destacados) → sin tarjeta.
+ * Hacemos las dos pasadas y mergeamos por título. La portada que falte se
+ * completa después desde /proximas/ (que sí la tiene para las inminentes).
+ */
 export async function getIvreaNews(): Promise<IvreaNewsItem[]> {
   const response = await fetch(`${BASE}/news/`, { next: { revalidate: 60 * 60 * 6 } });
   if (!response.ok) return [];
   const html = await response.text();
   const $ = cheerio.load(html);
-  const out: IvreaNewsItem[] = [];
-  const seen = new Set<string>();
+  const byKey = new Map<string, IvreaNewsItem>();
 
+  // Pasada 1 — tarjetas con imagen.
   $("h1, h2, h3").each((_, h) => {
     const title = $(h).text().replace(/\s+/g, " ").trim();
     if (!title || /PR[ÓO]XIMOS LANZAMIENTOS/i.test(title)) return;
     const card = $(h).closest(".vc_col-sm-2, .vc_column-inner, .wpb_column");
     if (!card.length) return;
-    // El texto de la tarjeta pega título+subtítulo sin espacio
-    // ("Octubre 2026PLUTODE NAOKI…"); sacamos el título para separar bien.
     const rest = card.text().replace(/\s+/g, " ").trim().split(title).join(" · ");
     const dm = rest
       .toLowerCase()
       .normalize("NFD")
       .replace(/[̀-ͯ]/g, "")
-      .match(
-        /\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+(\d{4})(?!\d)/,
-      );
-    if (!dm) return; // no es una tarjeta de lanzamiento
-    if (seen.has(title)) return;
-    seen.add(title);
-
+      .match(/\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+(\d{4})(?!\d)/);
+    if (!dm) return;
     const month = IVREA_MONTHS[dm[1]];
-    const rawAuthor = rest
-      .match(/\bDE\s+(.+?)\s+(?:Serie de|Formato|Tomo|Recopila|Incluye|Edici[óo]n)/i)?.[1]
-      ?.replace(/\s+Y\s+/gi, ", ")
-      .replace(/\s*&\s*/g, ", ")
-      .trim();
-    // Solo si parece una lista de nombres limpia (sin títulos originales pegados).
-    const author =
-      rawAuthor && rawAuthor.length <= 50 && !/\d/.test(rawAuthor)
-        ? rawAuthor.replace(/\b([A-ZÁÉÍÓÚÑ])([A-ZÁÉÍÓÚÑ]+)/g, (_, a, b) => a + b.toLowerCase())
-        : null;
     const vols = rest.match(/Serie de (\d+) tomos/i)?.[1];
-    // La portada vive en la columna-imagen de la misma fila (no en la del texto).
-    const cover = $(h).closest(".vc_row.wpb_row").find("img").first().attr("src");
-    out.push({
+    byKey.set(NEWS_KEY(title), {
       title,
-      author,
+      author: cleanAuthor(rest.match(/\bDE\s+(.+?)\s+(?:Serie de|Formato|Tomo|Recopila|Incluye|Edici[óo]n)/i)?.[1]),
       releaseLabel: month ? `${dm[2]}-${String(month).padStart(2, "0")}` : null,
       totalVolumes: vols ? Number(vols) : null,
-      coverImage: cover || null,
+      coverImage: $(h).closest(".vc_row.wpb_row").find("img").first().attr("src") || null,
     });
   });
-  return out;
+
+  return [...byKey.values()];
 }
 
 // --- helpers ---------------------------------------------------------------
