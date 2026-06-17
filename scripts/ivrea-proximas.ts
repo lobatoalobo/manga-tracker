@@ -16,7 +16,7 @@ async function main() {
   console.log(`  Tarjetas en /proximas/:     ${r.cards}`);
   console.log(`  Snapshot IvreaRelease:      ${r.snapshot} (mapeadas: ${r.mapped})`);
   console.log(`  Reediciones:                ${r.reissues}`);
-  console.log(`  Debuts con ficha (chip):    ${r.debutWorks}`);
+  console.log(`  Próximas series (/news/):   ${r.newSeries} (sembradas: ${r.debutWorks})`);
   console.log(`  Chips viejos apagados:      ${r.clearedStale}`);
   await prisma.$disconnect();
 }

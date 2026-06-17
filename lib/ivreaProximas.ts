@@ -1,12 +1,18 @@
 import { prisma } from "@/lib/prisma";
-import { getIvreaProximas, type IvreaProxima } from "@/lib/providers/ivrea";
+import {
+  getIvreaProximas,
+  getIvreaNews,
+  type IvreaProxima,
+} from "@/lib/providers/ivrea";
+import { findOrCreateWork } from "@/lib/catalog";
 
 export interface ProximasResult {
   cards: number; // tarjetas totales en /proximas/
   snapshot: number; // filas guardadas en IvreaRelease
   mapped: number; // de esas, cuántas mapean a una edición de Ivrea (por slug)
   reissues: number; // tarjetas de "REEDICIONES POR TOMO AGOTADO"
-  debutWorks: number; // works con chip "próximo a salir"
+  newSeries: number; // próximas series (debuts) sembradas desde /news/
+  debutWorks: number; // works con chip "próximo a salir" (= newSeries)
   clearedStale: number; // works que tenían el chip y se apagaron
 }
 
@@ -24,18 +30,17 @@ function kindOf(c: IvreaProxima): string {
  *  1) Snapshot en `IvreaRelease` de TODAS las tarjetas (lanzamiento/debut/tomo
  *     único/reedición) con su fecha, mapeadas a la edición de Ivrea por slug
  *     cuando existe. Reemplazo total (la página es el estado actual).
- *  2) Reconcilia el chip `Work.upcoming` ("🔜 Próximo a salir") = DEBUT con ficha
- *     y fecha futura. Apaga el resto (limpia chips viejos de cualquier editorial).
- *     Los debuts reales suelen linkear a /news/ (slug=null) → pendientes de
- *     mapear por título.
+ *  2) Siembra las PRÓXIMAS SERIES (debuts) desde /news/ como `Work` con
+ *     `upcoming=true` + `releaseLabel` (todavía sin edición; cuando salgan, el
+ *     crawl les engancha la edición por título). Esas son el set de "próximo a
+ *     salir"; el resto se apaga (limpia chips viejos de cualquier editorial).
  */
 export async function reconcileIvreaProximas(
   dryRun = false,
 ): Promise<ProximasResult> {
   const cards = await getIvreaProximas();
-  const today = new Date().toISOString().slice(0, 10);
 
-  // Mapa slug → edición de Ivrea (editionId, anilistId).
+  // Mapa slug → edición de Ivrea (editionId, anilistId) para el snapshot.
   const slugs = [...new Set(cards.map((c) => c.slug).filter(Boolean))] as string[];
   const editions = slugs.length
     ? await prisma.publisherEdition.findMany({
@@ -58,21 +63,24 @@ export async function reconcileIvreaProximas(
     };
   });
 
-  // Chip: debut con ficha (slug) y fecha futura → su work.
-  const debutWorkIds = [
-    ...new Set(
-      cards
-        .filter(
-          (c) =>
-            c.isNewSeries &&
-            c.slug != null &&
-            c.releaseDate != null &&
-            c.releaseDate > today,
-        )
-        .map((c) => bySlug.get(c.slug as string)?.workId)
-        .filter((id): id is number => id != null),
-    ),
-  ];
+  // Próximas series (debuts) desde /news/.
+  const news = await getIvreaNews();
+  const debutWorkIds: number[] = [];
+  if (!dryRun) {
+    for (const n of news) {
+      const workId = await findOrCreateWork({
+        title: n.title,
+        coverImage: n.coverImage,
+        author: n.author,
+      }).catch(() => null);
+      if (workId == null) continue;
+      await prisma.work.update({
+        where: { id: workId },
+        data: { upcoming: true, releaseLabel: n.releaseLabel ?? undefined },
+      });
+      debutWorkIds.push(workId);
+    }
+  }
 
   const stale = await prisma.work.count({
     where: { upcoming: true, id: { notIn: debutWorkIds } },
@@ -83,15 +91,11 @@ export async function reconcileIvreaProximas(
       prisma.ivreaRelease.deleteMany({}),
       prisma.ivreaRelease.createMany({ data: rows }),
     ]);
+    // Apagar upcoming en todo lo que no sea una próxima serie vigente.
     await prisma.work.updateMany({
       where: { upcoming: true, id: { notIn: debutWorkIds } },
       data: { upcoming: false },
     });
-    if (debutWorkIds.length)
-      await prisma.work.updateMany({
-        where: { id: { in: debutWorkIds }, upcoming: false },
-        data: { upcoming: true },
-      });
   }
 
   return {
@@ -99,6 +103,7 @@ export async function reconcileIvreaProximas(
     snapshot: rows.length,
     mapped: rows.filter((r) => r.editionId != null).length,
     reissues: cards.filter((c) => c.isReissue).length,
+    newSeries: news.length,
     debutWorks: debutWorkIds.length,
     clearedStale: stale,
   };
