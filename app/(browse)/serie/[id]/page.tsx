@@ -1,17 +1,37 @@
 import { notFound } from "next/navigation";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getSeries } from "@/lib/collection";
+import { isWished } from "@/lib/wishlist";
+import { crumbSearch } from "@/lib/crumb";
 import { formatReleaseLabel, formatProximaDate } from "@/lib/releaseDate";
+import AddEditionButton from "@/components/AddEditionButton";
+import WishButton from "@/components/WishButton";
+import TrackingPanel from "@/components/TrackingPanel";
+import { SignIn } from "@/components/AuthButtons";
+import type { Edition } from "@/lib/editions";
 
 export const metadata = { title: "Serie · Nakama" };
 
+const PUB_KEY: Record<string, string> = {
+  "Ivrea Argentina": "ivrea",
+  "Panini Argentina": "panini",
+  "Ovni Press": "ovni",
+  "Kemuri Ediciones": "kemuri",
+  "Utopía Editorial": "utopia",
+  "Larp Editores": "larp",
+  "Distrito Manga": "distrito",
+  "Planeta Cómic": "planeta",
+};
+
 /**
  * Detalle de una obra del catálogo LOCAL (`Work`), sin AniList. Generaliza el
- * patrón de `/nacional/[id]` (que es per-edición) a una vista per-Work que
- * muestra TODAS sus ediciones. Es la base del read-path local: en runtime lee
- * solo de nuestra DB.
+ * patrón de `/nacional/[id]` (per-edición) a una vista per-Work con TODAS sus
+ * ediciones y la colección.
  *
- * (La colección/tracking por `workId` y el browse local llegan en pasos
- * siguientes del rebuild; ver docs/plan-catalogo-local.md.)
+ * Colección por `workId`: reusamos la maquinaria existente con un id sintético
+ * `-workId` (mismo enfoque que /nacional con `-editionId`), sin tocar el esquema.
+ * Ver docs/plan-catalogo-local.md.
  */
 export default async function SeriePage({
   params,
@@ -51,6 +71,25 @@ export default async function SeriePage({
 
   const { title, coverImage, author, synopsis, genres } = work;
 
+  // Colección: id sintético negativo por workId (no choca con ids de AniList).
+  const pseudoId = -workId;
+  const session = await auth();
+  const userId = session?.user?.id ?? null;
+  const series = userId ? await getSeries(userId, pseudoId) : null;
+  const wished = userId ? await isWished(userId, pseudoId) : false;
+  const trackedKeys = series?.editions.map((e) => e.key) ?? [];
+
+  // Llave estable por edición (publisher; desambigua si se repite la editorial).
+  const seenKeys = new Set<string>();
+  const editionKey = (publisher: string, edId: number) => {
+    const base = PUB_KEY[publisher] ?? `ed${edId}`;
+    if (!seenKeys.has(base)) {
+      seenKeys.add(base);
+      return base;
+    }
+    return `${base}-${edId}`;
+  };
+
   return (
     <main className="mx-auto max-w-4xl px-5 py-8">
       <div className="flex flex-col gap-6 sm:flex-row">
@@ -89,6 +128,27 @@ export default async function SeriePage({
             </div>
           )}
 
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            {userId ? (
+              <WishButton
+                anilistId={pseudoId}
+                title={title}
+                coverImage={coverImage ?? ""}
+                initialWished={wished}
+              />
+            ) : (
+              <SignIn className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90" />
+            )}
+            <a
+              href={crumbSearch(title)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
+            >
+              🛒 Comprar en Crumb
+            </a>
+          </div>
+
           {/* Ediciones de la obra (todas las editoriales). */}
           <div className="mt-5 space-y-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
@@ -99,6 +159,18 @@ export default async function SeriePage({
             )}
             {work.editions.map((e) => {
               const next = nextByEdition.get(e.id);
+              const key = editionKey(e.publisher, e.id);
+              const edition: Edition = {
+                id: key,
+                source: e.publisher,
+                region: "AR",
+                publisher: e.publisher,
+                slug: e.slug,
+                status: e.status || "EN CATÁLOGO",
+                volumes: e.volumes,
+                nextVolume: next?.volume ?? null,
+                url: e.url,
+              };
               return (
                 <div
                   key={e.id}
@@ -118,6 +190,18 @@ export default async function SeriePage({
                       {formatProximaDate(next.date)}
                     </p>
                   )}
+                  {userId && (
+                    <AddEditionButton
+                      anilist={{
+                        id: pseudoId,
+                        title: { romaji: title, english: null, native: null },
+                        coverImage: coverImage ?? "",
+                        volumes: e.volumes,
+                      }}
+                      edition={edition}
+                      isTracked={trackedKeys.includes(key)}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -129,6 +213,15 @@ export default async function SeriePage({
         <p className="mt-6 whitespace-pre-wrap text-sm leading-relaxed text-muted">
           {synopsis}
         </p>
+      )}
+
+      {series && series.editions.length > 0 && (
+        <TrackingPanel
+          key={trackedKeys.slice().sort().join("|")}
+          anilistId={pseudoId}
+          title={title}
+          editions={series.editions}
+        />
       )}
     </main>
   );
