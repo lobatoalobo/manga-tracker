@@ -9,6 +9,7 @@ export interface BrowseCard {
   title: string;
   coverImage: string | null;
   publishers: string[];
+  national: boolean;
   upcoming: boolean;
   releaseLabel: string | null;
   next: { volume: number | null; date: string } | null;
@@ -116,7 +117,10 @@ export default function CatalogBrowser({ cards }: { cards: BrowseCard[] }) {
                 )}
               </div>
               <p className="mt-1.5 line-clamp-2 text-sm font-medium">{w.title}</p>
-              <p className="text-xs text-muted">{w.publishers.join(" · ")}</p>
+              <p className="text-xs text-muted">
+                {w.national && "🇦🇷 "}
+                {w.publishers.join(" · ")}
+              </p>
             </Link>
           ))}
         </div>

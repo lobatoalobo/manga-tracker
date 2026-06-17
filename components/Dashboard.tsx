@@ -65,7 +65,13 @@ export default async function Dashboard({
       {/* Resumen */}
       <div className="mt-4 grid grid-cols-3 gap-3">
         <Stat label="Series" value={String(new Set(items.map((i) => i.anilistId)).size)} href="/collection" />
-        <Stat label="Tomos" value={String(stats.tomos)} href="/compras" />
+        <Stat
+          label="Tomos"
+          value={String(
+            items.reduce((s, i) => s + i.edition.ownedVolumes.length, 0),
+          )}
+          href="/collection"
+        />
         <Stat label="Este mes" value={ars.format(stats.thisMonth)} href="/compras" />
       </div>
 

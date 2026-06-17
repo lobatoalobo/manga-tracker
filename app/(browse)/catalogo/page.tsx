@@ -15,6 +15,7 @@ export default async function CatalogoPage() {
     title: w.title,
     coverImage: w.coverImage,
     publishers: w.publishers,
+    national: w.national,
     upcoming: w.upcoming,
     releaseLabel: w.releaseLabel,
     next: w.next ? { volume: w.next.volume, date: w.next.date.toISOString() } : null,
