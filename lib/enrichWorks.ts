@@ -13,6 +13,23 @@ export interface EnrichResult {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Variantes de título para matchear: original (romaji) + título, más el título
+ * sin subtítulo ("JIGOKURAKU -HELL'S PARADISE-" → "JIGOKURAKU") y una versión
+ * sin espacios ("GACHI AKUTA" → "GACHIAKUTA", que matchea "Gachiakuta").
+ */
+function buildTargets(originalTitle: string | null, title: string): string[] {
+  const base = [originalTitle, title].filter(Boolean) as string[];
+  const extra: string[] = [];
+  for (const t of base) {
+    const stripped = t.split(/\s+[-–—]\s*/)[0].trim();
+    if (stripped && stripped !== t && stripped.length >= 3) extra.push(stripped);
+    const noSpace = t.replace(/\s+/g, "");
+    if (noSpace !== t) extra.push(noSpace);
+  }
+  return [...new Set([...base, ...extra])];
+}
+
 /** Mezcla y limpia géneros de varias fuentes (dedup case-insensitive). */
 function mergeGenres(...lists: string[][]): string[] {
   const seen = new Map<string, string>();
@@ -70,16 +87,17 @@ export async function enrichWorks(opts: {
       if (ficha?.originalTitle) originalTitle = ficha.originalTitle;
       await sleep(300);
     }
-    const targets = [originalTitle, w.title].filter(Boolean) as string[];
+    const targets = buildTargets(originalTitle, w.title);
 
     const [muRaw, mdRaw] = await Promise.all([
       getMangaUpdatesEnrich(targets).catch(() => null),
       getMangaDex(targets).catch(() => null),
     ]);
     // Guard anti-hentai/doujinshi: títulos cortos (ej. "Anohana") pueden matchear
-    // un doujin porno homónimo. Si el match trae esos géneros, lo descartamos
-    // (bloqueamos hentai por completo y casi seguro es la obra equivocada).
-    const BLOCK = /hentai|lolicon|shotacon|doujinshi|\bsmut\b|pornographic|adult \(18/i;
+    // un doujin porno homónimo. Si el match trae esos géneros, lo descartamos.
+    // OJO: NO bloqueamos "Smut"/"Adult" — los usan josei/ecchi legítimos que
+    // Ivrea SÍ publica (Yakuza Lover, Love Celeb, Highschool DxD).
+    const BLOCK = /hentai|lolicon|shotacon|doujinshi|pornographic/i;
     const mu = muRaw && !muRaw.genres.some((g) => BLOCK.test(g)) ? muRaw : null;
     const md = mdRaw && !mdRaw.genres.some((g) => BLOCK.test(g)) ? mdRaw : null;
     if (mu) matchedMU++;

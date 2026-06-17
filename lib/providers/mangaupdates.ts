@@ -227,6 +227,9 @@ function titleScore(
   for (const t of targets) {
     for (const n of names) {
       if (n === t) return 100; // match exacto
+      // Compacto (sin espacios): "high school dxd" ~ "highschool dxd",
+      // "gachi akuta" ~ "gachiakuta".
+      if (n.replace(/ /g, "") === t.replace(/ /g, "")) return 95;
 
       // Similitud Jaccard (intersección / unión): simétrica y estricta.
       // Evita que un título corto matchee uno más largo que lo contiene
