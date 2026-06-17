@@ -351,10 +351,13 @@ export interface WorkCard {
   title: string;
   coverImage: string | null;
   publishers: string[];
+  national: boolean; // tiene alguna edición de editorial argentina
   upcoming: boolean;
   releaseLabel: string | null;
   next: { volume: number | null; date: Date } | null;
 }
+
+const AR_PUBLISHERS = new Set<string>(PUBLISHERS);
 
 /**
  * Browse/búsqueda del catálogo LOCAL (`Work`), sin AniList. `tab`:
@@ -451,6 +454,7 @@ export async function browseWorks(opts: {
       title: w.title,
       coverImage: w.coverImage,
       publishers: [...new Set(w.editions.map((e) => e.publisher))],
+      national: w.editions.some((e) => AR_PUBLISHERS.has(e.publisher)),
       upcoming: w.upcoming,
       releaseLabel: w.releaseLabel,
       next,

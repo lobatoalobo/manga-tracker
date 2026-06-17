@@ -81,6 +81,9 @@ export default async function SeriePage({
   }
 
   const { title, coverImage, author, synopsis, genres } = work;
+  // Nacional = tiene alguna edición de una editorial argentina (PUB_KEY).
+  // A futuro, las internacionales no caerán acá y no llevarán el chip.
+  const national = work.editions.some((e) => PUB_KEY[e.publisher] != null);
 
   // Colección: id sintético negativo por workId (no choca con ids de AniList).
   const pseudoId = -workId;
@@ -116,6 +119,11 @@ export default async function SeriePage({
         <div className="flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold">{title}</h1>
+            {national && (
+              <span className="rounded-full bg-sky-500/15 px-2.5 py-0.5 text-xs font-medium text-sky-300">
+                🇦🇷 Edición nacional
+              </span>
+            )}
             {work.upcoming && (
               <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-300">
                 🔜 Próximo a salir
