@@ -24,21 +24,29 @@ export default async function CatalogoPage() {
     next: w.next ? { volume: w.next.volume, date: w.next.date.toISOString() } : null,
   }));
 
-  // Obras que el usuario ya colecciona (Manga con anilistId negativo = -workId),
-  // para resaltarlas en la grilla.
+  // Obras que el usuario ya colecciona / desea (Manga y WishlistItem con
+  // anilistId negativo = -workId), para resaltarlas en la grilla.
   let collected: number[] = [];
+  let wished: number[] = [];
   if (session?.user?.id) {
-    const rows = await prisma.manga.findMany({
-      where: { userId: session.user.id, anilistId: { lt: 0 } },
-      select: { anilistId: true },
-    });
-    collected = rows.map((r) => -r.anilistId);
+    const [mangas, wishes] = await Promise.all([
+      prisma.manga.findMany({
+        where: { userId: session.user.id, anilistId: { lt: 0 } },
+        select: { anilistId: true },
+      }),
+      prisma.wishlistItem.findMany({
+        where: { userId: session.user.id, anilistId: { lt: 0 } },
+        select: { anilistId: true },
+      }),
+    ]);
+    collected = mangas.map((r) => -r.anilistId);
+    wished = wishes.map((r) => -r.anilistId);
   }
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-8">
       <h1 className="mb-4 text-2xl font-bold">Catálogo</h1>
-      <CatalogBrowser cards={cards} collected={collected} />
+      <CatalogBrowser cards={cards} collected={collected} wished={wished} />
     </main>
   );
 }

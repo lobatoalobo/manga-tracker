@@ -66,8 +66,9 @@ export async function reconcileIvreaProximas(
   // Próximas SERIES (debuts) = tarjetas de /proximas/ marcadas ¡NUEVA SERIE! o
   // ¡TOMO ÚNICO! (título+portada+fecha limpios, incluye "Historias con aroma de
   // café") UNIDAS con las de /news/ (que aportan autor). Merge por título norm.
+  const today = new Date().toISOString().slice(0, 10);
   const news = await getIvreaNews();
-  type Debut = { title: string; cover: string | null; releaseLabel: string | null; author: string | null };
+  type Debut = { title: string; cover: string | null; releaseLabel: string | null; author: string | null; date: string | null };
   const debuts = new Map<string, Debut>();
   for (const c of cards) {
     if (!c.isNewSeries && !c.isOneShot) continue;
@@ -77,8 +78,9 @@ export async function reconcileIvreaProximas(
     if (ex) {
       if (!ex.cover) ex.cover = c.coverImage;
       if (!ex.releaseLabel) ex.releaseLabel = rl;
+      if (!ex.date) ex.date = c.releaseDate;
     } else {
-      debuts.set(k, { title: c.title, cover: c.coverImage, releaseLabel: rl, author: null });
+      debuts.set(k, { title: c.title, cover: c.coverImage, releaseLabel: rl, author: null, date: c.releaseDate });
     }
   }
   for (const n of news) {
@@ -89,7 +91,7 @@ export async function reconcileIvreaProximas(
       if (!ex.author) ex.author = n.author;
       if (!ex.releaseLabel) ex.releaseLabel = n.releaseLabel;
     } else {
-      debuts.set(k, { title: n.title, cover: n.coverImage, releaseLabel: n.releaseLabel, author: n.author });
+      debuts.set(k, { title: n.title, cover: n.coverImage, releaseLabel: n.releaseLabel, author: n.author, date: null });
     }
   }
 
@@ -102,6 +104,18 @@ export async function reconcileIvreaProximas(
         author: d.author,
       }).catch(() => null);
       if (workId == null) continue;
+      // "Próxima serie" = anunciada pero TODAVÍA NO PUBLICADA. Ya salió si:
+      //  - tiene edición con tomos (volumes>0), o
+      //  - su fecha exacta de /proximas/ ya pasó (caso Marriage Toxin: salió pero
+      //    Ivrea todavía no la pasó a /catalogo/, así que no hay edición aún), o
+      //  - su mes anunciado es anterior al actual.
+      // En cualquiera de esos casos NO es upcoming (queda false por el clear).
+      const published = await prisma.publisherEdition.count({
+        where: { workId, volumes: { gt: 0 } },
+      });
+      const datePast = d.date != null && d.date <= today;
+      const monthPast = d.releaseLabel != null && d.releaseLabel < today.slice(0, 7);
+      if (published > 0 || datePast || monthPast) continue;
       await prisma.work.update({
         where: { id: workId },
         data: { upcoming: true, releaseLabel: d.releaseLabel ?? undefined },
