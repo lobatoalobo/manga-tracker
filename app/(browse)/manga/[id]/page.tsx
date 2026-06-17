@@ -196,7 +196,9 @@ export default async function Page({
             <Suspense fallback={null}>
               <CrumbBuyButton anilist={anilist} />
             </Suspense>
-            {canTrack && (
+            {/* Solo si la coleccionás: si no, no recibís notis de ella, así que
+                no hay nada que silenciar (no mostramos la campanita). */}
+            {canTrack && trackedKeys.length > 0 && (
               <SeriesMuteToggle anilistId={mangaId} muted={muted} />
             )}
           </div>
