@@ -113,7 +113,8 @@ export async function getSeriesNotifList(
   for (const i of items) {
     if (i.anilistId <= 0 || byId.has(i.anilistId)) continue;
     byId.set(i.anilistId, {
-      title: i.title.romaji || i.title.english || i.title.native || "—",
+      // Mismo criterio que la colección (english primero, como displayTitle).
+      title: i.title.english || i.title.romaji || i.title.native || "—",
       coverImage: i.coverImage,
     });
   }
