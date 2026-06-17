@@ -48,7 +48,7 @@ export default function NavBar({
   }, []);
 
   const primary: MenuLink[] = [
-    { href: "/", label: "Búsqueda" },
+    { href: "/", label: "Inicio" },
     { href: "/catalogo", label: "Catálogo" },
     { href: "/tiendas", label: "Tiendas" },
     { href: "/independientes", label: "Indie" },
