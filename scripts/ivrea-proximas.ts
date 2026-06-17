@@ -14,8 +14,9 @@ async function main() {
   const r = await reconcileIvreaProximas(dry);
   console.log(dry ? "[DRY RUN]" : "[APLICADO]");
   console.log(`  Tarjetas en /proximas/:     ${r.cards}`);
-  console.log(`  ¡NUEVA SERIE! (debuts):     ${r.newSeries}`);
-  console.log(`  Debuts con edición (chip):  ${r.debutWorks}`);
+  console.log(`  Snapshot IvreaRelease:      ${r.snapshot} (mapeadas: ${r.mapped})`);
+  console.log(`  Reediciones:                ${r.reissues}`);
+  console.log(`  Debuts con ficha (chip):    ${r.debutWorks}`);
   console.log(`  Chips viejos apagados:      ${r.clearedStale}`);
   await prisma.$disconnect();
 }

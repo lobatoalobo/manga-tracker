@@ -321,6 +321,22 @@ export async function workMetaByAnilist(
 }
 
 /**
+ * Próxima salida de Ivrea para una serie (el tomo futuro más cercano, según el
+ * snapshot de /proximas/). Excluye reediciones (esas van por su propio aviso).
+ */
+export async function nextIvreaRelease(
+  anilistId: number,
+): Promise<{ volume: number | null; date: Date } | null> {
+  const today = new Date(new Date().toISOString().slice(0, 10));
+  const r = await prisma.ivreaRelease.findFirst({
+    where: { anilistId, kind: { not: "reissue" }, releaseDate: { gte: today } },
+    orderBy: { releaseDate: "asc" },
+    select: { volume: true, releaseDate: true },
+  });
+  return r?.releaseDate ? { volume: r.volume, date: r.releaseDate } : null;
+}
+
+/**
  * Portadas nacionales (del Work) para varios anilistId. Va por la EDICIÓN
  * (edición→work), no por work.anilistId, porque una edición puede estar mapeada
  * mientras su Work tiene anilistId null (se mapeó sin consolidar el Work).

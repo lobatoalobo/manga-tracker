@@ -430,6 +430,27 @@ model Volume {
   @@index([isbn])
 }
 
+// Snapshot de las salidas anunciadas en ivrea.com.ar/proximas/ (lanzamiento,
+// debut, tomo único o reedición de tomo agotado), con su fecha. La refresca
+// (reemplazo total) el cron mensual; alimenta la fecha de salida en la ficha y,
+// más adelante, las notis de próximo tomo / reedición. `slug`/`anilistId`/
+// `editionId` quedan null en debuts que linkean a /news/ (sin ficha aún).
+model IvreaRelease {
+  id          Int       @id @default(autoincrement())
+  slug        String?
+  title       String
+  volume      Int?
+  kind        String // "volume" | "debut" | "oneshot" | "reissue"
+  releaseDate DateTime?
+  editionId   Int?
+  anilistId   Int?
+  updatedAt   DateTime  @updatedAt
+
+  @@index([anilistId])
+  @@index([editionId])
+  @@index([releaseDate])
+}
+
 // "Esta editorial NO va en esta serie": para desvincular ediciones que la
 // resolución en vivo engancha mal por título (p. ej. ids duplicados de AniList).
 model EditionExclusion {

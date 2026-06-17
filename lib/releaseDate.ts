@@ -19,6 +19,14 @@ export function formatReleaseLabel(label: string | null | undefined): string | n
   return y ? y[1] : null;
 }
 
+/** Formatea una fecha exacta de salida ("3 jul 2026"). Client-safe. */
+export function formatProximaDate(date: Date | string | null | undefined): string | null {
+  if (!date) return null;
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (isNaN(d.getTime())) return null;
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
 /** Normaliza un input a "YYYY" o "YYYY-MM" válido, o null si no se entiende. */
 export function normalizeReleaseLabel(
   label: string | null | undefined,

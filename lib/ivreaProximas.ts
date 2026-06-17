@@ -1,59 +1,76 @@
 import { prisma } from "@/lib/prisma";
-import { getIvreaProximas } from "@/lib/providers/ivrea";
+import { getIvreaProximas, type IvreaProxima } from "@/lib/providers/ivrea";
 
 export interface ProximasResult {
   cards: number; // tarjetas totales en /proximas/
-  newSeries: number; // marcadas "¡NUEVA SERIE!"
-  debutWorks: number; // works que quedan con chip "próximo a salir"
+  snapshot: number; // filas guardadas en IvreaRelease
+  mapped: number; // de esas, cuántas mapean a una edición de Ivrea (por slug)
+  reissues: number; // tarjetas de "REEDICIONES POR TOMO AGOTADO"
+  debutWorks: number; // works con chip "próximo a salir"
   clearedStale: number; // works que tenían el chip y se apagaron
 }
 
+function kindOf(c: IvreaProxima): string {
+  if (c.isReissue) return "reissue";
+  if (c.isOneShot) return "oneshot";
+  if (c.isNewSeries) return "debut";
+  return "volume";
+}
+
 /**
- * Reconcilia el flag `Work.upcoming` ("🔜 Próximo a salir") usando como ÚNICA
- * fuente de verdad la página de próximas salidas de Ivrea.
+ * Refresca todo lo que sale de la página de próximas salidas de Ivrea (única
+ * fuente del sistema de próximos por ahora):
  *
- * Por decisión de producto, hoy SOLO Ivrea alimenta este sistema (el resto de
- * las editoriales son inconsistentes). El chip = serie que TODAVÍA NO SALIÓ:
- * tarjeta marcada "¡NUEVA SERIE!" Y cuya edición de Ivrea aún tiene 0 tomos en
- * nuestro catálogo. Ojo: "¡NUEVA SERIE!" sola no alcanza — Ivrea deja en
- * /proximas/ series nuevas cuyo tomo 1 YA está a la venta (esas no son "próximo
- * a salir"). Un próximo tomo de una serie publicada (One Piece #109) tampoco.
- *
- * Es idempotente y auto-limpiante: deja `upcoming=true` exactamente en los
- * debuts no publicados de Ivrea, y apaga el flag en todo el resto (incluye los
- * chips viejos que quedaron prendidos de cualquier editorial).
+ *  1) Snapshot en `IvreaRelease` de TODAS las tarjetas (lanzamiento/debut/tomo
+ *     único/reedición) con su fecha, mapeadas a la edición de Ivrea por slug
+ *     cuando existe. Reemplazo total (la página es el estado actual).
+ *  2) Reconcilia el chip `Work.upcoming` ("🔜 Próximo a salir") = DEBUT con ficha
+ *     y fecha futura. Apaga el resto (limpia chips viejos de cualquier editorial).
+ *     Los debuts reales suelen linkear a /news/ (slug=null) → pendientes de
+ *     mapear por título.
  */
 export async function reconcileIvreaProximas(
   dryRun = false,
 ): Promise<ProximasResult> {
   const cards = await getIvreaProximas();
   const today = new Date().toISOString().slice(0, 10);
-  // Debut "próximo a salir" = serie nueva con fecha FUTURA y ficha en Ivrea
-  // (slug). OJO: la mayoría de los debuts reales linkean a /news/ (slug=null) y
-  // todavía no se pueden mapear por slug → ese caso queda pendiente (title-match).
-  const debutSlugs = cards
-    .filter(
-      (c) =>
-        c.isNewSeries &&
-        c.slug != null &&
-        c.releaseDate != null &&
-        c.releaseDate > today,
-    )
-    .map((c) => c.slug as string);
 
-  const editions = debutSlugs.length
+  // Mapa slug → edición de Ivrea (editionId, anilistId).
+  const slugs = [...new Set(cards.map((c) => c.slug).filter(Boolean))] as string[];
+  const editions = slugs.length
     ? await prisma.publisherEdition.findMany({
-        where: { publisher: "Ivrea Argentina", slug: { in: debutSlugs } },
-        select: { workId: true, volumes: true },
+        where: { publisher: "Ivrea Argentina", slug: { in: slugs } },
+        select: { id: true, slug: true, anilistId: true, workId: true },
       })
     : [];
+  const bySlug = new Map(editions.map((e) => [e.slug, e]));
 
+  const rows = cards.map((c) => {
+    const ed = c.slug ? bySlug.get(c.slug) : undefined;
+    return {
+      slug: c.slug,
+      title: c.title,
+      volume: c.volume,
+      kind: kindOf(c),
+      releaseDate: c.releaseDate ? new Date(c.releaseDate) : null,
+      editionId: ed?.id ?? null,
+      anilistId: ed?.anilistId ?? null,
+    };
+  });
+
+  // Chip: debut con ficha (slug) y fecha futura → su work.
   const debutWorkIds = [
     ...new Set(
-      editions
-        // Solo las que todavía no tienen tomos publicados (no salió aún).
-        .filter((e) => e.workId != null && e.volumes === 0)
-        .map((e) => e.workId as number),
+      cards
+        .filter(
+          (c) =>
+            c.isNewSeries &&
+            c.slug != null &&
+            c.releaseDate != null &&
+            c.releaseDate > today,
+        )
+        .map((c) => bySlug.get(c.slug as string)?.workId)
+        .filter((id): id is number => id != null),
     ),
   ];
 
@@ -62,6 +79,10 @@ export async function reconcileIvreaProximas(
   });
 
   if (!dryRun) {
+    await prisma.$transaction([
+      prisma.ivreaRelease.deleteMany({}),
+      prisma.ivreaRelease.createMany({ data: rows }),
+    ]);
     await prisma.work.updateMany({
       where: { upcoming: true, id: { notIn: debutWorkIds } },
       data: { upcoming: false },
@@ -75,7 +96,9 @@ export async function reconcileIvreaProximas(
 
   return {
     cards: cards.length,
-    newSeries: debutSlugs.length,
+    snapshot: rows.length,
+    mapped: rows.filter((r) => r.editionId != null).length,
+    reissues: cards.filter((c) => c.isReissue).length,
     debutWorks: debutWorkIds.length,
     clearedStale: stale,
   };

@@ -4,8 +4,8 @@ import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { getSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
-import { workMetaByAnilist } from "@/lib/catalog";
-import { formatReleaseLabel } from "@/lib/releaseDate";
+import { workMetaByAnilist, nextIvreaRelease } from "@/lib/catalog";
+import { formatReleaseLabel, formatProximaDate } from "@/lib/releaseDate";
 import { isSeriesMuted } from "@/lib/notificationPrefs";
 import SeriesMuteToggle from "@/components/SeriesMuteToggle";
 import { isWished } from "@/lib/wishlist";
@@ -43,14 +43,16 @@ export default async function Page({
   const anilist = await getMangaCore(mangaId).catch(() => null);
   if (!anilist) notFound();
 
-  const [series, wished, note, reviews, workMeta, muted] = await Promise.all([
-    userId ? getSeries(userId, mangaId) : Promise.resolve(null),
-    userId ? isWished(userId, mangaId) : Promise.resolve(false),
-    userId ? getNote(userId, mangaId) : Promise.resolve(null),
-    getSeriesNotes(mangaId),
-    workMetaByAnilist(mangaId).catch(() => null),
-    userId ? isSeriesMuted(userId, mangaId) : Promise.resolve(false),
-  ]);
+  const [series, wished, note, reviews, workMeta, muted, nextRelease] =
+    await Promise.all([
+      userId ? getSeries(userId, mangaId) : Promise.resolve(null),
+      userId ? isWished(userId, mangaId) : Promise.resolve(false),
+      userId ? getNote(userId, mangaId) : Promise.resolve(null),
+      getSeriesNotes(mangaId),
+      workMetaByAnilist(mangaId).catch(() => null),
+      userId ? isSeriesMuted(userId, mangaId) : Promise.resolve(false),
+      nextIvreaRelease(mangaId).catch(() => null),
+    ]);
 
   // Para coleccionistas locales: si tenemos la portada de la edición nacional
   // (del catálogo), la preferimos a la japonesa de AniList.
@@ -121,6 +123,14 @@ export default async function Page({
           )}
           {anilist.title.native && (
             <p className="text-muted">{anilist.title.native}</p>
+          )}
+
+          {nextRelease && (
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-300">
+              📅 Próximo tomo
+              {nextRelease.volume ? ` #${nextRelease.volume}` : ""} en Ivrea ·{" "}
+              {formatProximaDate(nextRelease.date)}
+            </p>
           )}
 
           <div className="mt-4 flex flex-wrap gap-2">
