@@ -320,6 +320,105 @@ export async function workMetaByAnilist(
   };
 }
 
+export interface WorkCard {
+  id: number;
+  title: string;
+  coverImage: string | null;
+  publishers: string[];
+  upcoming: boolean;
+  next: { volume: number | null; date: Date } | null;
+}
+
+/**
+ * Browse/búsqueda del catálogo LOCAL (`Work`), sin AniList. `tab`:
+ *  - "az" (default): alfabético.
+ *  - "proximos": obras con un próximo tomo (fecha futura en IvreaRelease) o
+ *    marcadas "próximo a salir".
+ * `q` filtra por título (título visible o normalizado).
+ */
+export async function browseWorks(opts: {
+  q?: string;
+  tab?: "az" | "proximos";
+  take?: number;
+}): Promise<WorkCard[]> {
+  const take = opts.take ?? 60;
+  const today = new Date(new Date().toISOString().slice(0, 10));
+  const q = opts.q?.trim();
+
+  type WorkWhere = import("@prisma/client").Prisma.WorkWhereInput;
+  const qFilter: WorkWhere | null = q
+    ? {
+        OR: [
+          { title: { contains: q, mode: "insensitive" } },
+          { normTitle: { contains: normalizeTitle(q) } },
+        ],
+      }
+    : null;
+
+  let where: WorkWhere = qFilter ?? {};
+
+  if (opts.tab === "proximos") {
+    // Obras con un próximo tomo (vía edición→work) o marcadas upcoming.
+    const rel = await prisma.ivreaRelease.findMany({
+      where: { editionId: { not: null }, kind: { not: "reissue" }, releaseDate: { gte: today } },
+      select: { editionId: true },
+    });
+    const edIds = [...new Set(rel.map((r) => r.editionId as number))];
+    const eds = edIds.length
+      ? await prisma.publisherEdition.findMany({
+          where: { id: { in: edIds }, workId: { not: null } },
+          select: { workId: true },
+        })
+      : [];
+    const wIds = [...new Set(eds.map((e) => e.workId as number))];
+    const proximosFilter: WorkWhere = { OR: [{ id: { in: wIds } }, { upcoming: true }] };
+    where = qFilter ? { AND: [proximosFilter, qFilter] } : proximosFilter;
+  }
+
+  const works = await prisma.work.findMany({
+    where,
+    orderBy: { normTitle: "asc" },
+    take,
+    select: {
+      id: true,
+      title: true,
+      coverImage: true,
+      upcoming: true,
+      editions: { select: { id: true, publisher: true } },
+    },
+  });
+
+  // Próximo tomo por work (para el badge en la card).
+  const allEdIds = works.flatMap((w) => w.editions.map((e) => e.id));
+  const rel = allEdIds.length
+    ? await prisma.ivreaRelease.findMany({
+        where: { editionId: { in: allEdIds }, kind: { not: "reissue" }, releaseDate: { gte: today } },
+        orderBy: { releaseDate: "asc" },
+        select: { editionId: true, volume: true, releaseDate: true },
+      })
+    : [];
+  const nextByEd = new Map<number, { volume: number | null; date: Date }>();
+  for (const r of rel)
+    if (r.editionId != null && r.releaseDate && !nextByEd.has(r.editionId))
+      nextByEd.set(r.editionId, { volume: r.volume, date: r.releaseDate });
+
+  return works.map((w) => {
+    let next: { volume: number | null; date: Date } | null = null;
+    for (const e of w.editions) {
+      const n = nextByEd.get(e.id);
+      if (n && (!next || n.date < next.date)) next = n;
+    }
+    return {
+      id: w.id,
+      title: w.title,
+      coverImage: w.coverImage,
+      publishers: [...new Set(w.editions.map((e) => e.publisher))],
+      upcoming: w.upcoming,
+      next,
+    };
+  });
+}
+
 /**
  * Próxima salida de Ivrea para una serie (el tomo futuro más cercano, según el
  * snapshot de /proximas/). Excluye reediciones (esas van por su propio aviso).
