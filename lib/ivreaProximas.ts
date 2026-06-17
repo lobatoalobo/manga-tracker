@@ -27,7 +27,19 @@ export async function reconcileIvreaProximas(
   dryRun = false,
 ): Promise<ProximasResult> {
   const cards = await getIvreaProximas();
-  const debutSlugs = cards.filter((c) => c.isNewSeries).map((c) => c.slug);
+  const today = new Date().toISOString().slice(0, 10);
+  // Debut "próximo a salir" = serie nueva con fecha FUTURA y ficha en Ivrea
+  // (slug). OJO: la mayoría de los debuts reales linkean a /news/ (slug=null) y
+  // todavía no se pueden mapear por slug → ese caso queda pendiente (title-match).
+  const debutSlugs = cards
+    .filter(
+      (c) =>
+        c.isNewSeries &&
+        c.slug != null &&
+        c.releaseDate != null &&
+        c.releaseDate > today,
+    )
+    .map((c) => c.slug as string);
 
   const editions = debutSlugs.length
     ? await prisma.publisherEdition.findMany({
