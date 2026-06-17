@@ -7,7 +7,6 @@ import {
   deleteEditionAction,
   setCrumbQueryAction,
   updateWorkAction,
-  enrichWorkFromWhakoomAction,
 } from "@/app/actions";
 import { crumbSearch } from "@/lib/crumb";
 import ReleaseDatePicker from "@/components/ReleaseDatePicker";
@@ -61,25 +60,8 @@ export default function AdminNacionalEdit({
   const [v, setV] = useState(String(volumes));
   const [u, setU] = useState(url);
   const [crumb, setCrumb] = useState(crumbInitial);
-  const [wkUrl, setWkUrl] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
-
-  const pullFromWhakoom = () =>
-    start(async () => {
-      if (!workId) return;
-      const res = await enrichWorkFromWhakoomAction(workId, wkUrl);
-      if (!res.ok) {
-        setMsg(res.error);
-      } else if (res.applied.length === 0) {
-        setMsg("No había datos nuevos para traer.");
-      } else {
-        setMsg(`Traído: ${res.applied.join(", ")}`);
-        setWkUrl("");
-        router.refresh();
-      }
-      setTimeout(() => setMsg(null), 3500);
-    });
 
   if (!open) {
     return (
@@ -216,26 +198,6 @@ export default function AdminNacionalEdit({
             Probar búsqueda ↗
           </a>
         </div>
-        {workId && (
-          <div className="rounded-lg border border-border bg-surface-2 p-2">
-            <label className="text-xs text-muted">
-              Traer datos de Whakoom (admin) — pegá la URL de la edición
-              <input
-                value={wkUrl}
-                onChange={(e) => setWkUrl(e.target.value)}
-                placeholder="https://www.whakoom.com/ediciones/…"
-                className={`mt-1 ${input}`}
-              />
-            </label>
-            <button
-              onClick={pullFromWhakoom}
-              disabled={pending || !wkUrl.trim()}
-              className="mt-2 rounded-lg border border-accent px-2.5 py-1 text-xs text-accent transition hover:bg-accent hover:text-white disabled:opacity-50"
-            >
-              Traer autor/sinopsis/portada
-            </button>
-          </div>
-        )}
       </div>
 
       <div className="mt-3 flex items-center gap-2">
