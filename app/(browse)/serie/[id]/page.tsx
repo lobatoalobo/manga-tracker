@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getSeries } from "@/lib/collection";
@@ -46,7 +46,16 @@ export default async function SeriePage({
     where: { id: workId },
     include: { editions: { orderBy: [{ publisher: "asc" }, { title: "asc" }] } },
   });
-  if (!work) notFound();
+  if (!work) {
+    // Compat transición: un id que no es work puede ser una edición vieja
+    // (esquema -editionId de /nacional) → redirigir a su work.
+    const ed = await prisma.publisherEdition.findUnique({
+      where: { id: workId },
+      select: { workId: true },
+    });
+    if (ed?.workId) redirect(`/serie/${ed.workId}`);
+    notFound();
+  }
 
   // Próxima salida (no reedición) por edición, desde el snapshot de Ivrea.
   const editionIds = work.editions.map((e) => e.id);

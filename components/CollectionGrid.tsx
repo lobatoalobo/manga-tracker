@@ -188,7 +188,7 @@ function CollectionRow({
   const { owned, total, read, status } = prog;
   const href =
     item.anilistId < 0
-      ? `/nacional/${-item.anilistId}`
+      ? `/serie/${-item.anilistId}`
       : `${hrefBase}/${item.anilistId}`;
 
   return (
