@@ -24,6 +24,8 @@ import {
   type LocalCatalogHit,
 } from "@/lib/catalog";
 import { seriesHref } from "@/lib/url";
+import { redirect } from "next/navigation";
+import { ANILIST_OFF } from "@/lib/flags";
 import Pager from "@/components/Pager";
 import PageJump from "@/components/browse/PageJump";
 import LetterIndex from "@/components/browse/LetterIndex";
@@ -68,6 +70,17 @@ export default async function Home({
       </>
     );
   }
+
+  // AniList apagado: el browse/búsqueda corre desde el catálogo LOCAL.
+  if (ANILIST_OFF) {
+    const qs = query
+      ? `?q=${encodeURIComponent(query)}`
+      : params.tab === "proximos"
+        ? "?tab=proximos"
+        : "";
+    redirect(`/catalogo${qs}`);
+  }
+
   const tab: Tab =
     params.tab === "az"
       ? "az"
