@@ -301,6 +301,72 @@ export async function getIvreaProximas(): Promise<IvreaProxima[]> {
   return out;
 }
 
+export interface IvreaNewsItem {
+  title: string;
+  author: string | null;
+  releaseLabel: string | null; // "YYYY-MM" del mes anunciado
+  totalVolumes: number | null; // "Serie de N tomos"
+  coverImage: string | null;
+}
+
+/**
+ * Series NUEVAS anunciadas en ivrea.com.ar/news/ ("Próximos lanzamientos").
+ * Son debuts que todavía no tienen ficha /titulo/ (por eso no salen del catálogo
+ * normal). Cada tarjeta trae mes+año, autor ("DE …"), "Serie de N tomos" y
+ * portada. Es la fuente de las "próximas series".
+ */
+export async function getIvreaNews(): Promise<IvreaNewsItem[]> {
+  const response = await fetch(`${BASE}/news/`, { next: { revalidate: 60 * 60 * 6 } });
+  if (!response.ok) return [];
+  const html = await response.text();
+  const $ = cheerio.load(html);
+  const out: IvreaNewsItem[] = [];
+  const seen = new Set<string>();
+
+  $("h1, h2, h3").each((_, h) => {
+    const title = $(h).text().replace(/\s+/g, " ").trim();
+    if (!title || /PR[ÓO]XIMOS LANZAMIENTOS/i.test(title)) return;
+    const card = $(h).closest(".vc_col-sm-2, .vc_column-inner, .wpb_column");
+    if (!card.length) return;
+    // El texto de la tarjeta pega título+subtítulo sin espacio
+    // ("Octubre 2026PLUTODE NAOKI…"); sacamos el título para separar bien.
+    const rest = card.text().replace(/\s+/g, " ").trim().split(title).join(" · ");
+    const dm = rest
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .match(
+        /\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+(\d{4})(?!\d)/,
+      );
+    if (!dm) return; // no es una tarjeta de lanzamiento
+    if (seen.has(title)) return;
+    seen.add(title);
+
+    const month = IVREA_MONTHS[dm[1]];
+    const rawAuthor = rest
+      .match(/\bDE\s+(.+?)\s+(?:Serie de|Formato|Tomo|Recopila|Incluye|Edici[óo]n)/i)?.[1]
+      ?.replace(/\s+Y\s+/gi, ", ")
+      .replace(/\s*&\s*/g, ", ")
+      .trim();
+    // Solo si parece una lista de nombres limpia (sin títulos originales pegados).
+    const author =
+      rawAuthor && rawAuthor.length <= 50 && !/\d/.test(rawAuthor)
+        ? rawAuthor.replace(/\b([A-ZÁÉÍÓÚÑ])([A-ZÁÉÍÓÚÑ]+)/g, (_, a, b) => a + b.toLowerCase())
+        : null;
+    const vols = rest.match(/Serie de (\d+) tomos/i)?.[1];
+    // La portada vive en la columna-imagen de la misma fila (no en la del texto).
+    const cover = $(h).closest(".vc_row.wpb_row").find("img").first().attr("src");
+    out.push({
+      title,
+      author,
+      releaseLabel: month ? `${dm[2]}-${String(month).padStart(2, "0")}` : null,
+      totalVolumes: vols ? Number(vols) : null,
+      coverImage: cover || null,
+    });
+  });
+  return out;
+}
+
 // --- helpers ---------------------------------------------------------------
 
 function isTitlePage(response: Response): boolean {
