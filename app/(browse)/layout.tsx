@@ -2,11 +2,12 @@ import { Suspense } from "react";
 import { auth } from "@/auth";
 import { BrowseProvider } from "@/components/browse/BrowseProvider";
 import DiscoveryBar from "@/components/browse/DiscoveryBar";
+import { ANILIST_OFF } from "@/lib/flags";
 
 /**
- * Layout compartido por la home y la ficha de serie: la barra de descubrimiento
- * (buscador + modos) queda fija y no se desmonta al abrir una serie — solo
- * cambia el contenido de abajo.
+ * Layout compartido por la home y la ficha de serie. La barra de descubrimiento
+ * (buscador + modos de AniList) queda fija arriba. Con AniList apagado NO se
+ * muestra: el browse/búsqueda local vive en /catalogo.
  */
 export default async function BrowseLayout({
   children,
@@ -16,11 +17,13 @@ export default async function BrowseLayout({
   const session = await auth();
   return (
     <BrowseProvider>
-      <div className="mx-auto max-w-6xl px-5 pt-6">
-        <Suspense fallback={null}>
-          <DiscoveryBar loggedIn={!!session?.user} />
-        </Suspense>
-      </div>
+      {!ANILIST_OFF && (
+        <div className="mx-auto max-w-6xl px-5 pt-6">
+          <Suspense fallback={null}>
+            <DiscoveryBar loggedIn={!!session?.user} />
+          </Suspense>
+        </div>
+      )}
       {children}
     </BrowseProvider>
   );
