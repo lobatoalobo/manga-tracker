@@ -100,6 +100,36 @@ export async function getShareSlug(userId: string): Promise<string | null> {
   return u?.shareSlug ?? null;
 }
 
+/**
+ * Lista de series mapeadas de la colección (una por serie) con su estado de
+ * muteo, para la pantalla "Notificaciones por serie". Solo mapeadas (anilistId
+ * positivo): las nacionales no disparan notis de tomo nuevo.
+ */
+export async function getSeriesNotifList(
+  userId: string,
+): Promise<{ anilistId: number; title: string; coverImage: string; muted: boolean }[]> {
+  const items = await getCollectionItems(userId);
+  const byId = new Map<number, { title: string; coverImage: string }>();
+  for (const i of items) {
+    if (i.anilistId <= 0 || byId.has(i.anilistId)) continue;
+    byId.set(i.anilistId, {
+      title: i.title.romaji || i.title.english || i.title.native || "—",
+      coverImage: i.coverImage,
+    });
+  }
+  const muted = new Set(
+    (
+      await prisma.seriesNotifMute.findMany({
+        where: { userId },
+        select: { anilistId: true },
+      })
+    ).map((m) => m.anilistId),
+  );
+  return [...byId.entries()]
+    .map(([anilistId, v]) => ({ anilistId, ...v, muted: muted.has(anilistId) }))
+    .sort((a, b) => a.title.localeCompare(b.title));
+}
+
 /** anilistId de la serie preferida del usuario (1 por usuario), o null. */
 export async function getFavoriteId(userId: string): Promise<number | null> {
   const u = await prisma.user.findUnique({

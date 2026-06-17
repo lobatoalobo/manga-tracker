@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import Link from "next/link";
 import { getNotifPrefs } from "@/lib/notificationPrefs";
 import NotifPrefsToggles from "@/components/NotifPrefsToggles";
 import PushToggle from "@/components/PushToggle";
@@ -23,6 +24,19 @@ export default async function AjustesPage() {
         Notificaciones
       </h2>
       <NotifPrefsToggles initial={prefs} />
+
+      <Link
+        href="/ajustes/series"
+        className="mt-3 flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 text-sm transition hover:border-accent"
+      >
+        <span>
+          <span className="font-medium">🔔 Notificaciones por serie</span>
+          <span className="mt-0.5 block text-xs text-muted">
+            Silenciá series puntuales de tu colección, todo en un lugar.
+          </span>
+        </span>
+        <span className="shrink-0 text-accent">→</span>
+      </Link>
 
       <div className="mt-4">
         <PushToggle />

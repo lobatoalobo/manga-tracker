@@ -1,6 +1,10 @@
 import * as cheerio from "cheerio";
 import { getIvreaDataBySlug } from "../lib/providers/ivrea";
-import { upsertPublisherEdition, findOrCreateWork } from "../lib/catalog";
+import {
+  upsertPublisherEdition,
+  findOrCreateWork,
+  normalizeTitle,
+} from "../lib/catalog";
 import { seedMangakaIndex } from "../lib/mangakas";
 import { resolveEditionSeries } from "../lib/resolveSeries";
 import {
@@ -96,14 +100,35 @@ async function crawlIvrea() {
     const d = await getIvreaDataBySlug(slug);
     done++;
     if (d && d.argentinaVolumes > 0) {
-      await upsertPublisherEdition({
-        publisher: "Ivrea Argentina",
-        slug,
-        title: d.title || title,
-        volumes: d.argentinaVolumes,
-        status: d.argentinaStatus,
-        url: d.url,
+      const t = d.title || title;
+      const norm = normalizeTitle(t);
+      // Anti-duplicado: si Ivrea cambió el slug de la URL, ya existe una edición
+      // con el mismo título normalizado pero otro slug → la actualizamos (slug,
+      // url, tomos) en vez de crear una nueva (que dejaría un duplicado huérfano).
+      const dup = await prisma.publisherEdition.findFirst({
+        where: { publisher: "Ivrea Argentina", normTitle: norm, slug: { not: slug } },
+        select: { id: true },
       });
+      if (dup) {
+        await prisma.publisherEdition
+          .update({
+            where: { id: dup.id },
+            data: {
+              title: t, normTitle: norm, slug, url: d.url,
+              volumes: d.argentinaVolumes, status: d.argentinaStatus,
+            },
+          })
+          .catch(() => {});
+      } else {
+        await upsertPublisherEdition({
+          publisher: "Ivrea Argentina",
+          slug,
+          title: t,
+          volumes: d.argentinaVolumes,
+          status: d.argentinaStatus,
+          url: d.url,
+        });
+      }
       // Copiamos autor/sinopsis/portada de Ivrea al Work (somos dueños del dato,
       // sin fetch en vivo). findOrCreateWork completa sin pisar lo editado a mano.
       const row = await prisma.publisherEdition.findUnique({

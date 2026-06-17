@@ -57,9 +57,6 @@ export default async function NacionalPage({
   const synopsis = row.work?.synopsis ?? ficha?.synopsis ?? null;
   const volumes = row.volumes || ficha?.argentinaVolumes || 0;
   const status = row.status || ficha?.argentinaStatus || null;
-  // El link guardado a veces es de Whakoom (fuente del import, no la editorial):
-  // en esos casos NO mostramos link externo (mostramos toda la info igual).
-  const showStoreLink = !/whakoom\.com/i.test(row.url);
 
   // Id propio (negativo) para la colección, sin chocar con ids de AniList.
   const pseudoId = -editionId;
@@ -164,16 +161,8 @@ export default async function NacionalPage({
             </a>
           </div>
 
-          {showStoreLink && (
-            <a
-              href={row.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 inline-block text-xs text-accent hover:underline"
-            >
-              Ver en {row.publisher} ↗
-            </a>
-          )}
+          {/* Sin link de redirección a la editorial (rompen / aportan ≤ lo
+              nuestro). "Dónde comprar" va por Crumb. La url queda interna. */}
 
           {admin && (
             <AdminNacionalEdit
