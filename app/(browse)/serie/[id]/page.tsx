@@ -1,7 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { isAdmin } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { getSeries } from "@/lib/collection";
+import AdminWorkEdit from "@/components/AdminWorkEdit";
 import { isWished } from "@/lib/wishlist";
 import { crumbSearch } from "@/lib/crumb";
 import { formatReleaseLabel, formatProximaDate } from "@/lib/releaseDate";
@@ -87,6 +89,7 @@ export default async function SeriePage({
   const series = userId ? await getSeries(userId, pseudoId) : null;
   const wished = userId ? await isWished(userId, pseudoId) : false;
   const trackedKeys = series?.editions.map((e) => e.key) ?? [];
+  const admin = isAdmin(session?.user?.email);
 
   // Llave estable por edición (publisher; desambigua si se repite la editorial).
   const seenKeys = new Set<string>();
@@ -215,6 +218,19 @@ export default async function SeriePage({
               );
             })}
           </div>
+
+          {admin && (
+            <AdminWorkEdit
+              workId={work.id}
+              title={title}
+              author={author ?? ""}
+              synopsis={synopsis ?? ""}
+              coverImage={coverImage ?? ""}
+              genres={genres}
+              upcoming={work.upcoming}
+              releaseLabel={work.releaseLabel ?? ""}
+            />
+          )}
         </div>
       </div>
 
