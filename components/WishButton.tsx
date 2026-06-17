@@ -29,7 +29,7 @@ export default function WishButton({
     <button
       onClick={toggle}
       disabled={isPending}
-      className={`rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50 ${
+      className={`min-w-45 rounded-lg px-4 py-2 text-center text-sm font-medium transition disabled:opacity-50 ${
         wished
           ? "bg-accent text-white"
           : "border border-border text-muted hover:border-accent hover:text-foreground"

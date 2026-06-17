@@ -28,7 +28,6 @@ function toRanges(nums: number[]): string {
   return parts.length > 30 ? parts.slice(0, 30).join(", ") + " …" : parts.join(", ");
 }
 
-const LONG_SERIES = 36; // a partir de acá el grid arranca colapsado
 import { crumbSearch } from "@/lib/crumb";
 import type { EditionView, ReadingStatus } from "@/lib/collection";
 
@@ -46,7 +45,6 @@ export default function TrackingPanel({
     initial[0]?.key,
   );
   const [upTo, setUpTo] = useState("");
-  const [showGrid, setShowGrid] = useState(false);
   const [, startTransition] = useTransition();
 
   const sel = editions.find((e) => e.key === selectedKey) ?? editions[0];
@@ -110,7 +108,6 @@ export default function TrackingPanel({
         )
       : [];
   const allOwned = total > 0 && owned >= total;
-  const gridVisible = total <= LONG_SERIES || showGrid;
 
   return (
     <section className="mt-6 rounded-xl border border-border bg-surface p-5">
@@ -222,22 +219,14 @@ export default function TrackingPanel({
         </div>
       )}
 
-      {/* Grid tomo por tomo: colapsado por defecto en series largas. */}
-      {total > LONG_SERIES && (
-        <button
-          onClick={() => setShowGrid((v) => !v)}
-          className="mt-3 text-sm text-accent hover:underline"
-        >
-          {gridVisible ? "Ocultar tomos ▴" : `Marcar tomo por tomo (${total}) ▾`}
-        </button>
-      )}
-
-      {gridVisible && (
+      {/* Grid tomo por tomo, siempre visible y paginado de a 21. */}
+      {total > 0 && (
         <div className="mt-3">
           <VolumeGrid
             totalVolumes={total}
             owned={sel.ownedVolumes}
             onToggle={toggle}
+            paginate
           />
         </div>
       )}
