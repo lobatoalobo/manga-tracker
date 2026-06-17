@@ -162,6 +162,54 @@ export async function searchIvrea(title: string): Promise<string[]> {
     .map((s) => s.slug);
 }
 
+export interface IvreaProxima {
+  slug: string;
+  title: string; // título visible de la tarjeta (sin el "#N")
+  volume: number | null; // "#N" = el tomo que viene
+  isNewSeries: boolean; // "¡NUEVA SERIE!" → debut (chip "próximo a salir")
+  isLastVolume: boolean; // "¡ÚLTIMO TOMO!"
+}
+
+/**
+ * Tarjetas de la página de "Próximas salidas" de Ivrea (/proximas/): la fuente
+ * de verdad de qué viene pronto. Cada tarjeta trae el tomo (#N) y, cuando
+ * corresponde, los flags "¡NUEVA SERIE!" (debut) y "¡ÚLTIMO TOMO!".
+ *
+ * (La sección "REEDICIONES POR TOMO AGOTADO" se parsea aparte cuando armemos las
+ * notificaciones de reedición; su header se repite por fila e intercalado, así
+ * que requiere un parseo dedicado.)
+ *
+ * Ivrea NO está bloqueada en datacenter (a diferencia de Whakoom), así que esto
+ * corre tranquilo desde un cron de Vercel.
+ */
+export async function getIvreaProximas(): Promise<IvreaProxima[]> {
+  const response = await fetch(`${BASE}/proximas/`, {
+    next: { revalidate: 60 * 60 * 6 },
+  });
+  if (!response.ok) return [];
+  const html = await response.text();
+  const $ = cheerio.load(html);
+  const out: IvreaProxima[] = [];
+  const seen = new Set<unknown>();
+  $("a[href*='/titulo/']").each((_, a) => {
+    const slug = ($(a).attr("href") || "").match(/\/titulo\/([^/]+)\//)?.[1];
+    if (!slug) return;
+    const card = $(a).closest(".wpb_column, .vc_column-inner").get(0);
+    if (!card || seen.has(card)) return;
+    seen.add(card);
+    const text = $(card).text().replace(/\s+/g, " ").trim();
+    const volM = text.match(/#\s*(\d{1,4})/);
+    out.push({
+      slug,
+      title: text.split("#")[0].trim() || slug,
+      volume: volM ? Number(volM[1]) : null,
+      isNewSeries: /NUEVA SERIE/i.test(text),
+      isLastVolume: /[ÚU]LTIMO TOMO/i.test(text),
+    });
+  });
+  return out;
+}
+
 // --- helpers ---------------------------------------------------------------
 
 function isTitlePage(response: Response): boolean {
