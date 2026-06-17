@@ -1,126 +1,29 @@
-import Link from "next/link";
 import { browseWorks } from "@/lib/catalog";
-import { formatProximaDate, formatReleaseLabel } from "@/lib/releaseDate";
-import CatalogSearch from "@/components/CatalogSearch";
+import CatalogBrowser, { type BrowseCard } from "@/components/CatalogBrowser";
 
 export const metadata = { title: "Catálogo · Nakama" };
 
 /**
- * Browse/búsqueda del catálogo LOCAL (`Work`), sin AniList. Lee todo de nuestra
- * DB y linkea a /serie/[workId]. Parte del read-path local (paso 2 del rebuild,
- * ver docs/plan-catalogo-local.md). Convive con la home de AniList hasta que
- * apaguemos AniList.
+ * Browse/búsqueda del catálogo LOCAL (`Work`), sin AniList. Carga todas las obras
+ * de una y delega el filtrado (texto + tabs) al cliente, para que la búsqueda sea
+ * INSTANTÁNEA (sin round-trip por tecla).
  */
-export default async function CatalogoPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string; tab?: string; page?: string }>;
-}) {
-  const sp = await searchParams;
-  const q = (sp.q ?? "").trim();
-  const tab =
-    sp.tab === "series" ? "series" : sp.tab === "tomos" ? "tomos" : "az";
-  const perPage = 60;
-  const page = Math.max(1, Number(sp.page) || 1);
-  const { items: works, total } = await browseWorks({ q, tab, take: perPage, page });
-  const pageCount = Math.max(1, Math.ceil(total / perPage));
-
-  const tabHref = (t: string) =>
-    `/catalogo?tab=${t}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
-  const pageHref = (p: number) =>
-    `/catalogo?tab=${tab}${q ? `&q=${encodeURIComponent(q)}` : ""}&page=${p}`;
+export default async function CatalogoPage() {
+  const { items } = await browseWorks({ tab: "az", take: 10000 });
+  const cards: BrowseCard[] = items.map((w) => ({
+    id: w.id,
+    title: w.title,
+    coverImage: w.coverImage,
+    publishers: w.publishers,
+    upcoming: w.upcoming,
+    releaseLabel: w.releaseLabel,
+    next: w.next ? { volume: w.next.volume, date: w.next.date.toISOString() } : null,
+  }));
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-8">
       <h1 className="mb-4 text-2xl font-bold">Catálogo</h1>
-
-      <CatalogSearch tab={tab} initialQ={q} />
-
-      <div className="mb-5 flex gap-2 text-sm">
-        {[
-          { t: "az", label: "A-Z" },
-          { t: "series", label: "🔜 Series nuevas" },
-          { t: "tomos", label: "📅 Próximos tomos" },
-        ].map(({ t, label }) => (
-          <Link
-            key={t}
-            href={tabHref(t)}
-            className={`rounded-full px-3 py-1 transition ${
-              tab === t
-                ? "bg-accent text-white"
-                : "bg-surface-2 text-muted hover:text-foreground"
-            }`}
-          >
-            {label}
-          </Link>
-        ))}
-      </div>
-
-      {works.length === 0 ? (
-        <p className="text-sm text-muted">
-          {q ? `Sin resultados para "${q}".` : "No hay obras."}
-        </p>
-      ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {works.map((w) => (
-            <Link
-              key={w.id}
-              href={`/serie/${w.id}`}
-              className="group rounded-xl border border-border bg-surface p-2 transition hover:border-accent"
-            >
-              <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-surface-2">
-                {w.coverImage ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={w.coverImage}
-                    alt={w.title}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center px-2 text-center text-xs text-muted">
-                    {w.title}
-                  </div>
-                )}
-                {w.next && (
-                  <span className="absolute bottom-1 left-1 right-1 rounded bg-emerald-600/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
-                    📅 {w.next.volume ? `#${w.next.volume} · ` : ""}
-                    {formatProximaDate(w.next.date)}
-                  </span>
-                )}
-                {!w.next && w.upcoming && (
-                  <span className="absolute bottom-1 left-1 right-1 rounded bg-amber-500/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
-                    🔜 {formatReleaseLabel(w.releaseLabel) ?? "Próximo a salir"}
-                  </span>
-                )}
-              </div>
-              <p className="mt-1.5 line-clamp-2 text-sm font-medium">{w.title}</p>
-              <p className="text-xs text-muted">{w.publishers.join(" · ")}</p>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {pageCount > 1 && (
-        <div className="mt-6 flex items-center justify-center gap-4 text-sm">
-          {page > 1 ? (
-            <Link href={pageHref(page - 1)} className="rounded-lg border border-border px-3 py-1.5 transition hover:border-accent">
-              ← Anterior
-            </Link>
-          ) : (
-            <span className="rounded-lg border border-border px-3 py-1.5 text-muted opacity-40">← Anterior</span>
-          )}
-          <span className="text-muted">
-            Página {page} de {pageCount} · {total} obras
-          </span>
-          {page < pageCount ? (
-            <Link href={pageHref(page + 1)} className="rounded-lg border border-border px-3 py-1.5 transition hover:border-accent">
-              Siguiente →
-            </Link>
-          ) : (
-            <span className="rounded-lg border border-border px-3 py-1.5 text-muted opacity-40">Siguiente →</span>
-          )}
-        </div>
-      )}
+      <CatalogBrowser cards={cards} />
     </main>
   );
 }
