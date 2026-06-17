@@ -61,8 +61,24 @@ export async function getIvreaDataBySlug(
   const argentina = parseArgentina(text);
   const japan = matchEstado(text, "JAPÓN");
   const nextMatch = text.match(/PR[ÓO]XIMO TOMO A LA VENTA:\s*#?(\d+)/i);
-  // La ficha lista el autor como "AUTOR: NOMBRE • ..." (separador • o salto).
+  // Autor/artista: la ficha los expone como tags <a rel="tag" href="/autor/…">
+  // y "/artista/…" (historia y dibujo). Es lo más confiable.
+  const people = [
+    ...new Set(
+      $("a[rel='tag']")
+        .filter((_, a) => /\/(autor|artista)\//i.test($(a).attr("href") || ""))
+        .map((_, a) => $(a).text().trim())
+        .get()
+        .filter(Boolean),
+    ),
+  ];
+  // Fallback: "AUTOR: NOMBRE • ..." en texto plano (fichas viejas).
   const authorMatch = text.match(/AUTOR(?:ES)?:\s*([^•·|\n]+)/i);
+  const author = people.length
+    ? people.join(", ")
+    : authorMatch
+      ? authorMatch[1].trim()
+      : null;
   // "NOMBRE ORIGINAL JAPONÉS: TAKOPII NO GENZAI" (o "NOMBRE ORIGINAL: ...").
   const origMatch = text.match(/NOMBRE ORIGINAL[^:]*:\s*([^•·|\n]+)/i);
 
@@ -75,7 +91,7 @@ export async function getIvreaDataBySlug(
       .text()
       .trim(),
     originalTitle: origMatch ? origMatch[1].trim() : null,
-    author: authorMatch ? authorMatch[1].trim() : null,
+    author,
     coverImage,
     synopsis,
     url,
