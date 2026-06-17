@@ -68,10 +68,18 @@ model PushSubscription {
 model NotificationPref {
   userId    String  @id
   newVolume Boolean @default(true) // "tomo nuevo" de tus series
+  reissue   Boolean @default(true) // reedición de un tomo agotado que te falta
   wishlist  Boolean @default(true) // novedades de tus deseados (salió en AR)
   social    Boolean @default(true) // reacciones y comentarios en tu actividad
   friends   Boolean @default(true) // solicitudes / aceptaciones de amistad
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Dedup de las notis disparadas desde IvreaRelease (próximo tomo / reedición):
+// el snapshot se reemplaza en cada corrida, así que la idempotencia vive acá.
+model IvreaReleaseNotified {
+  key       String   @id // "<kind>:<workId>:<volume>:<YYYY-MM-DD>"
+  createdAt DateTime @default(now())
 }
 
 // Notificación in-app (reacción/comentario en tu actividad, etc.).

@@ -11,6 +11,11 @@ const ROWS: { key: keyof NotifPrefs; label: string; desc: string }[] = [
     desc: "Cuando sale un tomo de una serie que coleccionás.",
   },
   {
+    key: "reissue",
+    label: "Reediciones",
+    desc: "Cuando reeditan un tomo agotado que te falta.",
+  },
+  {
     key: "wishlist",
     label: "Novedades de tus deseados",
     desc: "Cuando una serie que deseás sale en edición argentina.",
