@@ -55,11 +55,14 @@ function pageWindow(cur: number, count: number, size = 5): number[] {
 export default function CatalogBrowser({
   cards,
   collected = [],
+  wished = [],
 }: {
   cards: BrowseCard[];
   collected?: number[];
+  wished?: number[];
 }) {
   const mine = useMemo(() => new Set(collected), [collected]);
+  const wish = useMemo(() => new Set(wished), [wished]);
   const init = readUrl();
   const [q, setQ] = useState(init.q);
   const [tab, setTab] = useState<Tab>(init.tab);
@@ -156,12 +159,17 @@ export default function CatalogBrowser({
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {shown.map((w) => {
             const owned = mine.has(w.id);
+            const wishedFlag = !owned && wish.has(w.id);
             return (
             <Link
               key={w.id}
               href={`/serie/${w.id}`}
               className={`group rounded-xl border bg-surface p-2 transition hover:border-accent ${
-                owned ? "border-accent/70 ring-1 ring-accent/40" : "border-border"
+                owned
+                  ? "border-accent/70 ring-1 ring-accent/40"
+                  : wishedFlag
+                    ? "border-rose-400/60 ring-1 ring-rose-400/30"
+                    : "border-border"
               }`}
             >
               <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-surface-2">
@@ -181,6 +189,11 @@ export default function CatalogBrowser({
                 {owned && (
                   <span className="absolute right-1 top-1 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-white">
                     ✓
+                  </span>
+                )}
+                {wishedFlag && (
+                  <span className="absolute right-1 top-1 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    ❤
                   </span>
                 )}
                 {w.next && (
