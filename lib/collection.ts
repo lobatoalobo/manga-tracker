@@ -111,7 +111,8 @@ export async function getSeriesNotifList(
   const items = await getCollectionItems(userId);
   const byId = new Map<number, { title: string; coverImage: string }>();
   for (const i of items) {
-    if (i.anilistId <= 0 || byId.has(i.anilistId)) continue;
+    // Incluye obras locales (id negativo, -workId); solo descartamos el 0 inválido.
+    if (i.anilistId === 0 || byId.has(i.anilistId)) continue;
     byId.set(i.anilistId, {
       // Mismo criterio que la colección (english primero, como displayTitle).
       title: i.title.english || i.title.romaji || i.title.native || "—",
