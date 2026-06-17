@@ -42,6 +42,7 @@ export async function getMangaDex(
   if (!list.length) return null;
 
   const wanted = new Set(targets.map(norm).filter(Boolean));
+  const wantedCompact = new Set([...wanted].map((w) => w.replace(/ /g, "")));
   const year = opts.year ?? null;
 
   const scored = list
@@ -51,7 +52,9 @@ export async function getMangaDex(
         ...Object.values(a.title ?? {}),
         ...(a.altTitles ?? []).flatMap((t: any) => Object.values(t)),
       ].map((x) => norm(String(x)));
-      const exact = names.some((n) => wanted.has(n));
+      const exact = names.some(
+        (n) => wanted.has(n) || wantedCompact.has(n.replace(/ /g, "")),
+      );
       const yearOk = !year || !a.year || Math.abs(Number(a.year) - year) <= 1;
       return { m, a, exact, yearOk };
     })

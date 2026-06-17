@@ -341,8 +341,10 @@ export async function browseWorks(opts: {
   q?: string;
   tab?: "az" | "series" | "tomos";
   take?: number;
-}): Promise<WorkCard[]> {
+  page?: number;
+}): Promise<{ items: WorkCard[]; total: number }> {
   const take = opts.take ?? 60;
+  const page = Math.max(1, opts.page ?? 1);
   const today = new Date(new Date().toISOString().slice(0, 10));
   const q = opts.q?.trim();
 
@@ -380,19 +382,23 @@ export async function browseWorks(opts: {
     where = qFilter ? { AND: [f, qFilter] } : f;
   }
 
-  const works = await prisma.work.findMany({
-    where,
-    orderBy: { normTitle: "asc" },
-    take,
-    select: {
-      id: true,
-      title: true,
-      coverImage: true,
-      upcoming: true,
-      releaseLabel: true,
-      editions: { select: { id: true, publisher: true } },
-    },
-  });
+  const [works, total] = await Promise.all([
+    prisma.work.findMany({
+      where,
+      orderBy: { normTitle: "asc" },
+      skip: (page - 1) * take,
+      take,
+      select: {
+        id: true,
+        title: true,
+        coverImage: true,
+        upcoming: true,
+        releaseLabel: true,
+        editions: { select: { id: true, publisher: true } },
+      },
+    }),
+    prisma.work.count({ where }),
+  ]);
 
   // Próximo tomo por work (para el badge en la card).
   const allEdIds = works.flatMap((w) => w.editions.map((e) => e.id));
@@ -408,7 +414,7 @@ export async function browseWorks(opts: {
     if (r.editionId != null && r.releaseDate && !nextByEd.has(r.editionId))
       nextByEd.set(r.editionId, { volume: r.volume, date: r.releaseDate });
 
-  return works.map((w) => {
+  const items = works.map((w) => {
     let next: { volume: number | null; date: Date } | null = null;
     for (const e of w.editions) {
       const n = nextByEd.get(e.id);
@@ -424,6 +430,7 @@ export async function browseWorks(opts: {
       next,
     };
   });
+  return { items, total };
 }
 
 /**

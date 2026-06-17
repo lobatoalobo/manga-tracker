@@ -13,16 +13,21 @@ export const metadata = { title: "Catálogo · Nakama" };
 export default async function CatalogoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; tab?: string }>;
+  searchParams: Promise<{ q?: string; tab?: string; page?: string }>;
 }) {
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const tab =
     sp.tab === "series" ? "series" : sp.tab === "tomos" ? "tomos" : "az";
-  const works = await browseWorks({ q, tab, take: 80 });
+  const perPage = 60;
+  const page = Math.max(1, Number(sp.page) || 1);
+  const { items: works, total } = await browseWorks({ q, tab, take: perPage, page });
+  const pageCount = Math.max(1, Math.ceil(total / perPage));
 
   const tabHref = (t: string) =>
     `/catalogo?tab=${t}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
+  const pageHref = (p: number) =>
+    `/catalogo?tab=${tab}${q ? `&q=${encodeURIComponent(q)}` : ""}&page=${p}`;
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-8">
@@ -103,6 +108,28 @@ export default async function CatalogoPage({
               <p className="text-xs text-muted">{w.publishers.join(" · ")}</p>
             </Link>
           ))}
+        </div>
+      )}
+
+      {pageCount > 1 && (
+        <div className="mt-6 flex items-center justify-center gap-4 text-sm">
+          {page > 1 ? (
+            <Link href={pageHref(page - 1)} className="rounded-lg border border-border px-3 py-1.5 transition hover:border-accent">
+              ← Anterior
+            </Link>
+          ) : (
+            <span className="rounded-lg border border-border px-3 py-1.5 text-muted opacity-40">← Anterior</span>
+          )}
+          <span className="text-muted">
+            Página {page} de {pageCount} · {total} obras
+          </span>
+          {page < pageCount ? (
+            <Link href={pageHref(page + 1)} className="rounded-lg border border-border px-3 py-1.5 transition hover:border-accent">
+              Siguiente →
+            </Link>
+          ) : (
+            <span className="rounded-lg border border-border px-3 py-1.5 text-muted opacity-40">Siguiente →</span>
+          )}
         </div>
       )}
     </main>
