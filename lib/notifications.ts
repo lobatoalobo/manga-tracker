@@ -18,3 +18,16 @@ export async function markAllRead(userId: string): Promise<void> {
     data: { read: true },
   });
 }
+
+/** Borra una notificación (solo si es del usuario). */
+export async function deleteNotification(
+  userId: string,
+  id: number,
+): Promise<void> {
+  await prisma.notification.deleteMany({ where: { id, userId } });
+}
+
+/** Borra todas las notificaciones del usuario. */
+export async function deleteAllNotifications(userId: string): Promise<void> {
+  await prisma.notification.deleteMany({ where: { userId } });
+}

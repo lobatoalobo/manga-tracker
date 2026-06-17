@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { getNotifications, markAllRead } from "@/lib/notifications";
 import { seriesHref } from "@/lib/url";
 import RefreshOnMount from "@/components/RefreshOnMount";
+import { DeleteNotifButton, ClearAllNotifsButton } from "@/components/NotifActions";
 
 export const metadata = { title: "Notificaciones · Nakama" };
 
@@ -19,6 +20,8 @@ function text(n: { type: string; actorName: string; text: string | null }) {
       return `${n.actorName} aceptó tu solicitud de amistad`;
     case "NEW_VOLUME":
       return `📖 Tomo nuevo de ${n.actorName}`;
+    case "REISSUE":
+      return `♻️ Reedición de ${n.actorName}`;
     default:
       return n.actorName;
   }
@@ -37,12 +40,15 @@ export default async function NotificacionesPage() {
       <RefreshOnMount />
       <div className="mb-6 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Notificaciones</h1>
-        <Link
-          href="/ajustes"
-          className="text-sm text-muted hover:text-foreground"
-        >
-          ⚙️ Preferencias
-        </Link>
+        <div className="flex items-center gap-4">
+          {items.length > 0 && <ClearAllNotifsButton />}
+          <Link
+            href="/ajustes"
+            className="text-sm text-muted hover:text-foreground"
+          >
+            ⚙️ Preferencias
+          </Link>
+        </div>
       </div>
 
       {items.length === 0 ? (
@@ -51,17 +57,17 @@ export default async function NotificacionesPage() {
         <ul className="space-y-2">
           {items.map((n) => {
             const href =
-              n.type === "NEW_VOLUME" && n.anilistId
+              (n.type === "NEW_VOLUME" || n.type === "REISSUE") && n.anilistId
                 ? seriesHref(n.anilistId)
                 : "/amigos";
             return (
               <li
                 key={n.id}
-                className={`rounded-xl border p-4 ${
+                className={`flex items-start gap-2 rounded-xl border p-4 ${
                   n.read ? "border-border bg-surface" : "border-accent bg-surface"
                 }`}
               >
-                <Link href={href} className="block">
+                <Link href={href} className="block min-w-0 flex-1">
                   <p className="text-sm">{text(n)}</p>
                   {n.text && (
                     <p className="mt-1 truncate text-sm text-muted">{n.text}</p>
@@ -73,6 +79,7 @@ export default async function NotificacionesPage() {
                     })}
                   </p>
                 </Link>
+                <DeleteNotifButton id={n.id} />
               </li>
             );
           })}
