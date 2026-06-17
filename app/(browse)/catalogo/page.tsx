@@ -1,3 +1,5 @@
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 import { browseWorks } from "@/lib/catalog";
 import CatalogBrowser, { type BrowseCard } from "@/components/CatalogBrowser";
 
@@ -9,6 +11,7 @@ export const metadata = { title: "Catálogo · Nakama" };
  * INSTANTÁNEA (sin round-trip por tecla).
  */
 export default async function CatalogoPage() {
+  const session = await auth();
   const { items } = await browseWorks({ tab: "az", take: 10000 });
   const cards: BrowseCard[] = items.map((w) => ({
     id: w.id,
@@ -21,10 +24,21 @@ export default async function CatalogoPage() {
     next: w.next ? { volume: w.next.volume, date: w.next.date.toISOString() } : null,
   }));
 
+  // Obras que el usuario ya colecciona (Manga con anilistId negativo = -workId),
+  // para resaltarlas en la grilla.
+  let collected: number[] = [];
+  if (session?.user?.id) {
+    const rows = await prisma.manga.findMany({
+      where: { userId: session.user.id, anilistId: { lt: 0 } },
+      select: { anilistId: true },
+    });
+    collected = rows.map((r) => -r.anilistId);
+  }
+
   return (
     <main className="mx-auto max-w-5xl px-5 py-8">
       <h1 className="mb-4 text-2xl font-bold">Catálogo</h1>
-      <CatalogBrowser cards={cards} />
+      <CatalogBrowser cards={cards} collected={collected} />
     </main>
   );
 }

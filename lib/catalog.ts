@@ -454,7 +454,9 @@ export async function browseWorks(opts: {
       title: w.title,
       coverImage: w.coverImage,
       publishers: [...new Set(w.editions.map((e) => e.publisher))],
-      national: w.editions.some((e) => AR_PUBLISHERS.has(e.publisher)),
+      // Nacional = edición de editorial AR, o un debut/próxima de Ivrea (que aún
+      // no tiene edición cargada pero es nacional).
+      national: w.upcoming || w.editions.some((e) => AR_PUBLISHERS.has(e.publisher)),
       upcoming: w.upcoming,
       releaseLabel: w.releaseLabel,
       next,
