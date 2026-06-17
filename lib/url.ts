@@ -4,11 +4,12 @@
  * links relativos del propio sitio.
  */
 /**
- * Link a la ficha de una serie. Las obras solo-nacionales (sin AniList) usan un
- * id negativo y viven en /nacional/[id]; el resto en /manga/[anilistId].
+ * Link a la ficha de una serie. Las obras del catálogo local (sin AniList) usan
+ * un id negativo (-workId) y viven en /serie/[workId]; el resto en
+ * /manga/[anilistId].
  */
 export function seriesHref(anilistId: number): string {
-  return anilistId < 0 ? `/nacional/${-anilistId}` : `/manga/${anilistId}`;
+  return anilistId < 0 ? `/serie/${-anilistId}` : `/manga/${anilistId}`;
 }
 
 export function externalHref(value: string): string {
