@@ -21,10 +21,10 @@ export default function MangaCard({
   const prog = editionProgress(edition);
   const { owned, total, read, status } = prog;
   const pct = prog.ownedPct;
-  // Las obras solo-nacionales (sin AniList) usan un id negativo y viven en /nacional.
+  // Las obras locales (sin AniList) usan un id negativo (-workId) y viven en /serie.
   const href =
     item.anilistId < 0
-      ? `/nacional/${-item.anilistId}`
+      ? `/serie/${-item.anilistId}`
       : `${hrefBase}/${item.anilistId}`;
 
   return (
