@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { browseWorks } from "@/lib/catalog";
 import { formatProximaDate, formatReleaseLabel } from "@/lib/releaseDate";
+import CatalogSearch from "@/components/CatalogSearch";
 
 export const metadata = { title: "Catálogo · Nakama" };
 
@@ -33,19 +34,7 @@ export default async function CatalogoPage({
     <main className="mx-auto max-w-5xl px-5 py-8">
       <h1 className="mb-4 text-2xl font-bold">Catálogo</h1>
 
-      <form action="/catalogo" className="mb-3 flex gap-2">
-        {tab !== "az" && <input type="hidden" name="tab" value={tab} />}
-        <input
-          type="search"
-          name="q"
-          defaultValue={q}
-          placeholder="Buscar obra…"
-          className="flex-1 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-accent"
-        />
-        <button className="rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition hover:opacity-90">
-          Buscar
-        </button>
-      </form>
+      <CatalogSearch tab={tab} initialQ={q} />
 
       <div className="mb-5 flex gap-2 text-sm">
         {[

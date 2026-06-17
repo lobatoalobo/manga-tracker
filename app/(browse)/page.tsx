@@ -61,7 +61,7 @@ export default async function Home({
   if (loggedIn && session?.user?.id && !query && !params.tab) {
     return (
       <>
-        {admin && (
+        {admin && !ANILIST_OFF && (
           <div className="mx-auto max-w-6xl px-5 pt-5">
             <CatalogRefreshBanner />
           </div>
