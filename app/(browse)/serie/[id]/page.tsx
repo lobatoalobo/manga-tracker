@@ -82,9 +82,10 @@ export default async function SeriePage({
   }
 
   const { title, coverImage, author, synopsis, genres } = work;
-  // Nacional = tiene alguna edición de una editorial argentina (PUB_KEY).
-  // A futuro, las internacionales no caerán acá y no llevarán el chip.
-  const national = work.editions.some((e) => PUB_KEY[e.publisher] != null);
+  // Nacional = edición de editorial argentina (PUB_KEY) o debut/próxima de Ivrea
+  // (sin edición cargada aún). A futuro, las internacionales no llevarán el chip.
+  const national =
+    work.upcoming || work.editions.some((e) => PUB_KEY[e.publisher] != null);
 
   // Colección: id sintético negativo por workId (no choca con ids de AniList).
   const pseudoId = -workId;

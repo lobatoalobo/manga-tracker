@@ -52,7 +52,14 @@ function pageWindow(cur: number, count: number, size = 5): number[] {
  * la restauración de scroll funcionan (volver de una ficha mantiene página y
  * lugar). Mobile-first.
  */
-export default function CatalogBrowser({ cards }: { cards: BrowseCard[] }) {
+export default function CatalogBrowser({
+  cards,
+  collected = [],
+}: {
+  cards: BrowseCard[];
+  collected?: number[];
+}) {
+  const mine = useMemo(() => new Set(collected), [collected]);
   const init = readUrl();
   const [q, setQ] = useState(init.q);
   const [tab, setTab] = useState<Tab>(init.tab);
@@ -147,11 +154,15 @@ export default function CatalogBrowser({ cards }: { cards: BrowseCard[] }) {
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {shown.map((w) => (
+          {shown.map((w) => {
+            const owned = mine.has(w.id);
+            return (
             <Link
               key={w.id}
               href={`/serie/${w.id}`}
-              className="group rounded-xl border border-border bg-surface p-2 transition hover:border-accent"
+              className={`group rounded-xl border bg-surface p-2 transition hover:border-accent ${
+                owned ? "border-accent/70 ring-1 ring-accent/40" : "border-border"
+              }`}
             >
               <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-surface-2">
                 {w.coverImage ? (
@@ -161,6 +172,16 @@ export default function CatalogBrowser({ cards }: { cards: BrowseCard[] }) {
                   <div className="flex h-full items-center justify-center px-2 text-center text-xs text-muted">
                     {w.title}
                   </div>
+                )}
+                {w.national && (
+                  <span className="absolute left-1 top-1 rounded bg-black/60 px-1 py-0.5 text-[10px] font-medium text-white">
+                    🇦🇷
+                  </span>
+                )}
+                {owned && (
+                  <span className="absolute right-1 top-1 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    ✓
+                  </span>
                 )}
                 {w.next && (
                   <span className="absolute bottom-1 left-1 right-1 rounded bg-emerald-600/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
@@ -175,12 +196,12 @@ export default function CatalogBrowser({ cards }: { cards: BrowseCard[] }) {
                 )}
               </div>
               <p className="mt-1.5 line-clamp-2 text-sm font-medium">{w.title}</p>
-              <p className="text-xs text-muted">
-                {w.national && "🇦🇷 "}
-                {w.publishers.join(" · ")}
+              <p className="truncate text-xs text-muted">
+                {w.publishers.length ? w.publishers.join(" · ") : "Ivrea Argentina"}
               </p>
             </Link>
-          ))}
+            );
+          })}
         </div>
       )}
 
