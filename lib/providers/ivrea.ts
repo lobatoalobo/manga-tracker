@@ -163,21 +163,60 @@ export async function searchIvrea(title: string): Promise<string[]> {
 }
 
 export interface IvreaProxima {
-  slug: string;
+  slug: string | null; // null si la tarjeta linkea a /news/ (serie sin ficha aún)
   title: string; // título visible de la tarjeta (sin el "#N")
   volume: number | null; // "#N" = el tomo que viene
-  isNewSeries: boolean; // "¡NUEVA SERIE!" → debut (chip "próximo a salir")
+  isNewSeries: boolean; // "¡NUEVA SERIE!" → debut
   isLastVolume: boolean; // "¡ÚLTIMO TOMO!"
+  isOneShot: boolean; // "¡TOMO ÚNICO!"
+  isReissue: boolean; // bajo "REEDICIONES POR TOMO AGOTADO" (tomo agotado reimpreso)
+  releaseDate: string | null; // "YYYY-MM-DD" del banner de fecha que agrupa la tarjeta
+  coverImage: string | null;
+}
+
+const IVREA_MONTHS: Record<string, number> = {
+  enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
+  julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10,
+  noviembre: 11, diciembre: 12,
+};
+
+/** Parsea un banner de fecha de Ivrea ("19 DE JUNIO", "JULIO", "JULIO 2026"). */
+function parseIvreaBanner(text: string): string | null {
+  const t = text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  let day = 1, month = 0, year: number | undefined;
+  let m = t.match(/^(\d{1,2})\s+de\s+([a-z]+)(?:\s+de\s+(\d{4}))?$/);
+  if (m && IVREA_MONTHS[m[2]]) {
+    day = Number(m[1]); month = IVREA_MONTHS[m[2]]; year = m[3] ? Number(m[3]) : undefined;
+  } else {
+    m = t.match(/^([a-z]+)(?:\s+(\d{4}))?$/);
+    if (!m || !IVREA_MONTHS[m[1]]) return null;
+    month = IVREA_MONTHS[m[1]]; year = m[2] ? Number(m[2]) : undefined;
+  }
+  const now = new Date();
+  if (year == null) {
+    // La página mezcla salidas recientes (pasado próximo, arriba) y futuras.
+    // Elegimos el año (anterior/actual/siguiente) que deje la fecha MÁS CERCA de
+    // hoy, así "29 DE MAYO" no salta a 2027 ni "ENERO" en diciembre al pasado.
+    const y0 = now.getFullYear();
+    year = [y0 - 1, y0, y0 + 1].reduce((best, y) => {
+      const d = Math.abs(new Date(y, month - 1, day).getTime() - now.getTime());
+      const db = Math.abs(new Date(best, month - 1, day).getTime() - now.getTime());
+      return d < db ? y : best;
+    }, y0);
+  }
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 /**
  * Tarjetas de la página de "Próximas salidas" de Ivrea (/proximas/): la fuente
- * de verdad de qué viene pronto. Cada tarjeta trae el tomo (#N) y, cuando
- * corresponde, los flags "¡NUEVA SERIE!" (debut) y "¡ÚLTIMO TOMO!".
- *
- * (La sección "REEDICIONES POR TOMO AGOTADO" se parsea aparte cuando armemos las
- * notificaciones de reedición; su header se repite por fila e intercalado, así
- * que requiere un parseo dedicado.)
+ * de verdad de qué viene pronto y CUÁNDO. La página agrupa las tarjetas bajo
+ * banners de fecha ("19 DE JUNIO"); recorremos en orden y le pegamos a cada
+ * tarjeta la fecha del banner vigente. Hay dos tipos de tarjeta:
+ *  - Lanzamiento normal: <h2> "TÍTULO #N" dentro de .vc_col-sm-2, con flags
+ *    (¡NUEVA SERIE!, ¡ÚLTIMO TOMO!, ¡TOMO ÚNICO!). Las series nuevas / tomo
+ *    único linkean a /news/ (no a /titulo/) → slug=null.
+ *  - Reedición de tomo agotado: <h3 class="aio-icon-title"> "TÍTULO #N" bajo el
+ *    header "REEDICIONES POR TOMO AGOTADO"; siempre con /titulo/ (slug).
  *
  * Ivrea NO está bloqueada en datacenter (a diferencia de Whakoom), así que esto
  * corre tranquilo desde un cron de Vercel.
@@ -190,21 +229,57 @@ export async function getIvreaProximas(): Promise<IvreaProxima[]> {
   const html = await response.text();
   const $ = cheerio.load(html);
   const out: IvreaProxima[] = [];
-  const seen = new Set<unknown>();
-  $("a[href*='/titulo/']").each((_, a) => {
-    const slug = ($(a).attr("href") || "").match(/\/titulo\/([^/]+)\//)?.[1];
-    if (!slug) return;
-    const card = $(a).closest(".wpb_column, .vc_column-inner").get(0);
-    if (!card || seen.has(card)) return;
-    seen.add(card);
-    const text = $(card).text().replace(/\s+/g, " ").trim();
+  let currentDate: string | null = null;
+
+  // h2 (lanzamientos + banners de fecha) y h3.aio-icon-title (reediciones), en
+  // orden de documento, para arrastrar bien la fecha del banner vigente.
+  $("h2, h3.aio-icon-title").each((_, h) => {
+    const text = $(h).text().replace(/\s+/g, " ").trim();
+    if (!text) return;
+    const tag = (h as { tagName?: string }).tagName?.toLowerCase();
     const volM = text.match(/#\s*(\d{1,4})/);
+    const title = text.split("#")[0].trim() || text;
+
+    if (tag === "h3") {
+      // Reedición.
+      const href = $(h).closest("a").attr("href") || "";
+      out.push({
+        slug: href.match(/\/titulo\/([^/]+)\//)?.[1] ?? null,
+        title,
+        volume: volM ? Number(volM[1]) : null,
+        isNewSeries: false,
+        isLastVolume: false,
+        isOneShot: false,
+        isReissue: true,
+        releaseDate: currentDate,
+        coverImage: $(h).closest(".aio-icon-box").find("img").attr("src") ?? null,
+      });
+      return;
+    }
+
+    const col = $(h).closest(".vc_col-sm-2");
+    if (col.length === 0) {
+      // h2 fuera de una tarjeta → puede ser un banner de fecha de sección.
+      const d = parseIvreaBanner(text);
+      if (d) currentDate = d;
+      return;
+    }
+    // h2 dentro de una tarjeta = lanzamiento normal.
+    const sub = col.find(".uvc-sub-heading").text();
+    const href =
+      col.find("a.ubtn-link").attr("href") ||
+      col.find("a[href*='/titulo/']").attr("href") ||
+      "";
     out.push({
-      slug,
-      title: text.split("#")[0].trim() || slug,
+      slug: href.match(/\/titulo\/([^/]+)\//)?.[1] ?? null,
+      title,
       volume: volM ? Number(volM[1]) : null,
-      isNewSeries: /NUEVA SERIE/i.test(text),
-      isLastVolume: /[ÚU]LTIMO TOMO/i.test(text),
+      isNewSeries: /NUEVA SERIE/i.test(sub),
+      isLastVolume: /[ÚU]LTIMO TOMO/i.test(sub),
+      isOneShot: /TOMO [ÚU]NICO/i.test(sub),
+      isReissue: false,
+      releaseDate: currentDate,
+      coverImage: col.find("img.vc_single_image-img").attr("src") ?? null,
     });
   });
   return out;
