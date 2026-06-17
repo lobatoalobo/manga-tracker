@@ -1,7 +1,9 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { ANILIST_OFF } from "@/lib/flags";
 import { getSeries } from "@/lib/collection";
 import { getMangaCore } from "@/lib/getMangaDetails";
 import { workMetaByAnilist, nextIvreaRelease } from "@/lib/catalog";
@@ -38,6 +40,16 @@ export default async function Page({
 
   const { id } = await params;
   const mangaId = Number(id);
+
+  // AniList apagado: no llamamos a AniList. Mandamos a la ficha local por su work.
+  if (ANILIST_OFF) {
+    const ed = await prisma.publisherEdition.findFirst({
+      where: { anilistId: mangaId, workId: { not: null } },
+      select: { workId: true },
+    });
+    if (ed?.workId) redirect(`/serie/${ed.workId}`);
+    notFound();
+  }
 
   // Si el id no existe en AniList (mapeo viejo/roto), 404 en vez de 500.
   const anilist = await getMangaCore(mangaId).catch(() => null);
