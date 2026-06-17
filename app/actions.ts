@@ -62,6 +62,10 @@ import { importWhakoomUrl } from "@/lib/whakoomImport";
 import { runAdminTask } from "@/lib/adminTasks";
 import { setNotifPref, type NotifCategory } from "@/lib/notificationPrefs";
 import {
+  deleteNotification,
+  deleteAllNotifications,
+} from "@/lib/notifications";
+import {
   saveSubscription,
   deleteSubscription,
   sendPushToUser,
@@ -883,11 +887,25 @@ export async function testPushAction() {
 }
 
 /** Preferencias de notificación: activa/desactiva una categoría. */
+const NOTIF_CATEGORIES = ["newVolume", "reissue", "wishlist", "social", "friends"];
+
 export async function setNotifPrefAction(key: string, value: boolean) {
   const userId = await requireUserId();
-  if (key !== "newVolume" && key !== "social" && key !== "friends") return;
+  if (!NOTIF_CATEGORIES.includes(key)) return;
   await setNotifPref(userId, key as NotifCategory, value);
   revalidatePath("/ajustes");
+}
+
+export async function deleteNotificationAction(id: number) {
+  const userId = await requireUserId();
+  await deleteNotification(userId, id);
+  revalidatePath("/notificaciones");
+}
+
+export async function deleteAllNotificationsAction() {
+  const userId = await requireUserId();
+  await deleteAllNotifications(userId);
+  revalidatePath("/notificaciones");
 }
 
 // --- Wishlist ---
