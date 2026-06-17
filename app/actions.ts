@@ -627,7 +627,14 @@ export async function enrichWorkFromWhakoomAction(
   if (!/whakoom\.com\/ediciones\//i.test(url))
     return { ok: false, error: "Pegá una URL de edición de Whakoom (/ediciones/…)." };
   const ed = await getWhakoomEdition(url).catch(() => null);
-  if (!ed) return { ok: false, error: "No se pudo leer esa página de Whakoom." };
+  if (!ed)
+    return {
+      ok: false,
+      // Cloudflare bloquea las IPs de datacenter (Vercel): desde producción esto
+      // siempre falla. Se completa con el job local `scripts/enrich-whakoom.ts`.
+      error:
+        "No se pudo leer Whakoom (bloquea el server). Se completa desde un job local.",
+    };
   const work = await prisma.work.findUnique({
     where: { id: workId },
     select: { author: true, synopsis: true, coverImage: true, anilistId: true },
