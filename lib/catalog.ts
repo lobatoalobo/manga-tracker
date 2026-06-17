@@ -326,19 +326,20 @@ export interface WorkCard {
   coverImage: string | null;
   publishers: string[];
   upcoming: boolean;
+  releaseLabel: string | null;
   next: { volume: number | null; date: Date } | null;
 }
 
 /**
  * Browse/búsqueda del catálogo LOCAL (`Work`), sin AniList. `tab`:
  *  - "az" (default): alfabético.
- *  - "proximos": obras con un próximo tomo (fecha futura en IvreaRelease) o
- *    marcadas "próximo a salir".
+ *  - "series": próximas SERIES (debuts marcados `upcoming`, desde /news/).
+ *  - "tomos": obras con un próximo TOMO (fecha futura en IvreaRelease).
  * `q` filtra por título (título visible o normalizado).
  */
 export async function browseWorks(opts: {
   q?: string;
-  tab?: "az" | "proximos";
+  tab?: "az" | "series" | "tomos";
   take?: number;
 }): Promise<WorkCard[]> {
   const take = opts.take ?? 60;
@@ -357,8 +358,12 @@ export async function browseWorks(opts: {
 
   let where: WorkWhere = qFilter ?? {};
 
-  if (opts.tab === "proximos") {
-    // Obras con un próximo tomo (vía edición→work) o marcadas upcoming.
+  if (opts.tab === "series") {
+    // Próximas SERIES: debuts marcados upcoming (sembrados desde /news/).
+    const f: WorkWhere = { upcoming: true };
+    where = qFilter ? { AND: [f, qFilter] } : f;
+  } else if (opts.tab === "tomos") {
+    // Próximos TOMOS: obras con una salida futura (vía edición→work).
     const rel = await prisma.ivreaRelease.findMany({
       where: { editionId: { not: null }, kind: { not: "reissue" }, releaseDate: { gte: today } },
       select: { editionId: true },
@@ -371,8 +376,8 @@ export async function browseWorks(opts: {
         })
       : [];
     const wIds = [...new Set(eds.map((e) => e.workId as number))];
-    const proximosFilter: WorkWhere = { OR: [{ id: { in: wIds } }, { upcoming: true }] };
-    where = qFilter ? { AND: [proximosFilter, qFilter] } : proximosFilter;
+    const f: WorkWhere = { id: { in: wIds } };
+    where = qFilter ? { AND: [f, qFilter] } : f;
   }
 
   const works = await prisma.work.findMany({
@@ -384,6 +389,7 @@ export async function browseWorks(opts: {
       title: true,
       coverImage: true,
       upcoming: true,
+      releaseLabel: true,
       editions: { select: { id: true, publisher: true } },
     },
   });
@@ -414,6 +420,7 @@ export async function browseWorks(opts: {
       coverImage: w.coverImage,
       publishers: [...new Set(w.editions.map((e) => e.publisher))],
       upcoming: w.upcoming,
+      releaseLabel: w.releaseLabel,
       next,
     };
   });
