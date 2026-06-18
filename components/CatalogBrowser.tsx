@@ -170,7 +170,8 @@ export default function CatalogBrowser({
         className="mb-3 w-full rounded-lg border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-accent"
       />
 
-      <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+      {/* Tabs (fila propia). */}
+      <div className="mb-2 flex flex-wrap gap-2 text-sm">
         {TABS.map(({ t, label }) => (
           <button
             key={t}
@@ -183,13 +184,17 @@ export default function CatalogBrowser({
             {label}
           </button>
         ))}
+      </div>
+
+      {/* Controles de género: fila ESTABLE (no cambia con la cantidad de chips). */}
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
         <select
           value=""
           onChange={(e) => {
             const g = e.target.value;
             if (g && !genres.includes(g)) update({ genres: [...genres, g] });
           }}
-          className="ml-auto rounded-full border border-border bg-surface-2 px-3 py-1 text-sm outline-none focus:border-accent"
+          className="rounded-full border border-border bg-surface-2 px-3 py-1 text-sm outline-none focus:border-accent"
           aria-label="Agregar género"
         >
           <option value="">+ Género…</option>
@@ -201,10 +206,36 @@ export default function CatalogBrowser({
               </option>
             ))}
         </select>
+        {genres.length >= 2 && (
+          <div className="flex shrink-0 overflow-hidden rounded-full border border-border text-xs">
+            {(["any", "all"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => update({ gmode: m })}
+                className={`px-2.5 py-1 transition ${
+                  gmode === m ? "bg-accent text-white" : "text-muted hover:text-foreground"
+                }`}
+              >
+                {m === "any" ? "Cualquiera" : "Todos"}
+              </button>
+            ))}
+          </div>
+        )}
+        {genres.length > 0 && (
+          <button
+            type="button"
+            onClick={() => update({ genres: [] })}
+            className="text-xs text-muted hover:text-foreground"
+          >
+            limpiar
+          </button>
+        )}
       </div>
 
+      {/* Chips seleccionados: fila propia; wrappean sin mover los controles. */}
       {genres.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="mb-4 flex flex-wrap gap-2">
           {genres.map((g) => (
             <button
               key={g}
@@ -215,29 +246,6 @@ export default function CatalogBrowser({
               {g} ✕
             </button>
           ))}
-          {genres.length >= 2 && (
-            <div className="flex overflow-hidden rounded-full border border-border text-xs">
-              {(["all", "any"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => update({ gmode: m })}
-                  className={`px-2.5 py-1 transition ${
-                    gmode === m ? "bg-accent text-white" : "text-muted hover:text-foreground"
-                  }`}
-                >
-                  {m === "all" ? "Todos" : "Cualquiera"}
-                </button>
-              ))}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => update({ genres: [] })}
-            className="text-xs text-muted hover:text-foreground"
-          >
-            limpiar
-          </button>
         </div>
       )}
 
