@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { prisma } from "@/lib/prisma";
+import { inCatalogWhere } from "@/lib/catalog";
 
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://mangas-nakamas.vercel.app";
@@ -24,7 +25,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   const works = await prisma.work
-    .findMany({ select: { id: true, updatedAt: true } })
+    .findMany({ where: inCatalogWhere(), select: { id: true, updatedAt: true } })
     .catch(() => []);
   const series: MetadataRoute.Sitemap = works.map((w) => ({
     url: `${SITE_URL}/serie/${w.id}`,

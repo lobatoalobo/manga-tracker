@@ -12,6 +12,28 @@ export const PUBLISHERS = [
   "Planeta Cómic",
 ] as const;
 
+/**
+ * Editoriales que el catálogo MUESTRA hoy (MVP = solo Ivrea, la fuente más
+ * validada y con fechas/próximos). Las demás (Panini/Ovni argentinas y las
+ * españolas Distrito/Kemuri/Utopía/Larp/Planeta) están en la base pero NO se
+ * listan en el browse/búsqueda hasta sumarlas bien. Ampliar acá cuando toque.
+ */
+export const CATALOG_PUBLISHERS = ["Ivrea Argentina"] as const;
+
+/**
+ * Filtro Prisma: una obra entra al catálogo visible si tiene una edición de una
+ * editorial activa (CATALOG_PUBLISHERS) o es un debut próximo (upcoming, sin
+ * edición aún). Fuente única para browse/búsqueda/autores/sitemap.
+ */
+export function inCatalogWhere(): import("@prisma/client").Prisma.WorkWhereInput {
+  return {
+    OR: [
+      { editions: { some: { publisher: { in: [...CATALOG_PUBLISHERS] } } } },
+      { upcoming: true },
+    ],
+  };
+}
+
 /** Editoriales para el browse: slug de URL ↔ nombre en el índice + label corto. */
 export const EDITORIALS = [
   { slug: "ivrea", publisher: "Ivrea Argentina", label: "Ivrea" },
@@ -329,7 +351,7 @@ export async function workMetaByAnilist(
 /** Índice de autores derivado de `Work.author` (sin tabla aparte). */
 export async function getLocalAuthors(): Promise<{ name: string; count: number }[]> {
   const works = await prisma.work.findMany({
-    where: { author: { not: null } },
+    where: { author: { not: null }, ...inCatalogWhere() },
     select: { author: true },
   });
   const byKey = new Map<string, { name: string; count: number }>();
@@ -351,7 +373,7 @@ export async function getWorksByAuthor(
   name: string,
 ): Promise<{ id: number; title: string; coverImage: string | null }[]> {
   const works = await prisma.work.findMany({
-    where: { author: { contains: name, mode: "insensitive" } },
+    where: { author: { contains: name, mode: "insensitive" }, ...inCatalogWhere() },
     orderBy: { normTitle: "asc" },
     select: { id: true, title: true, coverImage: true },
   });
@@ -371,10 +393,15 @@ export async function searchWorksLite(
   if (term.length < 2) return [];
   const works = await prisma.work.findMany({
     where: {
-      OR: [
-        { title: { contains: term, mode: "insensitive" } },
-        { normTitle: { contains: normalizeTitle(term) } },
-        { originalTitle: { contains: term, mode: "insensitive" } },
+      AND: [
+        {
+          OR: [
+            { title: { contains: term, mode: "insensitive" } },
+            { normTitle: { contains: normalizeTitle(term) } },
+            { originalTitle: { contains: term, mode: "insensitive" } },
+          ],
+        },
+        inCatalogWhere(),
       ],
     },
     orderBy: { normTitle: "asc" },
@@ -426,17 +453,17 @@ export async function browseWorks(opts: {
       }
     : null;
 
-  let where: WorkWhere = qFilter ?? {};
+  // MVP: el catálogo muestra SOLO obras de las editoriales activas (Ivrea) o
+  // debuts próximos de Ivrea (que aún no tienen edición). Excluye obras que solo
+  // existen en otras editoriales (Panini/Ovni/españolas) hasta sumarlas bien.
+  const conds: WorkWhere[] = [inCatalogWhere()];
+  if (qFilter) conds.push(qFilter);
 
   if (opts.tab === "series") {
     // Próximas SERIES: debuts marcados upcoming (sembrados desde /news/). Guard:
     // si ya tiene una edición con tomos, NO es próxima (el flag puede estar viejo
     // entre corridas del reconcile).
-    const f: WorkWhere = {
-      upcoming: true,
-      editions: { none: { volumes: { gt: 0 } } },
-    };
-    where = qFilter ? { AND: [f, qFilter] } : f;
+    conds.push({ upcoming: true, editions: { none: { volumes: { gt: 0 } } } });
   } else if (opts.tab === "tomos") {
     // Próximos TOMOS: obras con una salida futura (vía edición→work).
     const rel = await prisma.ivreaRelease.findMany({
@@ -451,9 +478,10 @@ export async function browseWorks(opts: {
         })
       : [];
     const wIds = [...new Set(eds.map((e) => e.workId as number))];
-    const f: WorkWhere = { id: { in: wIds } };
-    where = qFilter ? { AND: [f, qFilter] } : f;
+    conds.push({ id: { in: wIds } });
   }
+
+  const where: WorkWhere = conds.length === 1 ? conds[0] : { AND: conds };
 
   const [works, total] = await Promise.all([
     prisma.work.findMany({
