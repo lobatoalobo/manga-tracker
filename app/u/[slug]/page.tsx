@@ -39,7 +39,7 @@ export default async function PublicCollectionPage({
   const stats = getCollectionStats(data.items);
 
   return (
-    <main className="mx-auto max-w-6xl px-5 py-8">
+    <main className="mx-auto max-w-5xl px-5 py-8">
       <p className="text-sm text-muted">Colección de</p>
       <h1 className="mb-6 text-2xl font-bold">{data.name}</h1>
 

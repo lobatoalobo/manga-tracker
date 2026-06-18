@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getWorksByAuthor } from "@/lib/catalog";
+import SeriesTile from "@/components/SeriesTile";
 
 export const metadata = { title: "Autor · Nakama" };
 
@@ -26,23 +27,16 @@ export default async function AutorPage({
       </p>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {works.map((w) => (
-          <Link
+          <SeriesTile
             key={w.id}
-            href={`/serie/${w.id}`}
-            className="group rounded-xl border border-border bg-surface p-2 transition hover:border-accent"
-          >
-            <div className="aspect-2/3 overflow-hidden rounded-lg bg-surface-2">
-              {w.coverImage ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={w.coverImage} alt={w.title} className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full items-center justify-center px-2 text-center text-xs text-muted">
-                  {w.title}
-                </div>
-              )}
-            </div>
-            <p className="mt-1.5 line-clamp-2 text-sm font-medium">{w.title}</p>
-          </Link>
+            data={{
+              href: `/serie/${w.id}`,
+              title: w.title,
+              coverImage: w.coverImage,
+              national: true,
+              publishers: ["Ivrea Argentina"],
+            }}
+          />
         ))}
       </div>
     </main>

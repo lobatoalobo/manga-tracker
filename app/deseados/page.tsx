@@ -4,9 +4,9 @@ import { auth } from "@/auth";
 import { getWishlist } from "@/lib/wishlist";
 import { nationalEditionIds } from "@/lib/getMangaDetails";
 import { nationalCoversByAnilist, upcomingForIds } from "@/lib/catalog";
-import { crumbSearch } from "@/lib/crumb";
 import { seriesHref } from "@/lib/url";
 import RemoveWishButton from "@/components/RemoveWishButton";
+import SeriesTile from "@/components/SeriesTile";
 
 export const metadata = { title: "Deseados · Nakama" };
 
@@ -49,42 +49,17 @@ export default async function DeseadosPage() {
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {items.map((w) => (
-            <div
+            <SeriesTile
               key={w.id}
-              className="group relative overflow-hidden rounded-xl border border-border bg-surface transition hover:border-accent"
-            >
-              <RemoveWishButton anilistId={w.anilistId} />
-              <Link href={seriesHref(w.anilistId)} className="block">
-                <div className="relative aspect-2/3 w-full overflow-hidden bg-surface-2">
-                  {upcoming.has(w.anilistId) && (
-                    <span className="absolute left-2 top-2 z-10 rounded-full bg-amber-500/90 px-2 py-0.5 text-[10px] font-semibold text-white">
-                      🔜 Pronto
-                    </span>
-                  )}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={nationalCovers.get(w.anilistId) ?? w.coverImage}
-                    alt={w.title}
-                    className="h-full w-full object-cover transition group-hover:scale-105"
-                  />
-                </div>
-                <div className="p-3">
-                  <h3 className="truncate text-sm font-semibold" title={w.title}>
-                    {w.title}
-                  </h3>
-                </div>
-              </Link>
-              {nationalIds.has(w.anilistId) && (
-                <a
-                  href={crumbSearch(w.title)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block border-t border-border px-3 py-2 text-center text-xs text-accent transition hover:bg-accent/10"
-                >
-                  🛒 Comprar en Crumb
-                </a>
-              )}
-            </div>
+              data={{
+                href: seriesHref(w.anilistId),
+                title: w.title,
+                coverImage: nationalCovers.get(w.anilistId) ?? w.coverImage,
+                national: nationalIds.has(w.anilistId),
+                upcoming: upcoming.has(w.anilistId),
+              }}
+              overlay={<RemoveWishButton anilistId={w.anilistId} />}
+            />
           ))}
         </div>
       )}

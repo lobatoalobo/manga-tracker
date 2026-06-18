@@ -34,7 +34,7 @@ export default async function CollectionPage() {
   );
 
   return (
-    <main className="mx-auto max-w-6xl px-5 py-8">
+    <main className="mx-auto max-w-5xl px-5 py-8">
       <h1 className="mb-6 text-2xl font-bold">Mi colección</h1>
 
       <ShareToggle initialSlug={shareSlug} />

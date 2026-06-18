@@ -529,7 +529,15 @@ export async function browseWorks(opts: {
       id: w.id,
       title: w.title,
       coverImage: w.coverImage,
-      publishers: [...new Set(w.editions.map((e) => e.publisher))],
+      publishers: [
+        ...new Set(
+          w.editions
+            .filter((e) =>
+              (CATALOG_PUBLISHERS as readonly string[]).includes(e.publisher),
+            )
+            .map((e) => e.publisher),
+        ),
+      ],
       // Nacional = edición de editorial AR, o un debut/próxima de Ivrea (que aún
       // no tiene edición cargada pero es nacional).
       national: isUpcoming || w.editions.some((e) => AR_PUBLISHERS.has(e.publisher)),
