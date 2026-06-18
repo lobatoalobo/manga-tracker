@@ -6,7 +6,11 @@ import { seriesHref } from "@/lib/url";
 
 export const metadata = { title: "Para comprar · Nakama" };
 
-export default async function FaltantesPage() {
+export default async function FaltantesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const session = await auth();
   if (!session?.user?.id) redirect("/");
 
@@ -15,22 +19,46 @@ export default async function FaltantesPage() {
     getWishlistToBuy(session.user.id),
   ]);
   const totalMissing = items.reduce((s, i) => s + i.missing.length, 0);
+  const tab = (await searchParams).tab === "deseados" ? "deseados" : "faltan";
+
+  const tabs = [
+    { t: "faltan", label: `Te faltan${items.length ? ` (${items.length})` : ""}` },
+    {
+      t: "deseados",
+      label: `Deseados que salieron${wishlistBuy.length ? ` (${wishlistBuy.length})` : ""}`,
+    },
+  ];
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-8">
       <h1 className="mb-1 text-2xl font-bold">Para comprar</h1>
-      <p className="mb-6 text-sm text-muted">
-        Los tomos que te faltan de tus ediciones nacionales, con dónde
-        comprarlos.
+      <p className="mb-4 text-sm text-muted">
+        Los tomos que te faltan de tus ediciones nacionales y tus deseados ya
+        disponibles, con dónde comprarlos.
       </p>
 
-      {items.length === 0 && wishlistBuy.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border bg-surface p-10 text-center text-sm text-muted">
-          ¡Estás al día! No te falta ningún tomo de tus ediciones nacionales 🎉
-        </p>
-      ) : (
-        <>
-          {items.length > 0 && (
+      <div className="mb-6 flex gap-2 text-sm">
+        {tabs.map(({ t, label }) => (
+          <Link
+            key={t}
+            href={`/faltantes?tab=${t}`}
+            className={`rounded-full px-3 py-1 transition ${
+              tab === t
+                ? "bg-accent text-white"
+                : "bg-surface-2 text-muted hover:text-foreground"
+            }`}
+          >
+            {label}
+          </Link>
+        ))}
+      </div>
+
+      {tab === "faltan" ? (
+        items.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-border bg-surface p-10 text-center text-sm text-muted">
+            ¡Estás al día! No te falta ningún tomo de tus ediciones nacionales 🎉
+          </p>
+        ) : (
           <>
           <p className="mb-4 text-sm text-muted">
             Te faltan <b className="text-foreground">{totalMissing}</b> tomos en{" "}
@@ -111,17 +139,17 @@ export default async function FaltantesPage() {
             ))}
           </ul>
           </>
-          )}
-
-          {wishlistBuy.length > 0 && (
-            <section className={items.length > 0 ? "mt-8" : ""}>
-              <h2 className="mb-1 text-lg font-semibold">
-                Deseados que ya salieron 🎉
-              </h2>
-              <p className="mb-4 text-sm text-muted">
-                Series de tu lista de deseados ya disponibles en Argentina.
-              </p>
-              <ul className="space-y-3">
+        )
+      ) : wishlistBuy.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border bg-surface p-10 text-center text-sm text-muted">
+          Ninguno de tus deseados salió todavía. Te avisamos cuando pase 📬
+        </p>
+      ) : (
+        <>
+          <p className="mb-4 text-sm text-muted">
+            Series de tu lista de deseados ya disponibles en Argentina.
+          </p>
+          <ul className="space-y-3">
                 {wishlistBuy.map((w) => (
                   <li
                     key={w.anilistId}
@@ -159,8 +187,6 @@ export default async function FaltantesPage() {
                   </li>
                 ))}
               </ul>
-            </section>
-          )}
         </>
       )}
     </main>
