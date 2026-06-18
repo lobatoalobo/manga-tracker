@@ -7,7 +7,7 @@ export interface EditionProgress {
   total: number;
   read: number;
   ownedPct: number; // tenés / total (completitud)
-  readPct: number; // leídos / tenés (avance de lectura)
+  readPct: number; // leídos / total (avance de lectura sobre la serie)
   status: CollectionStatus;
 }
 
@@ -26,13 +26,15 @@ export function editionProgress(e: {
       : e.readingStatus === "READ"
         ? total || owned
         : 0;
-  const read = Math.min(Math.max(0, rawRead), owned);
+  // La lectura se topa en el TOTAL de la serie (podés leer online tomos que no
+  // tenés, pero no más que los que existen). NO se topa en lo que tenés (owned).
+  const read = Math.min(Math.max(0, rawRead), total || rawRead);
   return {
     owned,
     total,
     read,
     ownedPct: total > 0 ? Math.min(100, Math.floor((owned / total) * 100)) : 0,
-    readPct: owned > 0 ? Math.min(100, Math.floor((read / owned) * 100)) : 0,
+    readPct: total > 0 ? Math.min(100, Math.floor((read / total) * 100)) : 0,
     status: total > 0 ? (owned >= total ? "al-dia" : "incompleta") : "unknown",
   };
 }
@@ -57,7 +59,7 @@ export function getCollectionStats(items: CollectionItem[]) {
   const percentage =
     totalVolumes > 0 ? Math.floor((ownedVolumes / totalVolumes) * 100) : 0;
   const readPercentage =
-    ownedVolumes > 0 ? Math.floor((readVolumes / ownedVolumes) * 100) : 0;
+    totalVolumes > 0 ? Math.floor((readVolumes / totalVolumes) * 100) : 0;
 
   return {
     series,

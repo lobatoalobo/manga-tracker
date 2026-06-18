@@ -65,9 +65,12 @@ export default function ReadingControl({
             min={1}
             max={total || undefined}
             value={volume ?? ""}
-            onChange={(e) =>
-              persist("READING", e.target.value ? Number(e.target.value) : null)
-            }
+            onChange={(e) => {
+              if (!e.target.value) return persist("READING", null);
+              // Podés leer online más de lo que tenés, pero no más que el total.
+              const n = Math.max(1, Number(e.target.value));
+              persist("READING", total > 0 ? Math.min(n, total) : n);
+            }}
             className="w-20 rounded-lg border border-border bg-surface-2 px-2 py-1 text-foreground outline-none focus:border-accent"
           />
           {total > 0 && <span>de {total}</span>}

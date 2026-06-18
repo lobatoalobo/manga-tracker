@@ -4,6 +4,7 @@ import Link from "next/link";
 import { getNotifPrefs } from "@/lib/notificationPrefs";
 import NotifPrefsToggles from "@/components/NotifPrefsToggles";
 import PushToggle from "@/components/PushToggle";
+import DeleteAccount from "@/components/DeleteAccount";
 
 export const metadata = { title: "Ajustes · Nakama" };
 
@@ -41,6 +42,32 @@ export default async function AjustesPage() {
       <div className="mt-4">
         <PushToggle />
       </div>
+
+      <h2 className="mt-10 mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
+        Cuenta
+      </h2>
+      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
+        <li>
+          <Link
+            href="/privacidad"
+            className="flex items-center justify-between px-4 py-3 text-sm transition hover:bg-surface-2"
+          >
+            <span>Política de privacidad</span>
+            <span className="text-muted">›</span>
+          </Link>
+        </li>
+        <li>
+          <Link
+            href="/terminos"
+            className="flex items-center justify-between px-4 py-3 text-sm transition hover:bg-surface-2"
+          >
+            <span>Términos y condiciones</span>
+            <span className="text-muted">›</span>
+          </Link>
+        </li>
+      </ul>
+
+      <DeleteAccount />
     </main>
   );
 }
