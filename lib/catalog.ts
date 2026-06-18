@@ -320,6 +320,38 @@ export async function workMetaByAnilist(
   };
 }
 
+/** Índice de autores derivado de `Work.author` (sin tabla aparte). */
+export async function getLocalAuthors(): Promise<{ name: string; count: number }[]> {
+  const works = await prisma.work.findMany({
+    where: { author: { not: null } },
+    select: { author: true },
+  });
+  const byKey = new Map<string, { name: string; count: number }>();
+  for (const w of works) {
+    for (const raw of (w.author ?? "").split(/,|&| y /i)) {
+      const name = raw.trim();
+      if (name.length < 2) continue;
+      const key = name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      const ex = byKey.get(key);
+      if (ex) ex.count++;
+      else byKey.set(key, { name, count: 1 });
+    }
+  }
+  return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Obras de un autor (match por substring en `Work.author`). */
+export async function getWorksByAuthor(
+  name: string,
+): Promise<{ id: number; title: string; coverImage: string | null }[]> {
+  const works = await prisma.work.findMany({
+    where: { author: { contains: name, mode: "insensitive" } },
+    orderBy: { normTitle: "asc" },
+    select: { id: true, title: true, coverImage: true },
+  });
+  return works;
+}
+
 /**
  * Búsqueda liviana de obras locales (para pickers/autocomplete). Devuelve el id
  * como NEGATIVO (-workId) para que el resto del sistema lo trate como obra local
