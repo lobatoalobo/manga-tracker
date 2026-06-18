@@ -69,7 +69,13 @@ export default async function CatalogoPage({
   return (
     <main className="mx-auto max-w-5xl px-5 py-8">
       <h1 className="mb-4 text-2xl font-bold">Catálogo</h1>
-      <CatalogBrowser cards={cards} collected={collected} wished={wished} initial={initial} />
+      <CatalogBrowser
+        cards={cards}
+        collected={collected}
+        wished={wished}
+        canWish={!!session?.user?.id}
+        initial={initial}
+      />
     </main>
   );
 }
