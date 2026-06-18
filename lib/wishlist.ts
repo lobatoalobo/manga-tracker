@@ -24,9 +24,15 @@ export async function addWish(
 ) {
   // Si la serie YA tiene edición AR disponible al agregarla a deseados, no
   // corresponde alertar "salió en Argentina" (ya lo sabés) → marcamos notificado.
+  // Obras locales = anilistId negativo (-workId); el resto, por anilistId.
   const alreadyAvailable =
     (await prisma.publisherEdition.count({
-      where: { anilistId: item.anilistId, volumes: { gt: 0 } },
+      where: {
+        volumes: { gt: 0 },
+        ...(item.anilistId < 0
+          ? { workId: -item.anilistId }
+          : { anilistId: item.anilistId }),
+      },
     })) > 0;
   await prisma.wishlistItem.upsert({
     where: { userId_anilistId: { userId, anilistId: item.anilistId } },

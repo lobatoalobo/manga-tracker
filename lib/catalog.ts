@@ -261,12 +261,12 @@ export async function upcomingByAnilist(ids: number[]): Promise<Set<number>> {
 
 /**
  * Set de ids "próximo a salir", en el MISMO espacio de ids que la colección:
- * positivos = anilistId (vía edición), negativos = -editionId (obras nacionales).
+ * positivos = anilistId (vía edición), negativos = -workId (catálogo local).
  */
 export async function upcomingForIds(ids: number[]): Promise<Set<number>> {
   const out = new Set<number>();
   const pos = ids.filter((i) => i > 0);
-  const negEditionIds = ids.filter((i) => i < 0).map((i) => -i);
+  const negWorkIds = ids.filter((i) => i < 0).map((i) => -i);
   if (pos.length) {
     const rows = await prisma.publisherEdition.findMany({
       where: { anilistId: { in: pos }, work: { upcoming: true } },
@@ -274,9 +274,10 @@ export async function upcomingForIds(ids: number[]): Promise<Set<number>> {
     });
     for (const r of rows) if (r.anilistId != null) out.add(r.anilistId);
   }
-  if (negEditionIds.length) {
-    const rows = await prisma.publisherEdition.findMany({
-      where: { id: { in: negEditionIds }, work: { upcoming: true } },
+  if (negWorkIds.length) {
+    // Negativos = -workId: el flag upcoming vive en el Work, no en la edición.
+    const rows = await prisma.work.findMany({
+      where: { id: { in: negWorkIds }, upcoming: true },
       select: { id: true },
     });
     for (const r of rows) out.add(-r.id);

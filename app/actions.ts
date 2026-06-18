@@ -88,7 +88,7 @@ import {
 } from "@/lib/social";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimit, RL } from "@/lib/rateLimit";
-import { safeHttpUrl } from "@/lib/url";
+import { safeHttpUrl, seriesHref } from "@/lib/url";
 
 export async function addEditionAction(input: AddEditionInput) {
   const userId = await requireUserId();
@@ -108,7 +108,7 @@ export async function removeEditionAction(anilistId: number, key: string) {
   const userId = await requireUserId();
   await removeEdition(userId, anilistId, key);
   revalidatePath("/collection");
-  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath(seriesHref(anilistId));
 }
 
 export async function toggleVolumeAction(
@@ -119,7 +119,7 @@ export async function toggleVolumeAction(
   const userId = await requireUserId();
   await toggleVolume(userId, anilistId, key, volume);
   revalidatePath("/collection");
-  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath(seriesHref(anilistId));
 }
 
 export async function setAllVolumesAction(
@@ -140,7 +140,7 @@ export async function setAllVolumesAction(
       });
   }
   revalidatePath("/collection");
-  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath(seriesHref(anilistId));
 }
 
 export async function setVolumesUpToAction(
@@ -151,7 +151,7 @@ export async function setVolumesUpToAction(
   const userId = await requireUserId();
   await setVolumesUpTo(userId, anilistId, key, n);
   revalidatePath("/collection");
-  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath(seriesHref(anilistId));
 }
 
 export async function setReadingAction(
@@ -173,7 +173,7 @@ export async function setReadingAction(
       });
   }
   revalidatePath("/collection");
-  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath(seriesHref(anilistId));
 }
 
 async function mangaInfo(userId: string, anilistId: number) {
@@ -210,7 +210,7 @@ export async function setSeriesMutedAction(anilistId: number, muted: boolean) {
       update: {},
     });
   else await prisma.seriesNotifMute.deleteMany({ where: { userId, anilistId } });
-  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath(seriesHref(anilistId));
 }
 
 /** Marca (o desmarca) la serie preferida del usuario (1 por usuario). */
@@ -546,7 +546,7 @@ export async function flushEditionsCacheAction() {
 export async function setCrumbQueryAction(anilistId: number, query: string) {
   await assertAdmin();
   await setCrumbQuery(anilistId, query);
-  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath(seriesHref(anilistId));
 }
 
 /**
@@ -597,7 +597,7 @@ export async function addSeriesEditionAction(
     .deleteMany({ where: { anilistId, publisher } })
     .catch(() => {});
   await invalidateEditionsCache(anilistId);
-  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath(seriesHref(anilistId));
   revalidatePath("/admin/mapeos");
   return { ok: true as const };
 }
@@ -615,7 +615,7 @@ export async function updateSeriesEditionAction(
   await assertAdmin();
   await updatePublisherEditionFields(editionId, data);
   await invalidateEditionsCache(anilistId);
-  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath(seriesHref(anilistId));
   revalidatePath("/admin/mapeos");
   return { ok: true as const };
 }
@@ -633,7 +633,7 @@ export async function deleteSeriesEditionAction(
   await assertAdmin();
   await deletePublisherEdition(editionId);
   await invalidateEditionsCache(anilistId);
-  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath(seriesHref(anilistId));
   revalidatePath("/admin/mapeos");
   return { ok: true as const };
 }
@@ -716,7 +716,7 @@ export async function setWorkUpcomingAction(
       data,
     });
   await invalidateEditionsCache(anilistId);
-  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath(seriesHref(anilistId));
   return { ok: true as const };
 }
 
@@ -730,7 +730,7 @@ export async function setEditionUrlAction(
   await setEditionUrl(editionId, url);
   // El link sale de la caché de ediciones (no en vivo): hay que invalidarla.
   await invalidateEditionsCache(anilistId);
-  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath(seriesHref(anilistId));
 }
 
 /**
@@ -748,7 +748,7 @@ export async function unlinkEditionAction(anilistId: number, publisher: string) 
   });
   await prisma.publisherEdition.deleteMany({ where: { anilistId, publisher } });
   await invalidateEditionsCache(anilistId);
-  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath(seriesHref(anilistId));
   revalidatePath("/admin/mapeos");
   return { ok: true as const };
 }
@@ -760,7 +760,7 @@ export async function relinkEditionAction(anilistId: number, publisher: string) 
     .delete({ where: { anilistId_publisher: { anilistId, publisher } } })
     .catch(() => {});
   await invalidateEditionsCache(anilistId);
-  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath(seriesHref(anilistId));
   return { ok: true as const };
 }
 
@@ -1000,14 +1000,14 @@ export async function toggleWishAction(item: {
     await addWish(userId, item);
   }
   revalidatePath("/deseados");
-  revalidatePath(`/manga/${item.anilistId}`);
+  revalidatePath(seriesHref(item.anilistId));
 }
 
 export async function removeWishAction(anilistId: number) {
   const userId = await requireUserId();
   await removeWish(userId, anilistId);
   revalidatePath("/deseados");
-  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath(seriesHref(anilistId));
 }
 
 // --- Notas / puntaje ---
@@ -1022,7 +1022,7 @@ export async function setNoteAction(
     rating: rating && rating > 0 ? rating : null,
     note: note?.trim() || null,
   });
-  revalidatePath(`/manga/${anilistId}`);
+  revalidatePath(seriesHref(anilistId));
 }
 
 // --- Social (amigos / actividad) ---

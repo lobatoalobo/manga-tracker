@@ -80,6 +80,18 @@ Severidad: 🔴 Crítico · 🟠 Alto · 🟡 Medio · 🔵 Bajo. Estado: ✅ co
 
 ---
 
+## 7. Flujo local/Ivrea (revisión pre-cutover ANILIST_OFF)
+
+| # | Sev | Estado | Hallazgo | Ubicación |
+|---|-----|--------|----------|-----------|
+| L1 | 🟠 | ✅ | `upcomingForIds` trataba los negativos como `-editionId`, pero colección/deseados usan `-workId` → badge "🔜 Pronto" roto/cruzado para obras locales. Ahora consulta `Work` por id. | `lib/catalog.ts` |
+| L2 | 🟡 | ✅ | `addWish` calculaba `alreadyAvailable` por `anilistId` positivo → para obras locales nunca matcheaba → `notifiedAvailable=false` → riesgo de noti falsa "salió en AR". Ahora ramifica por `workId` si es local. | `lib/wishlist.ts` |
+| L3 | 🔵 | ✅ | Varias acciones revalidaban `/manga/${anilistId}` → para locales (negativo) apuntaban a `/manga/-id` inexistente. Cambiado a `seriesHref()` (correcto para ambos signos). | `app/actions.ts` |
+| L4 | 🟡 | ⬜ | Catálogo `take: 10000` sin guardia: si supera 10k obras, las extra desaparecen del browse sin aviso (= P1; decisión de paginar). | `app/(browse)/catalogo/page.tsx` |
+| L5 | 🔵 | ⬜ | Preventa: si el cron `ivrea-proximas` falla, los chips `upcoming` quedan congelados (no hay expiración por fecha en read-time). Riesgo dependiente del cron. | `lib/ivreaProximas.ts` |
+
+**Verificado OK**: colección con obras locales (add/quitar/marcar/cap lectura) por `userId_anilistId`, links a `/serie/[workId]`, "para comprar"/deseados ramifican por workId, filtro de género (obras sin género no rompen), sin llamadas residuales a AniList en el path de usuario.
+
 ## Resumen de prioridades pendientes (post-fixes de hoy)
 
 1. ✅ ~~Marketing viral: Open Graph en /serie y /u~~ — HECHO (M1–M3, M5).
