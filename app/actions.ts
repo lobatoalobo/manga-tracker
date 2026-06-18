@@ -88,6 +88,7 @@ import {
 } from "@/lib/social";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimit, RL } from "@/lib/rateLimit";
+import { safeHttpUrl } from "@/lib/url";
 
 export async function addEditionAction(input: AddEditionInput) {
   const userId = await requireUserId();
@@ -247,6 +248,36 @@ export async function resolveReportAction(
   revalidatePath("/admin/reportes");
 }
 
+/**
+ * Valida un conjunto de URLs ingresadas por la comunidad. Las vacías quedan en
+ * null; las que tienen valor deben ser http(s) válidas (ver `safeHttpUrl`). Si
+ * alguna es inválida devuelve un error apuntando al campo, para que el usuario
+ * lo corrija en vez de guardar basura o un esquema peligroso.
+ */
+function validateUrls(
+  fields: [value: string | null | undefined, label: string][],
+):
+  | { ok: true; values: (string | null)[] }
+  | { ok: false; error: string } {
+  const values: (string | null)[] = [];
+  for (const [value, label] of fields) {
+    const raw = value?.trim();
+    if (!raw) {
+      values.push(null);
+      continue;
+    }
+    const safe = safeHttpUrl(raw);
+    if (!safe) {
+      return {
+        ok: false,
+        error: `El enlace de ${label} no es válido. Usá una dirección web (https://…).`,
+      };
+    }
+    values.push(safe);
+  }
+  return { ok: true, values };
+}
+
 // --- Tiendas ---
 
 function readStore(formData: FormData): StoreInput {
@@ -271,6 +302,14 @@ export async function submitStoreAction(_prev: unknown, formData: FormData) {
 
   const rl = await enforceRateLimit("submitStore", RL.submitStore);
   if (!rl.ok) return { ok: false as const, error: rl.error };
+
+  const urls = validateUrls([
+    [input.website, "sitio web"],
+    [input.social, "red social"],
+  ]);
+  if (!urls.ok) return { ok: false as const, error: urls.error };
+  input.website = urls.values[0];
+  input.social = urls.values[1];
 
   await createStore(input, { status: "PENDING", submittedBy: userId });
   revalidatePath("/admin/tiendas");
@@ -326,6 +365,16 @@ export async function submitIndieWorkAction(
   }
   const rl = await enforceRateLimit("submitIndie", RL.submitIndie);
   if (!rl.ok) return { ok: false as const, error: rl.error };
+
+  const urls = validateUrls([
+    [input.coverUrl, "portada"],
+    [input.buyUrl, "compra"],
+    [input.social, "red social"],
+  ]);
+  if (!urls.ok) return { ok: false as const, error: urls.error };
+  input.coverUrl = urls.values[0];
+  input.buyUrl = urls.values[1];
+  input.social = urls.values[2];
 
   await createIndieWork(input, { status: "PENDING", submittedBy: userId });
   revalidatePath("/admin/independientes");

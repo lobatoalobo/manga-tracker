@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { getApprovedIndieWorks } from "@/lib/indie";
 import PublishIndieWork from "@/components/PublishIndieWork";
-import { externalHref } from "@/lib/url";
+import { externalHref, safeHttpUrl } from "@/lib/url";
 
 export const metadata = { title: "Autores independientes · Nakama" };
 
@@ -50,11 +50,11 @@ function IndieCard({
 }) {
   return (
     <div className="flex gap-4 rounded-xl border border-border bg-surface p-4">
-      {work.coverUrl && (
+      {safeHttpUrl(work.coverUrl) && (
         <div className="aspect-2/3 h-32 shrink-0 overflow-hidden rounded-lg bg-surface-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={work.coverUrl}
+            src={safeHttpUrl(work.coverUrl)!}
             alt={work.title}
             className="h-full w-full object-cover"
           />
