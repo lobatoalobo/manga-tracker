@@ -5,7 +5,26 @@ import { prisma } from "@/lib/prisma";
 import { displayTitle } from "@/lib/title";
 import VolumeGrid from "@/components/VolumeGrid";
 
-export const metadata = { title: "Colección · Nakama" };
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string; id: string }>;
+}): Promise<import("next").Metadata> {
+  const { slug, id } = await params;
+  const data = await getPublicSeries(slug, Number(id));
+  if (!data) return { title: "Colección" };
+  const t = displayTitle(data.series.title);
+  const desc = `${t} en la colección de ${data.ownerName} · Nakama.`;
+  const images = data.series.coverImage
+    ? [{ url: data.series.coverImage }]
+    : undefined;
+  return {
+    title: t,
+    description: desc,
+    openGraph: { title: `${t} · Nakama`, description: desc, images },
+    twitter: { title: `${t} · Nakama`, description: desc, images },
+  };
+}
 
 export default async function PublicSeriesPage({
   params,

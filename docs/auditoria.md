@@ -51,11 +51,11 @@ Severidad: 🔴 Crítico · 🟠 Alto · 🟡 Medio · 🔵 Bajo. Estado: ✅ co
 
 | # | Sev | Estado | Hallazgo | Nota |
 |---|-----|--------|----------|------|
-| M1 | 🟠 | ⬜ | **Sin Open Graph / Twitter card en ningún lado.** Compartir una serie o colección en WhatsApp/Twitter no muestra preview → mata el viral (clave para crecer en AR). | Agregar `opengraph-image` en `/serie/[id]` y `/u/[slug]`. |
-| M2 | 🟠 | ⬜ | `/serie/[id]` usa `metadata` **estática** ("Serie · Nakama") → todas las fichas iguales en Google. | `generateMetadata` con `Work.title` + descripción + og:image (portada). |
-| M3 | 🟡 | ⬜ | Home `/` sin `metadata` propia (cae a la del layout). | title/description únicos. |
+| M1 | 🟠 | ✅ | **Open Graph + Twitter card** agregados: `/serie/[id]` y `/u/[slug]` (+ `/u/[slug]/[id]`) exponen og/twitter con la **portada real** como imagen → preview al compartir en WhatsApp/Twitter. (Imagen *compuesta* con ImageResponse queda como polish futuro; se evitó por riesgo de fuentes.) | `app/(browse)/serie/[id]`, `app/u/[slug]` |
+| M2 | 🟠 | ✅ | `/serie/[id]` ahora usa `generateMetadata` dinámica (título de la obra + descripción desde sinopsis + og:image). | idem |
+| M3 | 🟡 | ✅ | `metadataBase` + título/descripción por defecto en el layout (la home hereda un title propio y bueno). | `app/layout.tsx` |
 | M4 | 🟡 | ⬜ | Logged-out cae directo al catálogo, **sin landing/hero** con propuesta de valor + CTA de login. | Hero en home pública. |
-| M5 | 🔵 | ⬜ | No hay `robots.txt` ni `sitemap.ts`. | `app/sitemap.ts` con rutas públicas + series. |
+| M5 | 🔵 | ✅ | Agregados `app/robots.ts` (bloquea privado/admin/api) y `app/sitemap.ts` (rutas públicas + todas las series). | — |
 
 **Verificado OK:** PWA instalable; **íconos PWA existen** (`app/icons/192|512/route.ts` — el reporte automático que decía que faltaban era **incorrecto**); `app/manifest.ts` completo; Sentry integrado.
 
@@ -82,11 +82,11 @@ Severidad: 🔴 Crítico · 🟠 Alto · 🟡 Medio · 🔵 Bajo. Estado: ✅ co
 
 ## Resumen de prioridades pendientes (post-fixes de hoy)
 
-1. 🟠 **Marketing viral**: Open Graph en /serie y /u (M1, M2) — alto ROI para crecer.
+1. ✅ ~~Marketing viral: Open Graph en /serie y /u~~ — HECHO (M1–M3, M5).
 2. 🟠 **Resiliencia**: `app/error.tsx` + `not-found.tsx` (E1, E2).
 3. 🟠 **Escala**: paginar /catalogo (P1) + batch N+1 de deseados (P2).
 4. 🟡 **Accesibilidad**: alt de portadas + labels de inputs (A1, A2).
-5. 🟡 **SEO**: metadata dinámica + sitemap (M3, M5).
+5. 🟡 **UX**: landing/hero para logged-out (M4).
 
 > Nota de método: los hallazgos S1–S4, P1 y los íconos PWA se verificaron leyendo el
 > código directamente. Un reporte automático afirmó que faltaban los íconos PWA y que

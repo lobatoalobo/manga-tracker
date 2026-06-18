@@ -28,12 +28,26 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://mangas-nakamas.vercel.app";
+
 export const metadata: Metadata = {
-  title: "Nakama",
-  description: "Seguí y organizá tu colección de manga.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "Nakama — Tu colección de manga en Argentina",
+    template: "%s · Nakama",
+  },
+  description:
+    "Seguí y organizá tu colección de manga: editoriales argentinas, próximos tomos, deseados y avisos cuando sale lo que esperás.",
   applicationName: "Nakama",
   appleWebApp: { capable: true, title: "Nakama", statusBarStyle: "black-translucent" },
   icons: { icon: "/icon.svg" },
+  openGraph: {
+    type: "website",
+    siteName: "Nakama",
+    locale: "es_AR",
+  },
+  twitter: { card: "summary_large_image" },
 };
 
 export const viewport: Viewport = {

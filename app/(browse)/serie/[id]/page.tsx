@@ -16,7 +16,33 @@ import TrackingPanel from "@/components/TrackingPanel";
 import { SignIn } from "@/components/AuthButtons";
 import type { Edition } from "@/lib/editions";
 
-export const metadata = { title: "Serie · Nakama" };
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<import("next").Metadata> {
+  const { id } = await params;
+  const workId = Number(id);
+  const work = workId
+    ? await prisma.work.findUnique({
+        where: { id: workId },
+        select: { title: true, author: true, synopsis: true, coverImage: true },
+      })
+    : null;
+  if (!work) return { title: "Serie" };
+  const desc =
+    work.synopsis?.replace(/\s+/g, " ").trim().slice(0, 160) ||
+    `${work.title}${work.author ? ` de ${work.author}` : ""} — seguí esta serie y su colección en Nakama.`;
+  // La portada (URL absoluta de la editorial/MU/MD) sirve directo como og:image:
+  // preview con la tapa real al compartir, sin componer imagen (sin riesgo de fuentes).
+  const images = work.coverImage ? [{ url: work.coverImage }] : undefined;
+  return {
+    title: work.title,
+    description: desc,
+    openGraph: { title: `${work.title} · Nakama`, description: desc, images },
+    twitter: { title: `${work.title} · Nakama`, description: desc, images },
+  };
+}
 
 const PUB_KEY: Record<string, string> = {
   "Ivrea Argentina": "ivrea",

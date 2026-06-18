@@ -3,9 +3,29 @@ import { getPublicCollection } from "@/lib/collection";
 import CollectionGrid from "@/components/CollectionGrid";
 import { getCollectionStats } from "@/services/collectionService";
 
-export const metadata = {
-  title: "Colección · Nakama",
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<import("next").Metadata> {
+  const { slug } = await params;
+  const data = await getPublicCollection(slug);
+  if (!data) return { title: "Colección" };
+  const stats = getCollectionStats(data.items);
+  const title = `Colección de ${data.name}`;
+  const desc = `${stats.series} series y ${stats.ownedVolumes} tomos. Mirá la colección de manga de ${data.name} en Nakama.`;
+  // Portada representativa (la preferida, o la primera) como preview al compartir.
+  const cover =
+    data.items.find((i) => i.anilistId === data.favoriteId)?.coverImage ||
+    data.items[0]?.coverImage;
+  const images = cover ? [{ url: cover }] : undefined;
+  return {
+    title,
+    description: desc,
+    openGraph: { title: `${title} · Nakama`, description: desc, images },
+    twitter: { title: `${title} · Nakama`, description: desc, images },
+  };
+}
 
 export default async function PublicCollectionPage({
   params,
