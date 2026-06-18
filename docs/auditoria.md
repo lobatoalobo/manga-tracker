@@ -16,7 +16,7 @@ Severidad: 🔴 Crítico · 🟠 Alto · 🟡 Medio · 🔵 Bajo. Estado: ✅ co
 | S2 | 🟠 | ✅ | **IDOR** en `updatePurchase`: el update de ítems usaba `where:{ id }` sin acotar a `purchaseId`, permitiendo sobrescribir ítems de compras de **otros usuarios**. Corregido con `updateMany({ where:{ id, purchaseId } })`. | `lib/purchases.ts` |
 | S3 | 🟡 | ✅ | `deleteSubscription` borraba push por `endpoint` sin `userId` → se podía desuscribir el dispositivo de otro. Ahora acotado a `userId`. | `lib/push.ts`, `unsubscribePushAction` |
 | S4 | 🟡 | ✅ | Crons `if (secret && …)` quedaban **abiertos si faltaba `CRON_SECRET`**. Ahora **fail-closed** (401 sin secreto). | `app/api/cron/{ivrea-proximas,mangakas}/route.ts` |
-| S5 | 🔵 | ⬜ | `searchPurchaseSeriesAction` sin `requireUserId` (solo lectura de catálogo; sin datos privados). Agregar guard por consistencia/abuso. | `app/actions.ts` |
+| S5 | 🔵 | ✅ | `searchPurchaseSeriesAction` ahora con `requireUserId` (solo se usa desde el form de compras). | `app/actions.ts` |
 | S6 | 🔵 | ⬜ | `ADMIN_EMAIL` con fallback hardcodeado en el código. Setear la env en prod y, si el repo se hace público, sacar el literal. | `lib/admin.ts` |
 
 **Verificado OK (sin acción):** las 9 páginas `/admin/**` gatean con `isAdmin`; colección pública solo con opt-in (`shareSlug`), sin exponer email; `/api/export` exige sesión; raw SQL parametrizado; **cero** `dangerouslySetInnerHTML`; validación de URLs de comunidad (`safeHttpUrl`); ownership correcto en notes/notifications/social/wishlist/collection.
