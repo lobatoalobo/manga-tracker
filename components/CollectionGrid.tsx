@@ -98,12 +98,13 @@ export default function CollectionGrid({
         <input
           type="text"
           placeholder="Buscar…"
+          aria-label="Buscar en tu colección"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="min-w-48 flex-1 rounded-lg border border-border bg-surface px-4 py-2 text-sm outline-none focus:border-accent"
         />
 
-        <Select value={publisher} onChange={setPublisher}>
+        <Select value={publisher} onChange={setPublisher} label="Filtrar por editorial">
           <option value="all">Toda editorial</option>
           {publishers.map((p) => (
             <option key={p} value={p}>
@@ -112,14 +113,14 @@ export default function CollectionGrid({
           ))}
         </Select>
 
-        <Select value={reading} onChange={setReading}>
+        <Select value={reading} onChange={setReading} label="Filtrar por estado de lectura">
           <option value="all">Toda lectura</option>
           <option value="UNREAD">Sin empezar</option>
           <option value="READING">Leyendo</option>
           <option value="READ">Leído</option>
         </Select>
 
-        <Select value={sort} onChange={(v) => setSort(v as SortKey)}>
+        <Select value={sort} onChange={(v) => setSort(v as SortKey)} label="Ordenar">
           <option value="title">Orden: A-Z</option>
           <option value="progress">Orden: % completado</option>
           <option value="volumes">Orden: tomos</option>
@@ -296,15 +297,18 @@ function Select({
   value,
   onChange,
   children,
+  label,
 }: {
   value: string;
   onChange: (v: string) => void;
   children: React.ReactNode;
+  label?: string;
 }) {
   return (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      aria-label={label}
       className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
     >
       {children}

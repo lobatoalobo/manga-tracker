@@ -39,8 +39,8 @@ Severidad: 🔴 Crítico · 🟠 Alto · 🟡 Medio · 🔵 Bajo. Estado: ✅ co
 | # | Sev | Estado | Hallazgo | Ubicación |
 |---|-----|--------|----------|-----------|
 | A1 | 🔵 | ✅ | **Falso positivo** (verificado): las portadas con `alt=""` en CollectionGrid (lista), Dashboard y el avatar de amigos están **dentro del mismo link que el título/nombre visible**. Por WCAG, imagen con texto adyacente que la describe → `alt=""` es lo correcto (evita leer el título dos veces). Sin cambio. | — |
-| A2 | 🟡 | ⬜ | **Inputs sin `<label>`** asociado (solo placeholder): formularios de compra, import CSV, buscadores y selects de colección/tiendas. | `components/PurchaseForm.tsx`, `ImportExport.tsx`, `CollectionGrid.tsx`, `StoreList.tsx` |
-| A3 | 🟡 | ⬜ | Botones de solo-ícono o de acción sin `aria-label`. | `RemoveWishButton.tsx`, `FriendActions.tsx`, `SeriesNotifManager.tsx` |
+| A2 | 🟡 | 🟧 | Parcial: `aria-label` agregado a buscadores/selects de **colección** y **tiendas** (los más usados). **Quedan**: `PurchaseForm.tsx`, `ImportExport.tsx` (file input), `SeriesNotifManager.tsx`. | `CollectionGrid.tsx`, `StoreList.tsx` (hechos) |
+| A3 | 🔵 | ⬜ | Revisado: los botones flagueados (`RemoveWishButton` "Quitar", `FriendActions`) **tienen texto visible** → ya son accesibles; mejora opcional sería un `aria-label` más descriptivo. Botón campana (`SeriesNotifManager`) tiene `title`; conviene `aria-label`. Baja prioridad. | — |
 | A4 | 🔵 | ⬜ | Estado comunicado solo por color en algunos badges (al-día/incompleta) — sumar texto/ícono. | `MangaCard.tsx`, `CollectionGrid.tsx` |
 
 **Verificado OK:** estados vacíos bien resueltos en /deseados, /faltantes, /compras, /amigos, /notificaciones, /tiendas, /independientes, /collection (doble: vacío vs filtro sin resultados). Feedback de formularios (loading + error) correcto en ReportButton, ProposeStore, PublishIndieWork, PurchaseForm, AddFriend, NoteEditor, ImportExport.
