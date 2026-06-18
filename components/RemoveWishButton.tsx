@@ -22,9 +22,10 @@ export default function RemoveWishButton({ anilistId }: { anilistId: number }) {
       type="button"
       onClick={remove}
       disabled={isPending}
-      className="absolute right-2 top-2 z-10 rounded-md bg-black/60 px-2 py-1 text-xs text-muted opacity-0 backdrop-blur transition hover:text-red-400 group-hover:opacity-100"
+      aria-label="Quitar de deseados"
+      className="absolute right-2 top-2 z-10 rounded-full bg-rose-500 px-1.5 py-0.5 text-sm leading-none text-white shadow transition hover:bg-rose-600 disabled:opacity-50"
     >
-      Quitar
+      ❤
     </button>
   );
 }

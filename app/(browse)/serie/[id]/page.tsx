@@ -12,6 +12,7 @@ import { getCrumbQuery } from "@/lib/storeLinks";
 import { formatReleaseLabel, formatProximaDate } from "@/lib/releaseDate";
 import AddEditionButton from "@/components/AddEditionButton";
 import ArgentinaFlag from "@/components/ArgentinaFlag";
+import { CATALOG_PUBLISHERS } from "@/lib/catalog";
 import WishButton from "@/components/WishButton";
 import TrackingPanel from "@/components/TrackingPanel";
 import { SignIn } from "@/components/AuthButtons";
@@ -111,6 +112,11 @@ export default async function SeriePage({
   }
 
   const { title, coverImage, author, synopsis, genres } = work;
+  // MVP: en la ficha mostramos solo las ediciones de las editoriales activas
+  // (Ivrea). Las demás siguen en la DB pero no se listan acá.
+  const shownEditions = work.editions.filter((e) =>
+    (CATALOG_PUBLISHERS as readonly string[]).includes(e.publisher),
+  );
   // Guard: una obra con edición publicada (volumes>0) NO es "próximo a salir",
   // aunque el flag haya quedado viejo entre corridas del reconcile.
   const upcoming = work.upcoming && !work.editions.some((e) => e.volumes > 0);
@@ -231,7 +237,7 @@ export default async function SeriePage({
               Ediciones
             </h2>
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
-              {work.editions.length === 0 && (
+              {shownEditions.length === 0 && (
                 // Debut sin ficha aún: sabemos que es de Ivrea. Card con
                 // "Trackear" deshabilitado; se habilita al salir el 1er tomo.
                 <div className="flex flex-col rounded-xl border border-border bg-surface p-4">
@@ -251,7 +257,7 @@ export default async function SeriePage({
                   </button>
                 </div>
               )}
-              {work.editions.map((e) => {
+              {shownEditions.map((e) => {
                 const next = nextByEdition.get(e.id);
                 const key = editionKey(e.publisher, e.id);
                 const isTracked = trackedKeys.includes(key);
