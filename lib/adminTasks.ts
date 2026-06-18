@@ -1,6 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { ovniSearchUrl, isOvniUrl } from "@/lib/ovni";
-import { resolveEditionSeries } from "@/lib/resolveSeries";
 import { detectAndNotifyNewVolumes } from "@/lib/catalogNotify";
 import { logJobRun } from "@/lib/jobs";
 import {
@@ -104,69 +102,6 @@ const tasks: AdminTask[] = [
             ({ e, max }) =>
               `${e.manga.romajiTitle} · ${e.label}: ${e.totalVolumes} → ${max}`,
           ),
-      };
-    },
-  },
-  {
-    id: "backfill-ovni-urls",
-    title: "Backfill de URLs de Ovni → OvniPress",
-    description:
-      "Ediciones de Ovni cuya URL no apunta a OvniPress (p. ej. quedó una de Whakoom). Las reemplaza por una búsqueda en OvniPress.",
-    invalidatesEditions: true,
-    async run(dryRun) {
-      const rows = await prisma.publisherEdition.findMany({
-        where: { publisher: "Ovni Press" },
-        select: { id: true, title: true, url: true },
-      });
-      const targets = rows.filter((r) => !isOvniUrl(r.url));
-      if (!dryRun)
-        for (const r of targets)
-          await prisma.publisherEdition.update({
-            where: { id: r.id },
-            data: { url: ovniSearchUrl(r.title) },
-          });
-      return {
-        scanned: rows.length,
-        changed: targets.length,
-        samples: targets
-          .slice(0, SAMPLE)
-          .map((r) => `${r.title} → ${ovniSearchUrl(r.title)}`),
-      };
-    },
-  },
-  {
-    id: "resolve-unmapped",
-    title: "Re-resolver ediciones sin mapear",
-    description:
-      "Intenta mapear a AniList (verificado por autor) las ediciones sin anilistId que NO son nacional-only. Hace búsquedas en AniList, así que puede tardar.",
-    invalidatesEditions: true,
-    async run(dryRun) {
-      const rows = await prisma.publisherEdition.findMany({
-        where: { anilistId: null, nationalOnly: false },
-        select: { id: true, publisher: true, slug: true, title: true },
-        take: 80, // acota para no abusar del rate-limit de AniList
-      });
-      let changed = 0;
-      const samples: string[] = [];
-      for (const r of rows) {
-        const id = await resolveEditionSeries(r).catch(() => null);
-        if (!id) continue;
-        changed++;
-        if (samples.length < SAMPLE) samples.push(`${r.title} → #${id}`);
-        if (!dryRun)
-          await prisma.publisherEdition.update({
-            where: { id: r.id },
-            data: { anilistId: id },
-          });
-      }
-      return {
-        scanned: rows.length,
-        changed,
-        samples,
-        note:
-          rows.length >= 80
-            ? "Procesa hasta 80 por corrida; repetí si quedan."
-            : undefined,
       };
     },
   },

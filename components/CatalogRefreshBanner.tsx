@@ -25,7 +25,7 @@ export default async function CatalogRefreshBanner() {
 
   return (
     <Link
-      href="/admin/scripts"
+      href="/admin/herramientas"
       className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-sm transition hover:border-accent"
     >
       <span className="flex min-w-0 items-center gap-2">
@@ -36,7 +36,7 @@ export default async function CatalogRefreshBanner() {
         </span>
       </span>
       <span className="shrink-0 text-xs font-medium text-accent">
-        Ver comando →
+        Herramientas →
       </span>
     </Link>
   );

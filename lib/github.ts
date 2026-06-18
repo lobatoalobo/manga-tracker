@@ -1,12 +1,10 @@
 const REPO = process.env.GITHUB_REPO || "lobatoalobo/manga-tracker";
 
-// Solo jobs de SITIO: corren en runner de GitHub. Lo de Whakoom NO se dispara
-// desde acá (Whakoom bloquea a los runners); se corre local (ver /admin/scripts).
-export const CRAWL_JOBS = [
-  "ivrea",
-  "mangakas",
-  "resolve",
-] as const;
+// Solo jobs de SITIO que corren en runner de GitHub. Hoy: Ivrea (catálogo +
+// fechas). Lo de Whakoom NO se dispara desde acá (bloquea a los runners): corre
+// local (ver docs/scripts.md). mangakas/resolve dependían de AniList (apagado)
+// → removidos.
+export const CRAWL_JOBS = ["ivrea"] as const;
 
 export type CrawlJob = (typeof CRAWL_JOBS)[number];
 
