@@ -362,6 +362,17 @@ model AppState {
   updatedAt DateTime @updatedAt
 }
 
+// Contador de rate limiting (ventana fija). `key` = "<accion>:<userId|ip>".
+// Backed por DB para que funcione en serverless (varias instancias). Las filas
+// vencidas se pisan en el próximo hit; no requieren limpieza activa.
+model RateLimit {
+  key       String   @id
+  count     Int      @default(0)
+  windowEnd DateTime
+
+  @@index([windowEnd])
+}
+
 // Identidad propia de obra (catálogo local). Reemplaza progresivamente a
 // `anilistId` como llave del dominio. Se puebla desde el import/crawl; `anilistId`
 // queda como referencia opcional de enriquecimiento, no como llave.

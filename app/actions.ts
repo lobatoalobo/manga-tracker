@@ -87,6 +87,7 @@ import {
   deleteComment,
 } from "@/lib/social";
 import { prisma } from "@/lib/prisma";
+import { enforceRateLimit, RL } from "@/lib/rateLimit";
 
 export async function addEditionAction(input: AddEditionInput) {
   const userId = await requireUserId();
@@ -229,6 +230,9 @@ export async function createReportAction(input: {
   const message = input.message.trim();
   if (!message) return { ok: false as const, error: "El reporte está vacío." };
 
+  const rl = await enforceRateLimit("report", RL.report);
+  if (!rl.ok) return { ok: false as const, error: rl.error };
+
   const session = await auth();
   await createReport({ ...input, message, userId: session?.user?.id ?? null });
   revalidatePath("/admin/reportes");
@@ -264,6 +268,9 @@ export async function submitStoreAction(_prev: unknown, formData: FormData) {
   const userId = await requireUserId();
   const input = readStore(formData);
   if (!input.name) return { ok: false as const, error: "Falta el nombre." };
+
+  const rl = await enforceRateLimit("submitStore", RL.submitStore);
+  if (!rl.ok) return { ok: false as const, error: rl.error };
 
   await createStore(input, { status: "PENDING", submittedBy: userId });
   revalidatePath("/admin/tiendas");
@@ -317,6 +324,9 @@ export async function submitIndieWorkAction(
   if (!input.title || !input.author) {
     return { ok: false as const, error: "Faltan título o autor." };
   }
+  const rl = await enforceRateLimit("submitIndie", RL.submitIndie);
+  if (!rl.ok) return { ok: false as const, error: rl.error };
+
   await createIndieWork(input, { status: "PENDING", submittedBy: userId });
   revalidatePath("/admin/independientes");
   return { ok: true as const };
@@ -970,6 +980,8 @@ export async function sendFriendRequestAction(_prev: unknown, formData: FormData
   const userId = await requireUserId();
   const email = ((formData.get("email") as string | null) ?? "").trim();
   if (!email) return { ok: false as const, error: "Ingresá un email." };
+  const rl = await enforceRateLimit("friendRequest", RL.friendRequest);
+  if (!rl.ok) return { ok: false as const, error: rl.error };
   const res = await sendFriendRequest(userId, email);
   revalidatePath("/amigos");
   return res.ok
@@ -1000,6 +1012,10 @@ export async function toggleReactionAction(activityId: number, emoji: string) {
 
 export async function addCommentAction(activityId: number, text: string) {
   const userId = await requireUserId();
+  // Anti-spam: si se pasó del límite, se descarta en silencio (la UI no espera
+  // resultado). Evita inundar el feed de un amigo con comentarios.
+  const rl = await enforceRateLimit("comment", RL.comment);
+  if (!rl.ok) return;
   await addComment(userId, activityId, text);
   revalidatePath("/amigos");
 }
@@ -1017,6 +1033,9 @@ export async function importCollectionAction(_prev: unknown, formData: FormData)
   const file = formData.get("file") as File | null;
   if (!file || file.size === 0)
     return { ok: false as const, error: "Subí un archivo CSV." };
+
+  const rl = await enforceRateLimit("importCsv", RL.importCsv);
+  if (!rl.ok) return { ok: false as const, error: rl.error };
 
   const rows = parseCsv(await file.text());
   if (rows.length < 2)
