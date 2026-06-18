@@ -12,6 +12,7 @@ export interface BrowseCard {
   national: boolean;
   upcoming: boolean;
   releaseLabel: string | null;
+  genres: string[];
   next: { volume: number | null; date: string } | null;
 }
 
@@ -27,13 +28,14 @@ const norm = (s: string) =>
 
 type Tab = (typeof TABS)[number]["t"];
 
-function readUrl(): { q: string; tab: Tab; page: number } {
-  if (typeof window === "undefined") return { q: "", tab: "az", page: 1 };
+function readUrl(): { q: string; tab: Tab; genre: string; page: number } {
+  if (typeof window === "undefined") return { q: "", tab: "az", genre: "", page: 1 };
   const p = new URLSearchParams(window.location.search);
   const tab = p.get("tab");
   return {
     q: p.get("q") ?? "",
     tab: tab === "series" || tab === "tomos" ? tab : "az",
+    genre: p.get("genre") ?? "",
     page: Math.max(1, Number(p.get("page")) || 1),
   };
 }
@@ -66,14 +68,29 @@ export default function CatalogBrowser({
   const init = readUrl();
   const [q, setQ] = useState(init.q);
   const [tab, setTab] = useState<Tab>(init.tab);
+  const [genre, setGenre] = useState(init.genre);
   const [page, setPage] = useState(init.page);
 
-  // Sincroniza estado → URL. `push` (página/tab) crea entrada de historial para
-  // que el back vuelva un paso; `replace` (tipeo) no ensucia el historial.
-  function syncUrl(next: { q: string; tab: Tab; page: number }, replace: boolean) {
+  // Géneros disponibles (con conteo) para el selector.
+  const genreOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const c of cards)
+      for (const g of c.genres) counts.set(g, (counts.get(g) ?? 0) + 1);
+    return [...counts.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([g, n]) => ({ g, n }));
+  }, [cards]);
+
+  // Sincroniza estado → URL. `push` (página/tab/género) crea entrada de historial
+  // para que el back vuelva un paso; `replace` (tipeo) no ensucia el historial.
+  function syncUrl(
+    next: { q: string; tab: Tab; genre: string; page: number },
+    replace: boolean,
+  ) {
     const params = new URLSearchParams();
     if (next.tab !== "az") params.set("tab", next.tab);
     if (next.q.trim()) params.set("q", next.q.trim());
+    if (next.genre) params.set("genre", next.genre);
     if (next.page > 1) params.set("page", String(next.page));
     const qs = params.toString();
     const url = `/catalogo${qs ? `?${qs}` : ""}`;
@@ -87,6 +104,7 @@ export default function CatalogBrowser({
       const u = readUrl();
       setQ(u.q);
       setTab(u.tab);
+      setGenre(u.genre);
       setPage(u.page);
     };
     window.addEventListener("popstate", onPop);
@@ -98,10 +116,11 @@ export default function CatalogBrowser({
     return cards.filter((c) => {
       if (tab === "series" && !c.upcoming) return false;
       if (tab === "tomos" && !c.next) return false;
+      if (genre && !c.genres.includes(genre)) return false;
       if (nq && !norm(c.title).includes(nq)) return false;
       return true;
     });
-  }, [cards, q, tab]);
+  }, [cards, q, tab, genre]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const cur = Math.min(page, pageCount);
@@ -110,16 +129,21 @@ export default function CatalogBrowser({
   function changeQ(value: string) {
     setQ(value);
     setPage(1);
-    syncUrl({ q: value, tab, page: 1 }, true); // tipeo: replace
+    syncUrl({ q: value, tab, genre, page: 1 }, true); // tipeo: replace
   }
   function changeTab(t: Tab) {
     setTab(t);
     setPage(1);
-    syncUrl({ q, tab: t, page: 1 }, false);
+    syncUrl({ q, tab: t, genre, page: 1 }, false);
+  }
+  function changeGenre(g: string) {
+    setGenre(g);
+    setPage(1);
+    syncUrl({ q, tab, genre: g, page: 1 }, false);
   }
   function goPage(p: number) {
     setPage(p);
-    syncUrl({ q, tab, page: p }, false);
+    syncUrl({ q, tab, genre, page: p }, false);
     window.scrollTo({ top: 0 });
   }
 
@@ -134,7 +158,7 @@ export default function CatalogBrowser({
         className="mb-3 w-full rounded-lg border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-accent"
       />
 
-      <div className="mb-5 flex flex-wrap gap-2 text-sm">
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         {TABS.map(({ t, label }) => (
           <button
             key={t}
@@ -149,7 +173,32 @@ export default function CatalogBrowser({
             {label}
           </button>
         ))}
+        <select
+          value={genre}
+          onChange={(e) => changeGenre(e.target.value)}
+          className="ml-auto rounded-full border border-border bg-surface-2 px-3 py-1 text-sm outline-none focus:border-accent"
+          aria-label="Filtrar por género"
+        >
+          <option value="">Todos los géneros</option>
+          {genreOptions.map(({ g, n }) => (
+            <option key={g} value={g}>
+              {g} ({n})
+            </option>
+          ))}
+        </select>
       </div>
+
+      {genre && (
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={() => changeGenre("")}
+            className="rounded-full bg-accent/15 px-3 py-1 text-xs font-medium text-accent transition hover:bg-accent/25"
+          >
+            {genre} ✕
+          </button>
+        </div>
+      )}
 
       {shown.length === 0 ? (
         <p className="text-sm text-muted">
@@ -172,7 +221,7 @@ export default function CatalogBrowser({
                     : "border-border"
               }`}
             >
-              <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-surface-2">
+              <div className="relative aspect-2/3 overflow-hidden rounded-lg bg-surface-2">
                 {w.coverImage ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={w.coverImage} alt={w.title} className="h-full w-full object-cover" />

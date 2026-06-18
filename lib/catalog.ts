@@ -354,6 +354,7 @@ export interface WorkCard {
   national: boolean; // tiene alguna edición de editorial argentina
   upcoming: boolean;
   releaseLabel: string | null;
+  genres: string[];
   next: { volume: number | null; date: Date } | null;
 }
 
@@ -423,6 +424,7 @@ export async function browseWorks(opts: {
         coverImage: true,
         upcoming: true,
         releaseLabel: true,
+        genres: true,
         editions: { select: { id: true, publisher: true } },
       },
     }),
@@ -459,6 +461,7 @@ export async function browseWorks(opts: {
       national: w.upcoming || w.editions.some((e) => AR_PUBLISHERS.has(e.publisher)),
       upcoming: w.upcoming,
       releaseLabel: w.releaseLabel,
+      genres: w.genres,
       next,
     };
   });

@@ -21,6 +21,7 @@ export default async function CatalogoPage() {
     national: w.national,
     upcoming: w.upcoming,
     releaseLabel: w.releaseLabel,
+    genres: w.genres,
     next: w.next ? { volume: w.next.volume, date: w.next.date.toISOString() } : null,
   }));
 

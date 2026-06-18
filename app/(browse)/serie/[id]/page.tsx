@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
@@ -140,12 +141,13 @@ export default async function SeriePage({
           {genres.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
               {genres.map((g) => (
-                <span
+                <Link
                   key={g}
-                  className="rounded-full bg-surface-2 px-3 py-1 text-xs text-muted"
+                  href={`/catalogo?genre=${encodeURIComponent(g)}`}
+                  className="rounded-full bg-surface-2 px-3 py-1 text-xs text-muted transition hover:bg-accent/20 hover:text-accent"
                 >
                   {g}
-                </span>
+                </Link>
               ))}
             </div>
           )}
