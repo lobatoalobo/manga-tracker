@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getPublicSeries } from "@/lib/collection";
-import { getMangaCore } from "@/lib/getMangaDetails";
+import { prisma } from "@/lib/prisma";
 import { displayTitle } from "@/lib/title";
 import VolumeGrid from "@/components/VolumeGrid";
 
@@ -15,12 +15,25 @@ export default async function PublicSeriesPage({
   const { slug, id } = await params;
   const anilistId = Number(id);
 
-  const [anilist, data] = await Promise.all([
-    getMangaCore(anilistId),
-    getPublicSeries(slug, anilistId),
-  ]);
-
+  const data = await getPublicSeries(slug, anilistId);
   if (!data) notFound();
+
+  // Catálogo local: la metadata (título/portada) sale de la colección guardada,
+  // sin pegarle a AniList. Géneros y sinopsis los traemos del Work local cuando
+  // la serie es nacional (id negativo = -workId).
+  const work =
+    anilistId < 0
+      ? await prisma.work.findUnique({
+          where: { id: -anilistId },
+          select: { genres: true, synopsis: true },
+        })
+      : null;
+  const anilist = {
+    title: data.series.title,
+    coverImage: data.series.coverImage,
+    genres: work?.genres ?? [],
+    description: work?.synopsis ?? null,
+  };
 
   return (
     <main className="mx-auto max-w-4xl px-5 py-8">

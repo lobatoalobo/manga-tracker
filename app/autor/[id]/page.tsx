@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getStaffWorks } from "@/lib/anilist";
+import { ANILIST_OFF } from "@/lib/flags";
 import { displayTitle } from "@/lib/title";
 
 export const metadata = { title: "Autor · Nakama" };
@@ -11,6 +12,9 @@ export default async function AutorPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  // Página legacy basada en el staff de AniList. En el modelo local el índice de
+  // autores vive en /autores/[name]; con AniList apagado esta ruta no aplica.
+  if (ANILIST_OFF) notFound();
   const data = await getStaffWorks(Number(id));
   if (!data) notFound();
 
