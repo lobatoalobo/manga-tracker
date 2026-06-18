@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { detectAndNotifyNewVolumes } from "@/lib/catalogNotify";
 import { logJobRun } from "@/lib/jobs";
 import {
-  flagComics,
   consolidateDups,
   depurateCatalog,
   splitHomonyms,
@@ -34,15 +33,6 @@ interface AdminTask extends AdminTaskMeta {
 const SAMPLE = 20;
 
 const tasks: AdminTask[] = [
-  {
-    id: "flag-comics",
-    title: "Sacar cómics occidentales",
-    description:
-      "Detecta y borra ediciones que parecen cómic (Marvel/DC/Star Wars) por título, entre las que NO están mapeadas a AniList. Simular lista; aplicar borra.",
-    danger: true,
-    invalidatesEditions: true,
-    run: (dryRun) => flagComics(dryRun),
-  },
   {
     id: "consolidate-dups",
     title: "Consolidar duplicados",

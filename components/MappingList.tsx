@@ -6,13 +6,7 @@ import MappingRow from "@/components/MappingRow";
 import { bulkEditionAction } from "@/app/actions";
 import type { EditionMapping } from "@/lib/catalog";
 
-export default function MappingList({
-  rows,
-  anilistVolumes,
-}: {
-  rows: EditionMapping[];
-  anilistVolumes: Record<number, number>;
-}) {
+export default function MappingList({ rows }: { rows: EditionMapping[] }) {
   const router = useRouter();
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [pending, start] = useTransition();
@@ -29,11 +23,10 @@ export default function MappingList({
   const toggleAll = () =>
     setSel(() => (allSelected ? new Set() : new Set(rows.map((r) => r.id))));
 
-  const bulk = (op: "delete" | "national" | "unnational") =>
+  const bulkDelete = () =>
     start(async () => {
-      if (op === "delete" && !confirm(`¿Borrar ${sel.size} entradas del catálogo?`))
-        return;
-      await bulkEditionAction([...sel], op);
+      if (!confirm(`¿Borrar ${sel.size} entradas del catálogo?`)) return;
+      await bulkEditionAction([...sel], "delete");
       setSel(new Set());
       router.refresh();
     });
@@ -57,7 +50,6 @@ export default function MappingList({
           <MappingRow
             key={row.id}
             row={row}
-            anilistVolumes={row.anilistId ? anilistVolumes[row.anilistId] ?? null : null}
             selected={sel.has(row.id)}
             onToggle={toggle}
           />
@@ -69,21 +61,7 @@ export default function MappingList({
           <span className="text-sm font-medium">{sel.size} seleccionadas</span>
           <span className="text-muted">·</span>
           <button
-            onClick={() => bulk("national")}
-            disabled={pending}
-            className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition hover:text-foreground disabled:opacity-50"
-          >
-            🇦🇷 Nacional-only
-          </button>
-          <button
-            onClick={() => bulk("unnational")}
-            disabled={pending}
-            className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition hover:text-foreground disabled:opacity-50"
-          >
-            Quitar nacional
-          </button>
-          <button
-            onClick={() => bulk("delete")}
+            onClick={bulkDelete}
             disabled={pending}
             className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition hover:border-red-500 hover:text-red-400 disabled:opacity-50"
           >

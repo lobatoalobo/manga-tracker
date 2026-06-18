@@ -42,7 +42,7 @@ Leyenda: ✅ MANTENER · 🟡 REVISAR · 🟥 DEPRECAR.
 | `fix-volumes-out-of-range` | ✅ | Corrige total < tomos poseídos. |
 | `notify-new-volumes` | ✅ | Detecta/notifica tomos nuevos. |
 | `clear-stale-cache` | ✅ | Limpia EditionsCache viejo. |
-| `flag-comics` | 🟡 | La propia UI dice "ya no borrar cómics". Dejar solo listar o sacar. |
+| `flag-comics` | 🟥 ELIMINADO | **Borraba** cómics occidentales por heurística. Los cómics ahora son parte de la oferta (y a futuro Funkos/etc.) → una herramienta que borra contenido por título es peligrosa. Removida (task + script + npm + filtro "Sospecha cómic"). El detector `looksLikeComic` queda solo como clasificador neutral. |
 | `backfill-ovni-urls` | 🟥 | Ovni está oculto en el MVP. |
 | `resolve-unmapped` | 🟥 | Mapea a **AniList** por autor. |
 
@@ -59,7 +59,9 @@ Leyenda: ✅ MANTENER · 🟡 REVISAR · 🟥 DEPRECAR.
 2. ✅ `mangakas` y `resolve` removidos de `CRAWL_JOBS` (`lib/github.ts`) y del `RunJobsPanel` (queda solo Ivrea).
 3. ✅ Tareas `resolve-unmapped` y `backfill-ovni-urls` removidas del runner (`lib/adminTasks.ts`).
 4. ✅ Página `/admin/scripts` (cheat-sheet de comandos) **eliminada** — los comandos viven solo en docs/scripts.md (decisión del usuario: en la app, solo herramientas ejecutables). Links actualizados (NavBar, CatalogRefreshBanner → Herramientas).
-5. ⬜ `flag-comics`: dejar solo-listar o sacar (pendiente, menor).
+5. ✅ `flag-comics` ELIMINADO (borraba cómics; ahora son parte de la oferta).
+
+**Criterio a futuro (importante):** el catálogo crece a multi-tipo (manga + cómics + Funkos por waves) y multi-editorial (Panini/Ovni y luego españolas/foráneas). Por eso: NUNCA herramientas que **borren por heurística** (como flag-comics); preferir clasificar/taguear. `depurate-catalog` ("1 edición por obra+editorial") usar **con cuidado** con tipos nuevos (waves de Funko = muchas "ediciones" legítimas). Ovni/Panini y las españolas volverán al browse → su mantenimiento (ej. backfill de URLs) se re-habilita cuando se muestren. AniList puede volver como **enriquecimiento** (géneros/score) sobre el catálogo local; por eso `lib/anilist.ts` se conserva.
 
 **Fase 2 — limpiar /admin/mapeos y /admin/scripts:**
 5. /admin/mapeos: sacar "mapear a AniList", `national-only` y la auditoría de conteos vs AniList; conservar editar/borrar/portada/filtros locales.

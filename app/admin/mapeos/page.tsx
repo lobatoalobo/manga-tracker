@@ -3,7 +3,6 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { getEditionMappings, EDITORIALS } from "@/lib/catalog";
-import { getMangaVolumes } from "@/lib/anilist";
 import MappingList from "@/components/MappingList";
 import Pager from "@/components/Pager";
 
@@ -24,9 +23,7 @@ export default async function AdminMapeosPage({
 
   const params = await searchParams;
   const editorial = EDITORIALS.find((e) => e.slug === params.ed);
-  const state = (
-    ["mapped", "unmapped", "national", "comic", "nocover"] as const
-  ).find((s) => s === params.estado);
+  const state = (["nocover"] as const).find((s) => s === params.estado);
   const q = params.q?.trim() || undefined;
   const page = Math.max(1, Number(params.page) || 1);
 
@@ -36,11 +33,6 @@ export default async function AdminMapeosPage({
     q,
     page,
   });
-
-  // Total de tomos de AniList (referencia) para auditar conteos de esta página.
-  const anilistVolumes = await getMangaVolumes(
-    rows.flatMap((r) => (r.anilistId ? [r.anilistId] : [])),
-  ).catch(() => new Map<number, number>());
 
   const base =
     `/admin/mapeos?` +
@@ -54,13 +46,11 @@ export default async function AdminMapeosPage({
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-8">
-      <h1 className="mb-1 text-2xl font-bold">Mapeos editoriales</h1>
+      <h1 className="mb-1 text-2xl font-bold">Catálogo de ediciones</h1>
       <p className="mb-5 text-sm text-muted">
-        Curá el enlace edición↔serie. <b className="text-foreground">Mapear</b>{" "}
-        guarda el anilistId; <b className="text-foreground">Auto</b> intenta
-        resolverlo por autor; <b className="text-foreground">Editar</b> corrige
-        cualquier dato; <b className="text-foreground">Borrar</b> elimina la
-        entrada.
+        Gestioná las ediciones del catálogo: <b className="text-foreground">Editar</b>{" "}
+        corrige título/tomos/URL, <b className="text-foreground">Borrar</b>{" "}
+        elimina la entrada. Filtrá por editorial, sin portada o sospecha de cómic.
       </p>
 
       {/* Filtros */}
@@ -78,34 +68,10 @@ export default async function AdminMapeosPage({
           </Chip>
         ))}
         <Chip
-          href={`/admin/mapeos?estado=unmapped${editorial ? `&ed=${editorial.slug}` : ""}`}
-          active={state === "unmapped"}
-        >
-          Sin mapear
-        </Chip>
-        <Chip
-          href={`/admin/mapeos?estado=mapped${editorial ? `&ed=${editorial.slug}` : ""}`}
-          active={state === "mapped"}
-        >
-          Mapeadas
-        </Chip>
-        <Chip
-          href={`/admin/mapeos?estado=national${editorial ? `&ed=${editorial.slug}` : ""}`}
-          active={state === "national"}
-        >
-          Nacional-only
-        </Chip>
-        <Chip
           href={`/admin/mapeos?estado=nocover${editorial ? `&ed=${editorial.slug}` : ""}`}
           active={state === "nocover"}
         >
           🖼 Sin portada
-        </Chip>
-        <Chip
-          href={`/admin/mapeos?estado=comic${editorial ? `&ed=${editorial.slug}` : ""}`}
-          active={state === "comic"}
-        >
-          🦸 Sospecha cómic
         </Chip>
       </div>
 
@@ -126,10 +92,7 @@ export default async function AdminMapeosPage({
 
       <p className="mb-3 text-sm text-muted">{total} entradas</p>
 
-      <MappingList
-        rows={rows}
-        anilistVolumes={Object.fromEntries(anilistVolumes)}
-      />
+      <MappingList rows={rows} />
 
       {lastPage > 1 && (
         <Pager basePath={base} page={page} lastPage={lastPage} />
