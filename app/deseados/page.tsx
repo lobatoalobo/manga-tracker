@@ -26,7 +26,15 @@ export default async function DeseadosPage() {
   return (
     <main className="mx-auto max-w-6xl px-5 py-8">
       <h1 className="mb-1 text-2xl font-bold">Deseados</h1>
-      <p className="mb-6 text-sm text-muted">Lo que querés comprar.</p>
+      <p className="mb-4 text-sm text-muted">Lo que querés comprar.</p>
+
+      {items.length > 0 && (
+        <p className="mb-6 rounded-xl border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-foreground">
+          📬 Te avisamos cuando alguna de estas series{" "}
+          <span className="font-medium">salga en Argentina</span> o cuando se{" "}
+          <span className="font-medium">reedite un tomo</span> que te falta.
+        </p>
+      )}
 
       {items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-surface p-10 text-center">
