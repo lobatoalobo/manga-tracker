@@ -42,8 +42,8 @@ Register-ScheduledTask `
   -Description "Actualiza el catálogo de Nakama (Ivrea + Whakoom + enrich) contra producción." `
   -Force | Out-Null
 
-Write-Host "✓ Tarea '$TaskName' registrada: diaria a las $At."
+Write-Host "OK - Tarea '$TaskName' registrada: diaria a las $At."
 Write-Host "  Probarla ahora:  Start-ScheduledTask -TaskName $TaskName"
 Write-Host "  Ver estado:      Get-ScheduledTaskInfo -TaskName $TaskName"
 Write-Host "  Logs:            $root\logs\refresh-*.log"
-Write-Host "  Quitarla:        Unregister-ScheduledTask -TaskName $TaskName -Confirm:`$false"
+Write-Host ("  Quitarla:        Unregister-ScheduledTask -TaskName $TaskName -Confirm:" + '$false')

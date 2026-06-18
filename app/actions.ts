@@ -244,6 +244,7 @@ export async function resolveReportAction(
   id: number,
   status: "PENDING" | "RESOLVED",
 ) {
+  await assertAdmin(); // solo el dueño resuelve reportes
   await setReportStatus(id, status);
   revalidatePath("/admin/reportes");
 }
@@ -945,8 +946,8 @@ export async function subscribePushAction(sub: WebPushSub) {
 }
 
 export async function unsubscribePushAction(endpoint: string) {
-  await requireUserId();
-  await deleteSubscription(endpoint);
+  const userId = await requireUserId();
+  await deleteSubscription(userId, endpoint);
   return { ok: true as const };
 }
 
