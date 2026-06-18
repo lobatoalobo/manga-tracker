@@ -2,8 +2,7 @@ import Link from "next/link";
 import { getCollectionItems } from "@/lib/collection";
 import { getShoppingCount } from "@/lib/shopping";
 import { getPurchaseStats } from "@/lib/purchases";
-import { displayTitle } from "@/lib/title";
-import { seriesHref } from "@/lib/url";
+import MangaCard from "@/components/MangaCard";
 
 const ars = new Intl.NumberFormat("es-AR", {
   style: "currency",
@@ -35,10 +34,10 @@ export default async function Dashboard({
     )
     .map((i) => ({ i, missing: i.edition.totalVolumes - i.edition.ownedVolumes.length }))
     .sort((a, b) => a.missing - b.missing)
-    .slice(0, 4);
+    .slice(0, 5);
 
   return (
-    <main className="mx-auto max-w-6xl px-5 pb-12 pt-4">
+    <main className="mx-auto max-w-5xl px-5 pb-12 pt-4">
       <h1 className="text-2xl font-bold">
         Hola{name ? `, ${name.split(" ")[0]}` : ""} 👋
       </h1>
@@ -79,42 +78,14 @@ export default async function Dashboard({
       {inProgress.length > 0 && (
         <section className="mt-8">
           <h2 className="mb-3 text-lg font-semibold">Continuar colección</h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {inProgress.map(({ i, missing }) => {
-              const owned = i.edition.ownedVolumes.length;
-              const total = i.edition.totalVolumes;
-              const pct = Math.floor((owned / total) * 100);
-              return (
-                <Link
-                  key={`${i.anilistId}-${i.edition.key}`}
-                  href={seriesHref(i.anilistId)}
-                  className="overflow-hidden rounded-xl border border-border bg-surface transition hover:border-accent"
-                >
-                  <div className="aspect-2/3 w-full bg-surface-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={i.coverImage}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                  <div className="p-2.5">
-                    <p className="truncate text-sm font-medium">
-                      {displayTitle(i.title)}
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted">
-                      {owned}/{total} · faltan {missing}
-                    </p>
-                    <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
-                      <div
-                        className="h-full rounded-full bg-accent"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            {inProgress.map(({ i }) => (
+              <MangaCard
+                key={`${i.anilistId}-${i.edition.key}`}
+                item={i}
+                readOnly
+              />
+            ))}
           </div>
         </section>
       )}
