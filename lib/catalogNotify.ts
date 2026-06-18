@@ -200,14 +200,28 @@ export async function detectAndNotifyWishlistAvailable(
   });
   if (pending.length === 0) return { scanned: 0, notifications: 0, samples: [] };
 
-  // ¿Cuáles de esas series ya tienen edición AR disponible (mapeada, volumes>0)?
+  // ¿Cuáles ya tienen edición AR disponible (volumes>0)? El deseado puede ser una
+  // obra mapeada a AniList (anilistId>0) o LOCAL (anilistId negativo = -workId).
   const ids = [...new Set(pending.map((p) => p.anilistId))];
-  const avail = await prisma.publisherEdition.findMany({
-    where: { anilistId: { in: ids }, volumes: { gt: 0 } },
-    select: { anilistId: true },
-    distinct: ["anilistId"],
-  });
-  const availSet = new Set(avail.map((a) => a.anilistId as number));
+  const availSet = new Set<number>();
+  const posIds = ids.filter((i) => i > 0);
+  const negWorkIds = ids.filter((i) => i < 0).map((i) => -i);
+  if (posIds.length) {
+    const a = await prisma.publisherEdition.findMany({
+      where: { anilistId: { in: posIds }, volumes: { gt: 0 } },
+      select: { anilistId: true },
+      distinct: ["anilistId"],
+    });
+    for (const x of a) if (x.anilistId != null) availSet.add(x.anilistId);
+  }
+  if (negWorkIds.length) {
+    const a = await prisma.publisherEdition.findMany({
+      where: { workId: { in: negWorkIds }, volumes: { gt: 0 } },
+      select: { workId: true },
+      distinct: ["workId"],
+    });
+    for (const x of a) if (x.workId != null) availSet.add(-x.workId);
+  }
   const ready = pending.filter((p) => availSet.has(p.anilistId));
   if (ready.length === 0) return { scanned: pending.length, notifications: 0, samples: [] };
 
