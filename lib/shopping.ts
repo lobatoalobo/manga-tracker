@@ -5,6 +5,50 @@ import { crumbSearch } from "@/lib/crumb";
 import { laRevisteriaSearch } from "@/lib/larevisteria";
 import { isOvniUrl, ovniSearchUrl } from "@/lib/ovni";
 
+export interface WishlistBuyItem {
+  anilistId: number;
+  title: string;
+  coverImage: string;
+  publisher: string;
+  total: number;
+  crumbUrl: string;
+}
+
+/**
+ * Series de DESEADOS que YA están disponibles en AR (tienen tomos publicados) →
+ * "para comprar" (la serie entera). Local: anilistId negativo = -workId, miramos
+ * sus ediciones; resto, por anilistId. Devuelve la edición con más tomos.
+ */
+export async function getWishlistToBuy(userId: string): Promise<WishlistBuyItem[]> {
+  const wishes = await prisma.wishlistItem.findMany({
+    where: { userId },
+    select: { anilistId: true, title: true, coverImage: true },
+  });
+  if (wishes.length === 0) return [];
+
+  const out: WishlistBuyItem[] = [];
+  for (const w of wishes) {
+    const ed = await prisma.publisherEdition.findFirst({
+      where:
+        w.anilistId < 0
+          ? { workId: -w.anilistId, volumes: { gt: 0 } }
+          : { anilistId: w.anilistId, volumes: { gt: 0 } },
+      orderBy: { volumes: "desc" },
+      select: { publisher: true, volumes: true, work: { select: { coverImage: true } } },
+    });
+    if (!ed) continue; // todavía no salió en AR
+    out.push({
+      anilistId: w.anilistId,
+      title: w.title,
+      coverImage: ed.work?.coverImage ?? w.coverImage,
+      publisher: ed.publisher,
+      total: ed.volumes,
+      crumbUrl: crumbSearch(w.title),
+    });
+  }
+  return out;
+}
+
 export interface ShoppingItem {
   anilistId: number;
   title: string;
