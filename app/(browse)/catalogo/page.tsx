@@ -1,16 +1,38 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { browseWorks } from "@/lib/catalog";
-import CatalogBrowser, { type BrowseCard } from "@/components/CatalogBrowser";
+import CatalogBrowser, {
+  type BrowseCard,
+  type BrowseState,
+} from "@/components/CatalogBrowser";
 
 export const metadata = { title: "Catálogo · Nakama" };
 
 /**
  * Browse/búsqueda del catálogo LOCAL (`Work`), sin AniList. Carga todas las obras
- * de una y delega el filtrado (texto + tabs) al cliente, para que la búsqueda sea
- * INSTANTÁNEA (sin round-trip por tecla).
+ * de una y delega el filtrado (texto + tabs + género) al cliente, instantáneo. El
+ * estado inicial sale de la URL (searchParams) para que los deep-links funcionen.
  */
-export default async function CatalogoPage() {
+export default async function CatalogoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    q?: string;
+    tab?: string;
+    genre?: string;
+    genres?: string;
+    gmode?: string;
+    page?: string;
+  }>;
+}) {
+  const sp = await searchParams;
+  const initial: BrowseState = {
+    q: sp.q ?? "",
+    tab: sp.tab === "series" || sp.tab === "tomos" ? sp.tab : "az",
+    genres: (sp.genres ?? sp.genre ?? "").split(",").map((g) => g.trim()).filter(Boolean),
+    gmode: sp.gmode === "any" ? "any" : "all",
+    page: Math.max(1, Number(sp.page) || 1),
+  };
   const session = await auth();
   const { items } = await browseWorks({ tab: "az", take: 10000 });
   const cards: BrowseCard[] = items.map((w) => ({
@@ -47,7 +69,7 @@ export default async function CatalogoPage() {
   return (
     <main className="mx-auto max-w-5xl px-5 py-8">
       <h1 className="mb-4 text-2xl font-bold">Catálogo</h1>
-      <CatalogBrowser cards={cards} collected={collected} wished={wished} />
+      <CatalogBrowser cards={cards} collected={collected} wished={wished} initial={initial} />
     </main>
   );
 }
