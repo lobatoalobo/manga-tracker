@@ -49,6 +49,7 @@ export default function StoreList({ stores }: { stores: StoreItem[] }) {
         <input
           type="text"
           placeholder="Buscar por nombre, barrio o dirección…"
+          aria-label="Buscar tiendas"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="min-w-56 flex-1 rounded-lg border border-border bg-surface px-4 py-2 text-sm outline-none focus:border-accent"
@@ -56,6 +57,7 @@ export default function StoreList({ stores }: { stores: StoreItem[] }) {
         <select
           value={province}
           onChange={(e) => setProvince(e.target.value)}
+          aria-label="Filtrar por provincia"
           className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
         >
           <option value="all">Toda provincia</option>

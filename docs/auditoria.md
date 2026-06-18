@@ -39,8 +39,8 @@ Severidad: 🔴 Crítico · 🟠 Alto · 🟡 Medio · 🔵 Bajo. Estado: ✅ co
 | # | Sev | Estado | Hallazgo | Ubicación |
 |---|-----|--------|----------|-----------|
 | A1 | 🔵 | ✅ | **Falso positivo** (verificado): las portadas con `alt=""` en CollectionGrid (lista), Dashboard y el avatar de amigos están **dentro del mismo link que el título/nombre visible**. Por WCAG, imagen con texto adyacente que la describe → `alt=""` es lo correcto (evita leer el título dos veces). Sin cambio. | — |
-| A2 | 🟡 | ⬜ | **Inputs sin `<label>`** asociado (solo placeholder): formularios de compra, import CSV, buscadores y selects de colección/tiendas. | `components/PurchaseForm.tsx`, `ImportExport.tsx`, `CollectionGrid.tsx`, `StoreList.tsx` |
-| A3 | 🟡 | ⬜ | Botones de solo-ícono o de acción sin `aria-label`. | `RemoveWishButton.tsx`, `FriendActions.tsx`, `SeriesNotifManager.tsx` |
+| A2 | 🟡 | 🟧 | Parcial: `aria-label` agregado a buscadores/selects de **colección** y **tiendas** (los más usados). **Quedan**: `PurchaseForm.tsx`, `ImportExport.tsx` (file input), `SeriesNotifManager.tsx`. | `CollectionGrid.tsx`, `StoreList.tsx` (hechos) |
+| A3 | 🔵 | ⬜ | Revisado: los botones flagueados (`RemoveWishButton` "Quitar", `FriendActions`) **tienen texto visible** → ya son accesibles; mejora opcional sería un `aria-label` más descriptivo. Botón campana (`SeriesNotifManager`) tiene `title`; conviene `aria-label`. Baja prioridad. | — |
 | A4 | 🔵 | ⬜ | Estado comunicado solo por color en algunos badges (al-día/incompleta) — sumar texto/ícono. | `MangaCard.tsx`, `CollectionGrid.tsx` |
 
 **Verificado OK:** estados vacíos bien resueltos en /deseados, /faltantes, /compras, /amigos, /notificaciones, /tiendas, /independientes, /collection (doble: vacío vs filtro sin resultados). Feedback de formularios (loading + error) correcto en ReportButton, ProposeStore, PublishIndieWork, PurchaseForm, AddFriend, NoteEditor, ImportExport.
@@ -54,7 +54,7 @@ Severidad: 🔴 Crítico · 🟠 Alto · 🟡 Medio · 🔵 Bajo. Estado: ✅ co
 | M1 | 🟠 | ✅ | **Open Graph + Twitter card** agregados: `/serie/[id]` y `/u/[slug]` (+ `/u/[slug]/[id]`) exponen og/twitter con la **portada real** como imagen → preview al compartir en WhatsApp/Twitter. (Imagen *compuesta* con ImageResponse queda como polish futuro; se evitó por riesgo de fuentes.) | `app/(browse)/serie/[id]`, `app/u/[slug]` |
 | M2 | 🟠 | ✅ | `/serie/[id]` ahora usa `generateMetadata` dinámica (título de la obra + descripción desde sinopsis + og:image). | idem |
 | M3 | 🟡 | ✅ | `metadataBase` + título/descripción por defecto en el layout (la home hereda un title propio y bueno). | `app/layout.tsx` |
-| M4 | 🟡 | ⬜ | Logged-out cae directo al catálogo, **sin landing/hero** con propuesta de valor + CTA de login. | Hero en home pública. |
+| M4 | 🟡 | ✅ | Agregado `components/Landing.tsx`: hero para no-logueados (propuesta de valor + CTA entrar/explorar + collage de portadas + 3 features), en vez de redirigir directo al catálogo. | `app/(browse)/page.tsx`, `components/Landing.tsx` |
 | M5 | 🔵 | ✅ | Agregados `app/robots.ts` (bloquea privado/admin/api) y `app/sitemap.ts` (rutas públicas + todas las series). | — |
 
 **Verificado OK:** PWA instalable; **íconos PWA existen** (`app/icons/192|512/route.ts` — el reporte automático que decía que faltaban era **incorrecto**); `app/manifest.ts` completo; Sentry integrado.
@@ -85,8 +85,8 @@ Severidad: 🔴 Crítico · 🟠 Alto · 🟡 Medio · 🔵 Bajo. Estado: ✅ co
 1. ✅ ~~Marketing viral: Open Graph en /serie y /u~~ — HECHO (M1–M3, M5).
 2. ✅ ~~Resiliencia: `app/error.tsx` + `not-found.tsx`~~ — HECHO (E1, E2). Queda `loading.tsx` (E3, 🔵).
 3. 🟠 **Escala**: paginar /catalogo (P1) + batch N+1 de deseados (P2).
-4. 🟡 **Accesibilidad**: alt de portadas + labels de inputs (A1, A2).
-5. 🟡 **UX**: landing/hero para logged-out (M4).
+4. 🟡 **Accesibilidad**: labels de inputs + aria-labels en botones de ícono (A2, A3).
+5. ✅ ~~UX: landing/hero para logged-out~~ — HECHO (M4).
 
 > Nota de método: los hallazgos S1–S4, P1 y los íconos PWA se verificaron leyendo el
 > código directamente. Un reporte automático afirmó que faltaban los íconos PWA y que
