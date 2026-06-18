@@ -15,8 +15,10 @@ export const dynamic = "force-dynamic";
  * Vercel Cron manda `Authorization: Bearer <CRON_SECRET>`.
  */
 export async function GET(request: Request) {
+  // Fail-closed: sin CRON_SECRET o token incorrecto, 401. Sin esto el endpoint
+  // (reconcile + push reales a usuarios) quedaría abierto si la env falta.
   const secret = process.env.CRON_SECRET;
-  if (secret && request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
   const reconcile = await reconcileIvreaProximas();

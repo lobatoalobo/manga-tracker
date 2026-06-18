@@ -143,8 +143,10 @@ export async function updatePurchase(
   });
 
   for (const i of items.filter((i) => i.id)) {
-    await prisma.purchaseItem.update({
-      where: { id: i.id as number },
+    // updateMany acotado a purchaseId (la compra ya verificada como del usuario):
+    // evita que un id de ítem ajeno sobrescriba datos de la compra de otro.
+    await prisma.purchaseItem.updateMany({
+      where: { id: i.id as number, purchaseId: id },
       data: fields(i), // no toca status (se maneja por tomo)
     });
   }

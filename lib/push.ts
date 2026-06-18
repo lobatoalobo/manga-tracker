@@ -34,8 +34,9 @@ export async function saveSubscription(userId: string, sub: WebPushSub) {
   });
 }
 
-export async function deleteSubscription(endpoint: string) {
-  await prisma.pushSubscription.deleteMany({ where: { endpoint } });
+export async function deleteSubscription(userId: string, endpoint: string) {
+  // Acotado al userId: un usuario no puede desuscribir el dispositivo de otro.
+  await prisma.pushSubscription.deleteMany({ where: { endpoint, userId } });
 }
 
 export interface PushPayload {

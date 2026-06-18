@@ -9,8 +9,10 @@ export const dynamic = "force-dynamic";
  * Cron incluye `Authorization: Bearer <CRON_SECRET>` cuando la env está seteada.
  */
 export async function GET(request: Request) {
+  // Fail-closed: sin CRON_SECRET o con token incorrecto, 401. Evita que el job
+  // costoso (scrape de AniList) quede abierto si la env falta en prod.
   const secret = process.env.CRON_SECRET;
-  if (secret && request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
 
