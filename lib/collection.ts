@@ -413,9 +413,15 @@ export async function setReading(
 ): Promise<void> {
   const ed = await findEdition(userId, anilistId, key);
   if (!ed) return;
+  // Se puede leer online más de lo que se tiene, pero nunca más que el total
+  // de la serie (no existe "leído 11/10"). Clampeo defensivo server-side.
+  const vol =
+    volume != null && ed.totalVolumes > 0
+      ? Math.min(Math.max(1, volume), ed.totalVolumes)
+      : volume;
   await prisma.trackedEdition.update({
     where: { id: ed.id },
-    data: { readingStatus: status, readingVolume: volume },
+    data: { readingStatus: status, readingVolume: vol },
   });
 }
 

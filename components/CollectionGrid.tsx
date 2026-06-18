@@ -240,7 +240,7 @@ function CollectionRow({
           )}
           {read > 0 && (
             <p className="mt-0.5 tabular-nums text-muted">
-              leídos {read}/{owned}
+              leídos {read}/{total || "?"}
             </p>
           )}
         </div>

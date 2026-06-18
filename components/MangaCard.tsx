@@ -96,7 +96,7 @@ export default function MangaCard({
               <span className="text-amber-400/90">Faltan {total - owned}</span>
             ) : null}
             {read > 0 && (
-              <span className="text-muted tabular-nums">· leídos {read}/{owned}</span>
+              <span className="text-muted tabular-nums">· leídos {read}/{total || "?"}</span>
             )}
             {edition.readingStatus === "READING" && (
               <span className="text-accent">
