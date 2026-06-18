@@ -1,5 +1,6 @@
 import { reconcileIvreaProximas } from "@/lib/ivreaProximas";
 import { notifyIvreaReleases } from "@/lib/localNotify";
+import { syncTrackedTotals } from "@/lib/syncTracked";
 
 export const maxDuration = 120;
 export const dynamic = "force-dynamic";
@@ -18,6 +19,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
   const reconcile = await reconcileIvreaProximas();
+  const synced = await syncTrackedTotals();
   const notify = await notifyIvreaReleases();
-  return Response.json({ ok: true, reconcile, notify });
+  return Response.json({ ok: true, reconcile, synced, notify });
 }
