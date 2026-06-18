@@ -27,8 +27,8 @@ Severidad: 🔴 Crítico · 🟠 Alto · 🟡 Medio · 🔵 Bajo. Estado: ✅ co
 
 | # | Sev | Estado | Hallazgo | Nota |
 |---|-----|--------|----------|------|
-| E1 | 🟠 | ⬜ | **No hay `error.tsx` en ninguna ruta** (solo `app/global-error.tsx`). Si una page server falla (DB caída, timeout), el usuario ve el error boundary global (pantalla completa) en vez de un error contenido en el layout, con la nav. | Agregar `app/error.tsx` (y por sección crítica). |
-| E2 | 🟡 | ⬜ | **No hay `not-found.tsx`** → 404 genérico de Next, sin la nav ni CTA. Hay muchos `notFound()` (fichas, autores). | Agregar `app/not-found.tsx` con CTA a /catalogo. |
+| E1 | 🟠 | ✅ | Agregado `app/error.tsx`: error boundary de segmento (mantiene la nav, botón Reintentar, reporta a Sentry). | `app/error.tsx` |
+| E2 | 🟡 | ✅ | Agregado `app/not-found.tsx`: 404 propio con nav + CTA a /catalogo (cubre rutas inexistentes y todos los `notFound()`). | `app/not-found.tsx` |
 | E3 | 🔵 | ⬜ | **No hay `loading.tsx`** → sin skeletons; en conexiones lentas la navegación parece colgada. | Opcional; agregar en /catalogo y /collection. |
 | E4 | 🟡 | ⬜ | Degradación silenciosa: en la home, si la búsqueda/fetch falla, el `.catch(()=>[])` muestra "sin resultados" en vez de "error temporal, reintentá". | Distinguir vacío real de error. `app/(browse)/page.tsx` |
 
@@ -83,7 +83,7 @@ Severidad: 🔴 Crítico · 🟠 Alto · 🟡 Medio · 🔵 Bajo. Estado: ✅ co
 ## Resumen de prioridades pendientes (post-fixes de hoy)
 
 1. ✅ ~~Marketing viral: Open Graph en /serie y /u~~ — HECHO (M1–M3, M5).
-2. 🟠 **Resiliencia**: `app/error.tsx` + `not-found.tsx` (E1, E2).
+2. ✅ ~~Resiliencia: `app/error.tsx` + `not-found.tsx`~~ — HECHO (E1, E2). Queda `loading.tsx` (E3, 🔵).
 3. 🟠 **Escala**: paginar /catalogo (P1) + batch N+1 de deseados (P2).
 4. 🟡 **Accesibilidad**: alt de portadas + labels de inputs (A1, A2).
 5. 🟡 **UX**: landing/hero para logged-out (M4).
