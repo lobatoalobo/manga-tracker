@@ -1,6 +1,5 @@
 {
   "crons": [
-    { "path": "/api/cron/mangakas", "schedule": "0 6 * * 1" },
     { "path": "/api/cron/ivrea-proximas", "schedule": "0 7 * * *" }
   ]
 }

@@ -54,11 +54,12 @@ Leyenda: ✅ MANTENER · 🟡 REVISAR · 🟥 DEPRECAR.
 
 ## Plan de limpieza (ordenado por riesgo)
 
-**Fase 1 — apagar lo muerto (seguro, sin impacto en usuarios):**
-1. Sacar el cron `mangakas` del schedule (vercel.json) — ya no aporta.
-2. Sacar `mangakas` y `resolve` de `CRAWL_JOBS` (`lib/github.ts`) y del `RunJobsPanel` (quedan solo Ivrea).
-3. Quitar las tareas `resolve-unmapped` y `backfill-ovni-urls` del runner (`lib/adminTasks.ts`).
-4. `flag-comics`: dejar solo-listar o sacar.
+**Fase 1 — apagar lo muerto (seguro, sin impacto en usuarios):** ✅ HECHO (2026-06-18)
+1. ✅ Cron `mangakas` sacado del schedule (vercel.json).
+2. ✅ `mangakas` y `resolve` removidos de `CRAWL_JOBS` (`lib/github.ts`) y del `RunJobsPanel` (queda solo Ivrea).
+3. ✅ Tareas `resolve-unmapped` y `backfill-ovni-urls` removidas del runner (`lib/adminTasks.ts`).
+4. ✅ Página `/admin/scripts` (cheat-sheet de comandos) **eliminada** — los comandos viven solo en docs/scripts.md (decisión del usuario: en la app, solo herramientas ejecutables). Links actualizados (NavBar, CatalogRefreshBanner → Herramientas).
+5. ⬜ `flag-comics`: dejar solo-listar o sacar (pendiente, menor).
 
 **Fase 2 — limpiar /admin/mapeos y /admin/scripts:**
 5. /admin/mapeos: sacar "mapear a AniList", `national-only` y la auditoría de conteos vs AniList; conservar editar/borrar/portada/filtros locales.

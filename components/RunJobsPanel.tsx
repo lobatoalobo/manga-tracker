@@ -3,12 +3,10 @@
 import { useState, useTransition } from "react";
 import { runCrawlAction } from "@/app/actions";
 
-// Solo jobs de SITIO (runner de GitHub). Lo de Whakoom se corre LOCAL
-// (`npm run crawl whakoom-all`) porque Whakoom bloquea a los runners — ver Scripts.
+// Solo jobs de SITIO (runner de GitHub). Lo de Whakoom se corre LOCAL porque
+// bloquea a los runners (ver docs/scripts.md).
 const JOBS: { id: string; label: string; desc: string }[] = [
   { id: "ivrea", label: "Ivrea", desc: "Crawl del sitio de Ivrea" },
-  { id: "mangakas", label: "Mangakas", desc: "Índice de autores" },
-  { id: "resolve", label: "Resolver", desc: "Re-mapea las sin mapear por autor" },
 ];
 
 export default function RunJobsPanel({ actionsUrl }: { actionsUrl: string }) {
