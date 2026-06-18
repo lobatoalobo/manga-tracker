@@ -386,7 +386,12 @@ model Work {
   coverImage String?
   author     String? // autor(es), editable; semilla de la ficha de la editorial
   synopsis   String? // sinopsis, editable
-  genres     String[] // géneros (enriquecidos de MU/MD o editados a mano); para filtrar
+  genres     String[] // géneros CANÓNICOS (es) para filtrar; ver lib/genres.ts
+  // Géneros crudos de MU/MD (en inglés) antes de mapear: backup para re-mapear
+  // sin re-enriquecer.
+  rawGenres   String[]
+  // Demografía (Shonen/Shojo/Seinen/Josei/Kodomo): eje aparte del género.
+  demographic String?
   // Cuándo se enriqueció desde MU/MD (null = pendiente). Para el job batch.
   enrichedAt DateTime?
   upcoming   Boolean  @default(false) // "Próximo a salir" en AR (preventa/anunciada)

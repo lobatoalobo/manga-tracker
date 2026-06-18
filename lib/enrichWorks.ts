@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getMangaUpdatesEnrich } from "@/lib/providers/mangaupdates";
 import { getMangaDex } from "@/lib/providers/mangadex";
 import { getIvreaDataBySlug } from "@/lib/providers/ivrea";
+import { normalizeGenres } from "@/lib/genres";
 
 export interface EnrichResult {
   scanned: number;
@@ -66,6 +67,8 @@ export async function enrichWorks(opts: {
       coverImage: true,
       synopsis: true,
       genres: true,
+      rawGenres: true,
+      demographic: true,
       editions: {
         where: { publisher: "Ivrea Argentina" },
         select: { slug: true },
@@ -103,10 +106,14 @@ export async function enrichWorks(opts: {
     if (mu) matchedMU++;
     if (md) matchedMD++;
 
-    const genres = mergeGenres(mu?.genres ?? [], md?.genres ?? []);
+    // Crudo (MU ∪ MD, inglés) → canónico (es) + demografía (eje aparte).
+    const raw = mergeGenres(mu?.genres ?? [], md?.genres ?? []);
+    const { genres, demographic } = normalizeGenres(raw);
     const patch: {
       originalTitle?: string;
       genres?: string[];
+      rawGenres?: string[];
+      demographic?: string;
       coverImage?: string;
       synopsis?: string;
       enrichedAt: Date;
@@ -114,7 +121,9 @@ export async function enrichWorks(opts: {
 
     if (originalTitle && originalTitle !== w.originalTitle)
       patch.originalTitle = originalTitle;
+    if (raw.length && w.rawGenres.length === 0) patch.rawGenres = raw;
     if (genres.length && w.genres.length === 0) patch.genres = genres;
+    if (demographic && !w.demographic) patch.demographic = demographic;
     // Portada: Ivrea manda; respaldo MD (original) y luego MU.
     if (!w.coverImage && (md?.coverImage || mu?.coverImage))
       patch.coverImage = (md?.coverImage || mu?.coverImage) as string;
