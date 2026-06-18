@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { formatProximaDate, formatReleaseLabel } from "@/lib/releaseDate";
 import { toggleWishAction } from "@/app/actions";
+import ArgentinaFlag from "@/components/ArgentinaFlag";
 
 export interface BrowseCard {
   id: number;
@@ -305,8 +306,8 @@ export default function CatalogBrowser({
                       </div>
                     )}
                     {w.national && (
-                      <span className="absolute left-1 top-1 rounded bg-black/60 px-1 py-0.5 text-[10px] font-medium text-white">
-                        🇦🇷
+                      <span className="absolute left-1 top-1 flex items-center rounded bg-black/60 px-1 py-0.5">
+                        <ArgentinaFlag className="h-2.5 w-4 rounded-[1px]" />
                       </span>
                     )}
                     {owned && (

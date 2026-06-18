@@ -276,8 +276,13 @@ export async function upcomingForIds(ids: number[]): Promise<Set<number>> {
   }
   if (negWorkIds.length) {
     // Negativos = -workId: el flag upcoming vive en el Work, no en la edición.
+    // Guard: excluir las que ya tienen edición publicada (flag viejo).
     const rows = await prisma.work.findMany({
-      where: { id: { in: negWorkIds }, upcoming: true },
+      where: {
+        id: { in: negWorkIds },
+        upcoming: true,
+        editions: { none: { volumes: { gt: 0 } } },
+      },
       select: { id: true },
     });
     for (const r of rows) out.add(-r.id);
@@ -424,8 +429,13 @@ export async function browseWorks(opts: {
   let where: WorkWhere = qFilter ?? {};
 
   if (opts.tab === "series") {
-    // Próximas SERIES: debuts marcados upcoming (sembrados desde /news/).
-    const f: WorkWhere = { upcoming: true };
+    // Próximas SERIES: debuts marcados upcoming (sembrados desde /news/). Guard:
+    // si ya tiene una edición con tomos, NO es próxima (el flag puede estar viejo
+    // entre corridas del reconcile).
+    const f: WorkWhere = {
+      upcoming: true,
+      editions: { none: { volumes: { gt: 0 } } },
+    };
     where = qFilter ? { AND: [f, qFilter] } : f;
   } else if (opts.tab === "tomos") {
     // Próximos TOMOS: obras con una salida futura (vía edición→work).
@@ -458,7 +468,7 @@ export async function browseWorks(opts: {
         upcoming: true,
         releaseLabel: true,
         genres: true,
-        editions: { select: { id: true, publisher: true } },
+        editions: { select: { id: true, publisher: true, volumes: true } },
       },
     }),
     prisma.work.count({ where }),
@@ -484,6 +494,9 @@ export async function browseWorks(opts: {
       const n = nextByEd.get(e.id);
       if (n && (!next || n.date < next.date)) next = n;
     }
+    // Guard: una obra con edición publicada (volumes>0) NO es "próximo a salir",
+    // aunque el flag `upcoming` haya quedado viejo (se setea entre crawls).
+    const isUpcoming = w.upcoming && !w.editions.some((e) => e.volumes > 0);
     return {
       id: w.id,
       title: w.title,
@@ -491,8 +504,8 @@ export async function browseWorks(opts: {
       publishers: [...new Set(w.editions.map((e) => e.publisher))],
       // Nacional = edición de editorial AR, o un debut/próxima de Ivrea (que aún
       // no tiene edición cargada pero es nacional).
-      national: w.upcoming || w.editions.some((e) => AR_PUBLISHERS.has(e.publisher)),
-      upcoming: w.upcoming,
+      national: isUpcoming || w.editions.some((e) => AR_PUBLISHERS.has(e.publisher)),
+      upcoming: isUpcoming,
       releaseLabel: w.releaseLabel,
       genres: w.genres,
       next,

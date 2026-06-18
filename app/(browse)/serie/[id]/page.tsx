@@ -11,6 +11,7 @@ import { crumbSearch } from "@/lib/crumb";
 import { getCrumbQuery } from "@/lib/storeLinks";
 import { formatReleaseLabel, formatProximaDate } from "@/lib/releaseDate";
 import AddEditionButton from "@/components/AddEditionButton";
+import ArgentinaFlag from "@/components/ArgentinaFlag";
 import WishButton from "@/components/WishButton";
 import TrackingPanel from "@/components/TrackingPanel";
 import { SignIn } from "@/components/AuthButtons";
@@ -110,10 +111,13 @@ export default async function SeriePage({
   }
 
   const { title, coverImage, author, synopsis, genres } = work;
+  // Guard: una obra con edición publicada (volumes>0) NO es "próximo a salir",
+  // aunque el flag haya quedado viejo entre corridas del reconcile.
+  const upcoming = work.upcoming && !work.editions.some((e) => e.volumes > 0);
   // Nacional = edición de editorial argentina (PUB_KEY) o debut/próxima de Ivrea
   // (sin edición cargada aún). A futuro, las internacionales no llevarán el chip.
   const national =
-    work.upcoming || work.editions.some((e) => PUB_KEY[e.publisher] != null);
+    upcoming || work.editions.some((e) => PUB_KEY[e.publisher] != null);
 
   // Colección: id sintético negativo por workId (no choca con ids de AniList).
   const pseudoId = -workId;
@@ -152,11 +156,12 @@ export default async function SeriePage({
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold">{title}</h1>
             {national && (
-              <span className="rounded-full bg-sky-500/15 px-2.5 py-0.5 text-xs font-medium text-sky-300">
-                🇦🇷 Edición nacional
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500/15 px-2.5 py-0.5 text-xs font-medium text-sky-300">
+                <ArgentinaFlag className="h-3 w-4.5 rounded-[1px]" /> Edición
+                nacional
               </span>
             )}
-            {work.upcoming && (
+            {upcoming && (
               <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-300">
                 🔜 Próximo a salir
                 {formatReleaseLabel(work.releaseLabel) &&
@@ -316,7 +321,7 @@ export default async function SeriePage({
 
       {synopsis ? (
         <ExpandableText text={synopsis} />
-      ) : work.upcoming ? (
+      ) : upcoming ? (
         <p className="mt-6 text-sm text-muted">
           📅 La sinopsis y los datos completos se cargan cuando sale la serie.
         </p>
