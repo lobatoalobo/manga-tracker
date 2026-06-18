@@ -38,7 +38,7 @@ Severidad: 🔴 Crítico · 🟠 Alto · 🟡 Medio · 🔵 Bajo. Estado: ✅ co
 
 | # | Sev | Estado | Hallazgo | Ubicación |
 |---|-----|--------|----------|-----------|
-| A1 | 🟠 | ⬜ | Portadas que son **contenido** con `alt=""` (lector de pantalla no identifica la serie). | `components/CollectionGrid.tsx` (vista lista), `components/Dashboard.tsx`, avatar en `app/amigos/page.tsx` |
+| A1 | 🔵 | ✅ | **Falso positivo** (verificado): las portadas con `alt=""` en CollectionGrid (lista), Dashboard y el avatar de amigos están **dentro del mismo link que el título/nombre visible**. Por WCAG, imagen con texto adyacente que la describe → `alt=""` es lo correcto (evita leer el título dos veces). Sin cambio. | — |
 | A2 | 🟡 | ⬜ | **Inputs sin `<label>`** asociado (solo placeholder): formularios de compra, import CSV, buscadores y selects de colección/tiendas. | `components/PurchaseForm.tsx`, `ImportExport.tsx`, `CollectionGrid.tsx`, `StoreList.tsx` |
 | A3 | 🟡 | ⬜ | Botones de solo-ícono o de acción sin `aria-label`. | `RemoveWishButton.tsx`, `FriendActions.tsx`, `SeriesNotifManager.tsx` |
 | A4 | 🔵 | ⬜ | Estado comunicado solo por color en algunos badges (al-día/incompleta) — sumar texto/ícono. | `MangaCard.tsx`, `CollectionGrid.tsx` |
@@ -66,7 +66,7 @@ Severidad: 🔴 Crítico · 🟠 Alto · 🟡 Medio · 🔵 Bajo. Estado: ✅ co
 | # | Sev | Estado | Hallazgo | Ubicación |
 |---|-----|--------|----------|-----------|
 | P1 | 🟠 | ⬜ | `/catalogo` manda **hasta 10.000 works** al cliente (`take: 10000`) y filtra/pagina client-side. Payload grande; crece con el catálogo. | `app/(browse)/catalogo/page.tsx`. Paginar server-side o bajar el `take` + carga incremental. |
-| P2 | 🟠 | ⬜ | **N+1** en "deseados para comprar": un `findFirst` por cada deseado. | `lib/shopping.ts` getWishlistToBuy → batch con `findMany`+OR. |
+| P2 | 🟠 | ✅ | **N+1** en "deseados para comprar" (un `findFirst` por deseado) → batcheado a 1 `findMany` con OR + map por workId/anilistId. | `lib/shopping.ts` getWishlistToBuy |
 | P3 | 🟡 | ⬜ | **N+1** en `syncTrackedTotals` (update por edición trackeada) y en `detectAndNotifyNewVolumes` (varias queries por edición cambiada). Es cron, no hot-path, pero escala mal. | `lib/syncTracked.ts`, `lib/catalogNotify.ts` |
 | P4 | 🔵 | ⬜ | 22 usos de `<img>` (no `next/image`): sin lazy-load/AVIF/srcset. | Migrar a `<Image>` (configurar `images` en next.config). |
 | P5 | 🔵 | ⬜ | Riesgo histórico: AniList en runtime con rate-limit. Ya **mitigado** en el path local (ver [pre-launch]); queda admin/batch. | — |

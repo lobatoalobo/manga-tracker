@@ -26,16 +26,41 @@ export async function getWishlistToBuy(userId: string): Promise<WishlistBuyItem[
   });
   if (wishes.length === 0) return [];
 
+  // 1 sola query (antes era un findFirst por deseado = N+1). Traemos todas las
+  // ediciones publicadas de los works/anilistIds deseados, ordenadas por tomos
+  // desc, y nos quedamos con la de MÁS tomos por clave (la primera que aparece).
+  const workIds = wishes.filter((w) => w.anilistId < 0).map((w) => -w.anilistId);
+  const anilistIds = wishes.filter((w) => w.anilistId > 0).map((w) => w.anilistId);
+
+  const eds = await prisma.publisherEdition.findMany({
+    where: {
+      volumes: { gt: 0 },
+      OR: [
+        ...(workIds.length ? [{ workId: { in: workIds } }] : []),
+        ...(anilistIds.length ? [{ anilistId: { in: anilistIds } }] : []),
+      ],
+    },
+    orderBy: { volumes: "desc" },
+    select: {
+      workId: true,
+      anilistId: true,
+      publisher: true,
+      volumes: true,
+      work: { select: { coverImage: true } },
+    },
+  });
+
+  type Ed = (typeof eds)[number];
+  const byWork = new Map<number, Ed>();
+  const byAnilist = new Map<number, Ed>();
+  for (const e of eds) {
+    if (e.workId != null && !byWork.has(e.workId)) byWork.set(e.workId, e);
+    if (e.anilistId != null && !byAnilist.has(e.anilistId)) byAnilist.set(e.anilistId, e);
+  }
+
   const out: WishlistBuyItem[] = [];
   for (const w of wishes) {
-    const ed = await prisma.publisherEdition.findFirst({
-      where:
-        w.anilistId < 0
-          ? { workId: -w.anilistId, volumes: { gt: 0 } }
-          : { anilistId: w.anilistId, volumes: { gt: 0 } },
-      orderBy: { volumes: "desc" },
-      select: { publisher: true, volumes: true, work: { select: { coverImage: true } } },
-    });
+    const ed = w.anilistId < 0 ? byWork.get(-w.anilistId) : byAnilist.get(w.anilistId);
     if (!ed) continue; // todavía no salió en AR
     out.push({
       anilistId: w.anilistId,
