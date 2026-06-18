@@ -1,5 +1,6 @@
 import { reconcileIvreaProximas } from "@/lib/ivreaProximas";
 import { notifyIvreaReleases } from "@/lib/localNotify";
+import { detectAndNotifyWishlistAvailable } from "@/lib/catalogNotify";
 import { syncTrackedTotals } from "@/lib/syncTracked";
 
 export const maxDuration = 120;
@@ -21,5 +22,6 @@ export async function GET(request: Request) {
   const reconcile = await reconcileIvreaProximas();
   const synced = await syncTrackedTotals();
   const notify = await notifyIvreaReleases();
-  return Response.json({ ok: true, reconcile, synced, notify });
+  const wishlist = await detectAndNotifyWishlistAvailable();
+  return Response.json({ ok: true, reconcile, synced, notify, wishlist });
 }
