@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Link from "next/link";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { ANILIST_OFF } from "@/lib/flags";
@@ -106,6 +107,15 @@ export default async function RootLayout({
             {ANILIST_OFF
               ? "datos de las editoriales, MangaUpdates y MangaDex."
               : "datos de AniList, MangaUpdates y editoriales locales."}
+          </p>
+          <p className="mt-2 flex items-center justify-center gap-3">
+            <Link href="/privacidad" className="transition hover:text-foreground">
+              Privacidad
+            </Link>
+            <span aria-hidden>·</span>
+            <Link href="/terminos" className="transition hover:text-foreground">
+              Términos
+            </Link>
           </p>
           {process.env.NEXT_PUBLIC_DONATE_URL && (
             <a

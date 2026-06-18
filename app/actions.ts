@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth, requireUserId } from "@/auth";
+import { auth, requireUserId, signOut } from "@/auth";
+import { deleteAccount } from "@/lib/account";
 import {
   addEdition,
   removeEdition,
@@ -178,6 +179,16 @@ async function mangaInfo(userId: string, anilistId: number) {
     where: { userId_anilistId: { userId, anilistId } },
     select: { romajiTitle: true, coverImage: true },
   });
+}
+
+/**
+ * Borra la cuenta del usuario y todos sus datos, y cierra la sesión. Acción
+ * irreversible (derecho de supresión). El `signOut` redirige a la home.
+ */
+export async function deleteAccountAction() {
+  const userId = await requireUserId();
+  await deleteAccount(userId);
+  await signOut({ redirectTo: "/" });
 }
 
 export async function setSharingAction(enable: boolean) {
