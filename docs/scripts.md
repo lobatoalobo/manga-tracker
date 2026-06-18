@@ -23,7 +23,7 @@ Referencia de todos los comandos. **Convención de entorno:**
 | `npm run crawl …` | Atajo de `tsx scripts/crawl.ts` (ver abajo). |
 | `npm run import:whakoom …` | Atajo de `scripts/import-whakoom.ts`. |
 | `npm run seed:whakoom …` | Atajo de `scripts/seed-whakoom.ts`. |
-| `npm run depurate` / `consolidate-dups` / `flag-comics` / `enrich-covers` / `split-homonyms` / `fix-ivrea-urls` / `auto-map` / `test-preventa` / `reset-preventa` / `push-test` | Atajos de los scripts homónimos. |
+| `npm run depurate` / `consolidate-dups` / `enrich-covers` / `split-homonyms` / `fix-ivrea-urls` / `auto-map` / `test-preventa` / `reset-preventa` / `push-test` | Atajos de los scripts homónimos. |
 
 Migraciones: crear el SQL a mano en `prisma/migrations/<ts>_<nombre>/migration.sql`, luego `npm run migrate:staging` (staging) y `npx prisma migrate deploy` (prod) + `npx prisma generate`.
 
@@ -75,7 +75,6 @@ Migraciones: crear el SQL a mano en `prisma/migrations/<ts>_<nombre>/migration.s
 | `npx tsx scripts/depurate-catalog.ts [--apply]` | 1 edición regular por (obra, editorial); borra specials/duplicados + works huérfanos. |
 | `npx tsx scripts/consolidate-dups.ts [--apply]` | Consolida duplicados de misma editorial+título+tomos en una edición. |
 | `npx tsx scripts/split-homonyms.ts [--apply]` | Separa homónimos fusionados (Citrus vs Citrus+). |
-| `npx tsx scripts/flag-comics.ts [--apply]` | Marca/borra ediciones que parecen cómic occidental (Marvel/DC). |
 | `npx tsx scripts/fix-ivrea-urls.ts [--limit N] [--apply]` | Arregla links de Ivrea que quedaron a Whakoom + sincroniza tomos. |
 | `npx tsx scripts/fix-whakoom-counts.ts [--dry]` | Corrige conteo de tomos publicados de imports de Whakoom (excluye upcoming). |
 | `npx tsx scripts/auto-map.ts [--limit N] [--apply]` | 🟥 Auto-mapea a AniList ediciones sin mapear (por título original + autor). |

@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { tightTitleKey, findOrCreateWork } from "@/lib/catalog";
-import { looksLikeComic } from "@/lib/comicTerms";
 
 /**
  * Lógica de curación del catálogo, compartida por los scripts de terminal y las
@@ -20,30 +19,6 @@ const isWhakoom = (u: string) => /whakoom\.com/i.test(u);
 async function cleanOrphanWorks(): Promise<number> {
   const r = await prisma.work.deleteMany({ where: { editions: { none: {} } } });
   return r.count;
-}
-
-// --- Cómics -----------------------------------------------------------------
-
-export async function flagComics(dryRun: boolean): Promise<CurationResult> {
-  const rows = await prisma.publisherEdition.findMany({
-    where: { anilistId: null },
-    select: { id: true, publisher: true, title: true },
-  });
-  const hits = rows
-    .map((r) => ({ ...r, term: looksLikeComic(r.title) }))
-    .filter((h): h is typeof h & { term: string } => !!h.term);
-
-  let orphans = 0;
-  if (!dryRun && hits.length) {
-    await prisma.publisherEdition.deleteMany({ where: { id: { in: hits.map((h) => h.id) } } });
-    orphans = await cleanOrphanWorks();
-  }
-  return {
-    scanned: rows.length,
-    changed: hits.length,
-    samples: hits.slice(0, SAMPLE).map((h) => `#${h.id} [${h.publisher}] "${h.title}" (${h.term})`),
-    note: orphans ? `${orphans} works huérfanos borrados` : undefined,
-  };
 }
 
 // --- Depuración: 1 edición regular por (obra, editorial) --------------------

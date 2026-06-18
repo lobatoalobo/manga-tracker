@@ -3,13 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  setEditionMappingAction,
-  resolveEditionMappingAction,
-  updateEditionAction,
-  deleteEditionAction,
-  setEditionNationalOnlyAction,
-} from "@/app/actions";
+import { updateEditionAction, deleteEditionAction } from "@/app/actions";
 import type { EditionMapping } from "@/lib/catalog";
 
 const input =
@@ -17,18 +11,15 @@ const input =
 
 export default function MappingRow({
   row,
-  anilistVolumes = null,
   selected,
   onToggle,
 }: {
   row: EditionMapping;
-  anilistVolumes?: number | null;
   selected?: boolean;
   onToggle?: (id: number) => void;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
-  const [anilist, setAnilist] = useState(row.anilistId?.toString() ?? "");
   const [title, setTitle] = useState(row.title);
   const [url, setUrl] = useState(row.url);
   const [volumes, setVolumes] = useState(row.volumes.toString());
@@ -40,18 +31,12 @@ export default function MappingRow({
       router.refresh();
     });
 
-  const saveMapping = () =>
-    run(() =>
-      setEditionMappingAction(row.id, anilist.trim() ? Number(anilist) : null),
-    );
-
   const saveAll = () =>
     run(async () => {
       await updateEditionAction(row.id, {
         title,
         url,
         volumes: Number(volumes) || 0,
-        anilistId: anilist.trim() ? Number(anilist) : null,
       });
       setEditing(false);
     });
@@ -78,40 +63,14 @@ export default function MappingRow({
             {row.title}
           </p>
           <p className="mt-0.5 text-xs text-muted">
-            {row.publisher} · {row.volumes} tomos
-            {anilistVolumes != null && anilistVolumes !== row.volumes && (
-              <span
-                className="text-amber-400/80"
-                title="AniList dice otro total (su dato suele estar incompleto). Solo una referencia, no necesariamente un error."
-              >
-                {" "}
-                (AniList: {anilistVolumes})
-              </span>
-            )}{" "}
-            ·{" "}
-            {row.anilistId ? (
-              <Link
-                href={`/manga/${row.anilistId}`}
-                target="_blank"
-                className="text-accent hover:underline"
-              >
-                serie #{row.anilistId} ↗
-              </Link>
-            ) : (
-              <>
-                <span className={row.nationalOnly ? "text-sky-300" : "text-muted"}>
-                  {row.nationalOnly ? "🇦🇷 nacional-only" : "sin AniList (opcional)"}
-                </span>{" "}
-                ·{" "}
-                <Link
-                  href={`/nacional/${row.id}`}
-                  target="_blank"
-                  className="text-accent hover:underline"
-                >
-                  abrir ↗
-                </Link>
-              </>
-            )}{" "}
+            {row.publisher} · {row.volumes} tomos ·{" "}
+            <Link
+              href={`/nacional/${row.id}`}
+              target="_blank"
+              className="text-accent hover:underline"
+            >
+              abrir ↗
+            </Link>{" "}
             ·{" "}
             <a
               href={row.url}
@@ -126,36 +85,8 @@ export default function MappingRow({
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-          <input
-            value={anilist}
-            onChange={(e) => setAnilist(e.target.value.replace(/[^0-9]/g, ""))}
-            placeholder="anilistId"
-            inputMode="numeric"
-            className={`w-24 ${input}`}
-          />
-          <Btn onClick={saveMapping} disabled={pending} variant="accent">
-            Mapear
-          </Btn>
-          <Btn
-            onClick={() => run(() => resolveEditionMappingAction(row.id))}
-            disabled={pending}
-            title="Resolver automáticamente (verificado por autor)"
-          >
-            Auto
-          </Btn>
           <Btn onClick={() => setEditing((v) => !v)} disabled={pending}>
             {editing ? "Cerrar" : "Editar"}
-          </Btn>
-          <Btn
-            onClick={() =>
-              run(() =>
-                setEditionNationalOnlyAction(row.id, !row.nationalOnly),
-              )
-            }
-            disabled={pending}
-            title="Marcar como obra solo-nacional (no existe en AniList)"
-          >
-            {row.nationalOnly ? "Quitar nacional" : "Nacional-only"}
           </Btn>
           <Btn
             onClick={() => run(() => deleteEditionAction(row.id))}

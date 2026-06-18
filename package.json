@@ -16,7 +16,6 @@
     "seed:whakoom": "tsx scripts/seed-whakoom.ts",
     "depurate": "tsx scripts/depurate-catalog.ts",
     "consolidate-dups": "tsx scripts/consolidate-dups.ts",
-    "flag-comics": "tsx scripts/flag-comics.ts",
     "enrich-covers": "tsx scripts/enrich-covers.ts",
     "split-homonyms": "tsx scripts/split-homonyms.ts",
     "fix-ivrea-urls": "tsx scripts/fix-ivrea-urls.ts",
