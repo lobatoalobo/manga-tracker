@@ -44,7 +44,7 @@ export default async function PerfilPage() {
     {
       title: "Explorar",
       rows: [
-        { href: "/", label: "Buscar" },
+        { href: "/catalogo", label: "Buscar" },
         { href: "/tiendas", label: "Tiendas" },
         { href: "/independientes", label: "Autores independientes" },
       ],

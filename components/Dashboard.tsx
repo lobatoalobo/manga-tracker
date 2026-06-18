@@ -122,10 +122,10 @@ export default async function Dashboard({
       {/* Descubrir */}
       <section className="mt-8">
         <Link
-          href="/?tab=hot"
+          href="/catalogo?tab=series"
           className="flex items-center justify-between rounded-xl border border-border bg-surface px-5 py-4 transition hover:border-accent"
         >
-          <span className="font-medium">🔥 Descubrir series nuevas</span>
+          <span className="font-medium">🔜 Descubrir series nuevas</span>
           <span className="text-muted">→</span>
         </Link>
       </section>
