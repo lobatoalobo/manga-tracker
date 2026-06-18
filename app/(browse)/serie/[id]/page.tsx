@@ -11,6 +11,7 @@ import { crumbSearch } from "@/lib/crumb";
 import { getCrumbQuery } from "@/lib/storeLinks";
 import { formatReleaseLabel, formatProximaDate } from "@/lib/releaseDate";
 import AddEditionButton from "@/components/AddEditionButton";
+import ArgentinaFlag from "@/components/ArgentinaFlag";
 import WishButton from "@/components/WishButton";
 import TrackingPanel from "@/components/TrackingPanel";
 import { SignIn } from "@/components/AuthButtons";
@@ -155,8 +156,9 @@ export default async function SeriePage({
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold">{title}</h1>
             {national && (
-              <span className="rounded-full bg-sky-500/15 px-2.5 py-0.5 text-xs font-medium text-sky-300">
-                🇦🇷 Edición nacional
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500/15 px-2.5 py-0.5 text-xs font-medium text-sky-300">
+                <ArgentinaFlag className="h-3 w-4.5 rounded-[1px]" /> Edición
+                nacional
               </span>
             )}
             {upcoming && (
