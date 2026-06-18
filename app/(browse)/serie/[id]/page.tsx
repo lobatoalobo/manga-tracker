@@ -136,7 +136,25 @@ export default async function SeriePage({
             )}
           </div>
 
-          {author && <p className="mt-1 text-sm text-muted">{author}</p>}
+          {author && (
+            <p className="mt-1 text-sm text-muted">
+              {author
+                .split(/,|&| y /i)
+                .map((a) => a.trim())
+                .filter(Boolean)
+                .map((a, i) => (
+                  <span key={a}>
+                    {i > 0 && ", "}
+                    <Link
+                      href={`/autores/${encodeURIComponent(a)}`}
+                      className="transition hover:text-accent hover:underline"
+                    >
+                      {a}
+                    </Link>
+                  </span>
+                ))}
+            </p>
+          )}
 
           {genres.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
