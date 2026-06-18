@@ -226,80 +226,88 @@ export default async function SeriePage({
           </div>
 
           {/* Ediciones de la obra (todas las editoriales). */}
-          <div className="mt-5 space-y-2">
+          <div className="mt-6">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
               Ediciones
             </h2>
-            {work.editions.length === 0 && (
-              // Debut sin ficha aún: sabemos que es de Ivrea. Mostramos la card
-              // con "Trackear" deshabilitado; se habilita al salir el 1er tomo.
-              <div className="rounded-xl border border-border bg-surface px-4 py-3">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              {work.editions.length === 0 && (
+                // Debut sin ficha aún: sabemos que es de Ivrea. Card con
+                // "Trackear" deshabilitado; se habilita al salir el 1er tomo.
+                <div className="flex flex-col rounded-xl border border-border bg-surface p-4">
                   <span className="font-medium">Ivrea Argentina</span>
-                  <span className="text-sm text-muted">
+                  <p className="mt-1 text-sm text-muted">
                     Próximamente
                     {formatReleaseLabel(work.releaseLabel)
                       ? ` · ${formatReleaseLabel(work.releaseLabel)}`
                       : ""}
-                  </span>
+                  </p>
+                  <button
+                    disabled
+                    title="Se habilita cuando salga el primer tomo"
+                    className="mt-auto cursor-not-allowed rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted opacity-50"
+                  >
+                    + Trackear (cuando salga)
+                  </button>
                 </div>
-                <button
-                  disabled
-                  title="Se habilita cuando salga el primer tomo"
-                  className="mt-3 w-full cursor-not-allowed rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted opacity-50"
-                >
-                  + Trackear (cuando salga)
-                </button>
-              </div>
-            )}
-            {work.editions.map((e) => {
-              const next = nextByEdition.get(e.id);
-              const key = editionKey(e.publisher, e.id);
-              const edition: Edition = {
-                id: key,
-                source: e.publisher,
-                region: "AR",
-                publisher: e.publisher,
-                slug: e.slug,
-                status: e.status || "EN CATÁLOGO",
-                volumes: e.volumes,
-                nextVolume: next?.volume ?? null,
-                url: e.url,
-              };
-              return (
-                <div
-                  key={e.id}
-                  className="rounded-xl border border-border bg-surface px-4 py-3"
-                >
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              )}
+              {work.editions.map((e) => {
+                const next = nextByEdition.get(e.id);
+                const key = editionKey(e.publisher, e.id);
+                const isTracked = trackedKeys.includes(key);
+                const edition: Edition = {
+                  id: key,
+                  source: e.publisher,
+                  region: "AR",
+                  publisher: e.publisher,
+                  slug: e.slug,
+                  status: e.status || "EN CATÁLOGO",
+                  volumes: e.volumes,
+                  nextVolume: next?.volume ?? null,
+                  url: e.url,
+                };
+                return (
+                  <div
+                    key={e.id}
+                    className={`flex flex-col rounded-xl border bg-surface p-4 ${
+                      isTracked ? "border-accent" : "border-border"
+                    }`}
+                  >
                     <span className="font-medium">{e.publisher}</span>
-                    <span className="text-sm text-muted">
-                      {e.volumes > 0 ? `${e.volumes} tomos` : "Sin tomos aún"}
-                      {e.status ? ` · ${e.status.toLowerCase()}` : ""}
-                    </span>
+                    <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                      <EdField
+                        label="Tomos"
+                        value={e.volumes > 0 ? e.volumes : "—"}
+                      />
+                      <EdField
+                        label="Estado"
+                        value={e.status ? e.status.toLowerCase() : "en catálogo"}
+                      />
+                    </dl>
+                    {next && (
+                      <p className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-300">
+                        📅 Próximo tomo{next.volume ? ` #${next.volume}` : ""} ·{" "}
+                        {formatProximaDate(next.date)}
+                      </p>
+                    )}
+                    {userId && (
+                      <div className="mt-auto">
+                        <AddEditionButton
+                          anilist={{
+                            id: pseudoId,
+                            title: { romaji: title, english: null, native: null },
+                            coverImage: coverImage ?? "",
+                            volumes: e.volumes,
+                          }}
+                          edition={edition}
+                          isTracked={isTracked}
+                        />
+                      </div>
+                    )}
                   </div>
-                  {next && (
-                    <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-300">
-                      📅 Próximo tomo
-                      {next.volume ? ` #${next.volume}` : ""} ·{" "}
-                      {formatProximaDate(next.date)}
-                    </p>
-                  )}
-                  {userId && (
-                    <AddEditionButton
-                      anilist={{
-                        id: pseudoId,
-                        title: { romaji: title, english: null, native: null },
-                        coverImage: coverImage ?? "",
-                        volumes: e.volumes,
-                      }}
-                      edition={edition}
-                      isTracked={trackedKeys.includes(key)}
-                    />
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
           {admin && (
@@ -336,5 +344,20 @@ export default async function SeriePage({
         />
       )}
     </main>
+  );
+}
+
+function EdField({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div>
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="font-medium capitalize">{value}</dd>
+    </div>
   );
 }
