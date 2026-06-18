@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { detectAndNotifyNewVolumes } from "@/lib/catalogNotify";
+import { normalizeGenres } from "@/lib/genres";
 import { logJobRun } from "@/lib/jobs";
 import {
   consolidateDups,
@@ -93,6 +94,44 @@ const tasks: AdminTask[] = [
               `${e.manga.romajiTitle} · ${e.label}: ${e.totalVolumes} → ${max}`,
           ),
       };
+    },
+  },
+  {
+    id: "normalize-genres",
+    title: "Normalizar géneros (taxonomía canónica)",
+    description:
+      "Mapea los géneros crudos (MU/MD, inglés) a la taxonomía canónica en español (lib/genres.ts), guarda el crudo en rawGenres (backup) y separa la demografía. Idempotente: re-mapea desde rawGenres si ya existe.",
+    async run(dryRun) {
+      const works = await prisma.work.findMany({
+        select: { id: true, title: true, genres: true, rawGenres: true, demographic: true },
+      });
+      let changed = 0;
+      const samples: string[] = [];
+      for (const w of works) {
+        const source = w.rawGenres.length ? w.rawGenres : w.genres;
+        if (source.length === 0) continue;
+        const { genres, demographic } = normalizeGenres(source);
+        const sameGenres =
+          genres.length === w.genres.length &&
+          genres.every((g) => w.genres.includes(g));
+        if (sameGenres && w.rawGenres.length > 0 && (w.demographic ?? null) === (demographic ?? null))
+          continue;
+        changed++;
+        if (samples.length < SAMPLE)
+          samples.push(
+            `${w.title}: [${source.slice(0, 4).join(", ")}] → [${genres.join(", ")}]${demographic ? ` · ${demographic}` : ""}`,
+          );
+        if (!dryRun)
+          await prisma.work.update({
+            where: { id: w.id },
+            data: {
+              rawGenres: w.rawGenres.length ? w.rawGenres : w.genres,
+              genres,
+              demographic,
+            },
+          });
+      }
+      return { scanned: works.length, changed, samples };
     },
   },
   {
