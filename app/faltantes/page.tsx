@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
-import { getShoppingList } from "@/lib/shopping";
+import { getShoppingList, getWishlistToBuy } from "@/lib/shopping";
 import { seriesHref } from "@/lib/url";
 
 export const metadata = { title: "Para comprar · Nakama" };
@@ -10,7 +10,10 @@ export default async function FaltantesPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/");
 
-  const items = await getShoppingList(session.user.id);
+  const [items, wishlistBuy] = await Promise.all([
+    getShoppingList(session.user.id),
+    getWishlistToBuy(session.user.id),
+  ]);
   const totalMissing = items.reduce((s, i) => s + i.missing.length, 0);
 
   return (
@@ -21,12 +24,14 @@ export default async function FaltantesPage() {
         comprarlos.
       </p>
 
-      {items.length === 0 ? (
+      {items.length === 0 && wishlistBuy.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border bg-surface p-10 text-center text-sm text-muted">
           ¡Estás al día! No te falta ningún tomo de tus ediciones nacionales 🎉
         </p>
       ) : (
         <>
+          {items.length > 0 && (
+          <>
           <p className="mb-4 text-sm text-muted">
             Te faltan <b className="text-foreground">{totalMissing}</b> tomos en{" "}
             <b className="text-foreground">{items.length}</b> series.
@@ -105,6 +110,57 @@ export default async function FaltantesPage() {
               </li>
             ))}
           </ul>
+          </>
+          )}
+
+          {wishlistBuy.length > 0 && (
+            <section className={items.length > 0 ? "mt-8" : ""}>
+              <h2 className="mb-1 text-lg font-semibold">
+                Deseados que ya salieron 🎉
+              </h2>
+              <p className="mb-4 text-sm text-muted">
+                Series de tu lista de deseados ya disponibles en Argentina.
+              </p>
+              <ul className="space-y-3">
+                {wishlistBuy.map((w) => (
+                  <li
+                    key={w.anilistId}
+                    className="flex gap-3 rounded-xl border border-border bg-surface p-3"
+                  >
+                    <Link href={seriesHref(w.anilistId)} className="shrink-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={w.coverImage}
+                        alt={w.title}
+                        className="h-24 w-16 rounded-md object-cover"
+                      />
+                    </Link>
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={seriesHref(w.anilistId)}
+                        className="font-medium hover:text-accent"
+                      >
+                        {w.title}
+                      </Link>
+                      <p className="mt-0.5 text-xs text-muted">
+                        {w.publisher} · {w.total} {w.total === 1 ? "tomo" : "tomos"}
+                      </p>
+                      <div className="mt-2">
+                        <a
+                          href={w.crumbUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-lg border border-border px-3 py-1 text-xs transition hover:border-accent"
+                        >
+                          🛒 Comprar en Crumb
+                        </a>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </>
       )}
     </main>
