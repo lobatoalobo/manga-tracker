@@ -919,6 +919,7 @@ export async function setPurchaseItemStatusAction(
 
 /** Búsqueda liviana de series para el selector del form de compras. */
 export async function searchPurchaseSeriesAction(query: string) {
+  await requireUserId(); // solo desde el form de compras (logueado)
   const q = query.trim();
   if (q.length < 2) return [];
   // Catálogo local: buscamos en nuestros Works (no AniList). Devuelve id
