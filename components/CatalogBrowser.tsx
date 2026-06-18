@@ -38,7 +38,7 @@ const norm = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 function readUrl(): BrowseState {
-  const empty: BrowseState = { q: "", tab: "az", genres: [], gmode: "all", page: 1 };
+  const empty: BrowseState = { q: "", tab: "az", genres: [], gmode: "any", page: 1 };
   if (typeof window === "undefined") return empty;
   const p = new URLSearchParams(window.location.search);
   const tab = p.get("tab");
@@ -50,7 +50,7 @@ function readUrl(): BrowseState {
     q: p.get("q") ?? "",
     tab: tab === "series" || tab === "tomos" ? tab : "az",
     genres,
-    gmode: p.get("gmode") === "any" ? "any" : "all",
+    gmode: p.get("gmode") === "all" ? "all" : "any",
     page: Math.max(1, Number(p.get("page")) || 1),
   };
 }
@@ -102,7 +102,7 @@ export default function CatalogBrowser({
     if (next.tab !== "az") params.set("tab", next.tab);
     if (next.q.trim()) params.set("q", next.q.trim());
     if (next.genres.length) params.set("genres", next.genres.join(","));
-    if (next.genres.length > 1 && next.gmode === "any") params.set("gmode", "any");
+    if (next.genres.length > 1 && next.gmode === "all") params.set("gmode", "all");
     if (next.page > 1) params.set("page", String(next.page));
     const qs = params.toString();
     const url = `/catalogo${qs ? `?${qs}` : ""}`;
