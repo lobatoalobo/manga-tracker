@@ -8,6 +8,7 @@ import AdminWorkEdit from "@/components/AdminWorkEdit";
 import ExpandableText from "@/components/ExpandableText";
 import { isWished } from "@/lib/wishlist";
 import { crumbSearch } from "@/lib/crumb";
+import { getCrumbQuery } from "@/lib/storeLinks";
 import { formatReleaseLabel, formatProximaDate } from "@/lib/releaseDate";
 import AddEditionButton from "@/components/AddEditionButton";
 import WishButton from "@/components/WishButton";
@@ -96,6 +97,8 @@ export default async function SeriePage({
   const wished = userId ? await isWished(userId, pseudoId) : false;
   const trackedKeys = series?.editions.map((e) => e.key) ?? [];
   const admin = isAdmin(session?.user?.email);
+  // Override admin del término de búsqueda de Crumb (keyeado por el id local).
+  const crumbQuery = (await getCrumbQuery(pseudoId)) ?? title;
 
   // Llave estable por edición (publisher; desambigua si se repite la editorial).
   const seenKeys = new Set<string>();
@@ -182,7 +185,7 @@ export default async function SeriePage({
               <SignIn className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90" />
             )}
             <a
-              href={crumbSearch(title)}
+              href={crumbSearch(crumbQuery)}
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
@@ -271,6 +274,7 @@ export default async function SeriePage({
           {admin && (
             <AdminWorkEdit
               workId={work.id}
+              pseudoId={pseudoId}
               title={title}
               author={author ?? ""}
               synopsis={synopsis ?? ""}
@@ -278,6 +282,7 @@ export default async function SeriePage({
               genres={genres}
               upcoming={work.upcoming}
               releaseLabel={work.releaseLabel ?? ""}
+              crumbInitial={crumbQuery}
             />
           )}
         </div>

@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateWorkAction } from "@/app/actions";
+import { updateWorkAction, setCrumbQueryAction } from "@/app/actions";
+import { crumbSearch } from "@/lib/crumb";
 import ReleaseDatePicker from "@/components/ReleaseDatePicker";
 
 const input =
@@ -15,6 +16,7 @@ const input =
  */
 export default function AdminWorkEdit({
   workId,
+  pseudoId,
   title,
   author,
   synopsis,
@@ -22,8 +24,10 @@ export default function AdminWorkEdit({
   genres,
   upcoming,
   releaseLabel,
+  crumbInitial,
 }: {
   workId: number;
+  pseudoId: number;
   title: string;
   author: string;
   synopsis: string;
@@ -31,6 +35,7 @@ export default function AdminWorkEdit({
   genres: string[];
   upcoming: boolean;
   releaseLabel: string;
+  crumbInitial: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -41,6 +46,7 @@ export default function AdminWorkEdit({
   const [gen, setGen] = useState(genres.join(", "));
   const [up, setUp] = useState(upcoming);
   const [rel, setRel] = useState(releaseLabel);
+  const [crumb, setCrumb] = useState(crumbInitial);
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -65,6 +71,7 @@ export default function AdminWorkEdit({
         upcoming: up,
         releaseLabel: rel,
       });
+      await setCrumbQueryAction(pseudoId, crumb);
       setMsg("Guardado");
       router.refresh();
       setTimeout(() => setMsg(null), 2500);
@@ -130,6 +137,24 @@ export default function AdminWorkEdit({
             <ReleaseDatePicker value={rel} onChange={setRel} />
           </div>
         )}
+        <div>
+          <label className="text-xs text-muted">
+            Búsqueda en Crumb (lo que se usa en el botón "Comprar")
+            <input
+              value={crumb}
+              onChange={(e) => setCrumb(e.target.value)}
+              className={`mt-1 ${input}`}
+            />
+          </label>
+          <a
+            href={crumbSearch(crumb || " ")}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 inline-block text-xs text-accent hover:underline"
+          >
+            Probar búsqueda ↗
+          </a>
+        </div>
       </div>
 
       <div className="mt-3 flex items-center gap-2">
