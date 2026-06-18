@@ -22,8 +22,9 @@ if (-not $node) {
   exit 1
 }
 
-# Corre el orquestador; todo (stdout+stderr) va al log.
-& $node "scripts\refresh-catalog.mjs" *>> $log
+# Corre el orquestador; todo (stdout+stderr) va al log en UTF-8 (el redirect
+# nativo *>> de PowerShell 5.1 escribe UTF-16 y queda ilegible).
+& $node "scripts\refresh-catalog.mjs" *>&1 | Out-File -FilePath $log -Encoding utf8 -Append
 $code = $LASTEXITCODE
 
 # Poda: dejamos los últimos 30 logs.
