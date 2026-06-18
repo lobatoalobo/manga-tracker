@@ -83,7 +83,7 @@ export default function CollectionGrid({
       <div className="rounded-xl border border-dashed border-border bg-surface p-10 text-center">
         <p className="text-muted">Todavía no agregaste ninguna edición.</p>
         <Link
-          href="/"
+          href="/catalogo"
           className="mt-3 inline-block rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
         >
           Buscar mangas
