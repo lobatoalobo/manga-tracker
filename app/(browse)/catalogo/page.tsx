@@ -30,7 +30,7 @@ export default async function CatalogoPage({
     q: sp.q ?? "",
     tab: sp.tab === "series" || sp.tab === "tomos" ? sp.tab : "az",
     genres: (sp.genres ?? sp.genre ?? "").split(",").map((g) => g.trim()).filter(Boolean),
-    gmode: sp.gmode === "any" ? "any" : "all",
+    gmode: sp.gmode === "all" ? "all" : "any",
     page: Math.max(1, Number(sp.page) || 1),
   };
   const session = await auth();
