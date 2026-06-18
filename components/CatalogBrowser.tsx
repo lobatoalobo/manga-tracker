@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { formatProximaDate, formatReleaseLabel } from "@/lib/releaseDate";
+import { toggleWishAction } from "@/app/actions";
 
 export interface BrowseCard {
   id: number;
@@ -73,15 +74,38 @@ export default function CatalogBrowser({
   cards,
   collected = [],
   wished = [],
+  canWish = false,
   initial,
 }: {
   cards: BrowseCard[];
   collected?: number[];
   wished?: number[];
+  canWish?: boolean;
   initial: BrowseState;
 }) {
   const mine = useMemo(() => new Set(collected), [collected]);
-  const wish = useMemo(() => new Set(wished), [wished]);
+  const [wishSet, setWishSet] = useState(() => new Set(wished));
+  const [, startWish] = useTransition();
+
+  function toggleWish(w: BrowseCard, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const isWished = wishSet.has(w.id);
+    setWishSet((s) => {
+      const n = new Set(s);
+      if (isWished) n.delete(w.id);
+      else n.add(w.id);
+      return n;
+    });
+    startWish(() =>
+      toggleWishAction({
+        anilistId: -w.id,
+        title: w.title,
+        coverImage: w.coverImage ?? "",
+        wished: isWished,
+      }),
+    );
+  }
   const [q, setQ] = useState(initial.q);
   const [tab, setTab] = useState<Tab>(initial.tab);
   const [genres, setGenres] = useState<string[]>(initial.genres);
@@ -257,60 +281,71 @@ export default function CatalogBrowser({
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {shown.map((w) => {
             const owned = mine.has(w.id);
-            const wishedFlag = !owned && wish.has(w.id);
+            const isWished = wishSet.has(w.id);
+            const wishedFlag = !owned && isWished;
             return (
-              <Link
-                key={w.id}
-                href={`/serie/${w.id}`}
-                className={`group rounded-xl border bg-surface p-2 transition hover:border-accent ${
-                  owned
-                    ? "border-accent/70 ring-1 ring-accent/40"
-                    : wishedFlag
-                      ? "border-rose-400/60 ring-1 ring-rose-400/30"
-                      : "border-border"
-                }`}
-              >
-                <div className="relative aspect-2/3 overflow-hidden rounded-lg bg-surface-2">
-                  {w.coverImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={w.coverImage} alt={w.title} className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full items-center justify-center px-2 text-center text-xs text-muted">
-                      {w.title}
-                    </div>
-                  )}
-                  {w.national && (
-                    <span className="absolute left-1 top-1 rounded bg-black/60 px-1 py-0.5 text-[10px] font-medium text-white">
-                      🇦🇷
-                    </span>
-                  )}
-                  {owned && (
-                    <span className="absolute right-1 top-1 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-white">
-                      ✓
-                    </span>
-                  )}
-                  {wishedFlag && (
-                    <span className="absolute right-1 top-1 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                      ❤
-                    </span>
-                  )}
-                  {w.next && (
-                    <span className="absolute bottom-1 left-1 right-1 rounded bg-emerald-600/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
-                      📅 {w.next.volume ? `#${w.next.volume} · ` : ""}
-                      {formatProximaDate(w.next.date)}
-                    </span>
-                  )}
-                  {!w.next && w.upcoming && (
-                    <span className="absolute bottom-1 left-1 right-1 rounded bg-amber-500/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
-                      🔜 {formatReleaseLabel(w.releaseLabel) ?? "Próximo a salir"}
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1.5 line-clamp-2 text-sm font-medium">{w.title}</p>
-                <p className="truncate text-xs text-muted">
-                  {w.publishers.length ? w.publishers.join(" · ") : "Ivrea Argentina"}
-                </p>
-              </Link>
+              <div key={w.id} className="relative">
+                <Link
+                  href={`/serie/${w.id}`}
+                  className={`block rounded-xl border bg-surface p-2 transition hover:border-accent ${
+                    owned
+                      ? "border-accent/70 ring-1 ring-accent/40"
+                      : wishedFlag
+                        ? "border-rose-400/60 ring-1 ring-rose-400/30"
+                        : "border-border"
+                  }`}
+                >
+                  <div className="relative aspect-2/3 overflow-hidden rounded-lg bg-surface-2">
+                    {w.coverImage ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={w.coverImage} alt={w.title} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center px-2 text-center text-xs text-muted">
+                        {w.title}
+                      </div>
+                    )}
+                    {w.national && (
+                      <span className="absolute left-1 top-1 rounded bg-black/60 px-1 py-0.5 text-[10px] font-medium text-white">
+                        🇦🇷
+                      </span>
+                    )}
+                    {owned && (
+                      <span className="absolute right-1 top-1 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-white">
+                        ✓
+                      </span>
+                    )}
+                    {w.next && (
+                      <span className="absolute bottom-1 left-1 right-1 rounded bg-emerald-600/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+                        📅 {w.next.volume ? `#${w.next.volume} · ` : ""}
+                        {formatProximaDate(w.next.date)}
+                      </span>
+                    )}
+                    {!w.next && !owned && w.upcoming && (
+                      <span className="absolute bottom-1 left-1 right-1 rounded bg-amber-500/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+                        🔜 {formatReleaseLabel(w.releaseLabel) ?? "Próximo a salir"}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1.5 line-clamp-2 text-sm font-medium">{w.title}</p>
+                  <p className="truncate text-xs text-muted">
+                    {w.publishers.length ? w.publishers.join(" · ") : "Ivrea Argentina"}
+                  </p>
+                </Link>
+
+                {/* Marcar deseado sin entrar a la serie (fuera del Link). */}
+                {canWish && !owned && (
+                  <button
+                    type="button"
+                    aria-label={isWished ? "Quitar de deseados" : "Agregar a deseados"}
+                    onClick={(e) => toggleWish(w, e)}
+                    className={`absolute right-2 top-2 z-10 rounded-full px-1.5 py-0.5 text-sm leading-none shadow transition ${
+                      isWished ? "bg-rose-500 text-white" : "bg-black/55 text-white hover:bg-rose-500"
+                    }`}
+                  >
+                    {isWished ? "❤" : "🤍"}
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>
