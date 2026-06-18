@@ -112,18 +112,27 @@ export default async function SeriePage({
   }
 
   const { title, coverImage, author, synopsis, genres } = work;
-  // MVP: en la ficha mostramos solo las ediciones de las editoriales activas
-  // (Ivrea). Las demás siguen en la DB pero no se listan acá.
-  const shownEditions = work.editions.filter((e) =>
+  // MVP: priorizamos mostrar las ediciones de las editoriales activas (Ivrea).
+  // Si la obra NO tiene edición de Ivrea, mostramos sus ediciones reales (ej.
+  // Kemuri) en vez de un placeholder falso "Ivrea Argentina".
+  const ivreaEditions = work.editions.filter((e) =>
     (CATALOG_PUBLISHERS as readonly string[]).includes(e.publisher),
   );
+  const shownEditions =
+    ivreaEditions.length > 0 ? ivreaEditions : work.editions;
   // Guard: una obra con edición publicada (volumes>0) NO es "próximo a salir",
   // aunque el flag haya quedado viejo entre corridas del reconcile.
   const upcoming = work.upcoming && !work.editions.some((e) => e.volumes > 0);
-  // Nacional = edición de editorial argentina (PUB_KEY) o debut/próxima de Ivrea
-  // (sin edición cargada aún). A futuro, las internacionales no llevarán el chip.
+  // Nacional = edición de editorial ARGENTINA (Ivrea/Panini/Ovni) o debut/próxima
+  // de Ivrea. Las españolas (Kemuri/Utopía/Larp/Distrito/Planeta) NO son nacionales.
+  const AR_NATIONAL = new Set([
+    "Ivrea Argentina",
+    "Panini Argentina",
+    "Ovni Press",
+  ]);
   const national =
-    upcoming || work.editions.some((e) => PUB_KEY[e.publisher] != null);
+    (work.editions.length === 0 && upcoming) ||
+    work.editions.some((e) => AR_NATIONAL.has(e.publisher));
 
   // Colección: id sintético negativo por workId (no choca con ids de AniList).
   const pseudoId = -workId;
