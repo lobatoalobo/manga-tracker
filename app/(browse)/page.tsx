@@ -34,6 +34,8 @@ import { MangakaList } from "@/components/MangakaBrowser";
 import EditorialBrowser from "@/components/browse/EditorialBrowser";
 import Dashboard from "@/components/Dashboard";
 import CatalogRefreshBanner from "@/components/CatalogRefreshBanner";
+import Landing from "@/components/Landing";
+import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 
 type Tab = "hot" | "az" | "nacional" | "mangaka" | "editoriales" | "proximos";
@@ -73,6 +75,22 @@ export default async function Home({
 
   // AniList apagado: el browse/búsqueda corre desde el catálogo LOCAL.
   if (ANILIST_OFF) {
+    // No logueado y sin intención de búsqueda → landing con propuesta de valor
+    // (en vez de tirarlo directo a la grilla del catálogo sin contexto).
+    if (!loggedIn && !query && !params.tab) {
+      const works = await prisma.work
+        .findMany({
+          where: { coverImage: { not: null } },
+          select: { coverImage: true },
+          orderBy: { updatedAt: "desc" },
+          take: 14,
+        })
+        .catch(() => [] as { coverImage: string | null }[]);
+      const covers = works
+        .map((w) => w.coverImage)
+        .filter((c): c is string => !!c);
+      return <Landing covers={covers} />;
+    }
     const qs = query
       ? `?q=${encodeURIComponent(query)}`
       : params.tab === "proximos"
