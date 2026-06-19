@@ -37,7 +37,7 @@ import {
   upsertPublisherEdition,
   slugifyTitle,
   normalizeTitle,
-  searchWorksLite,
+  searchPurchaseEditions,
   EDITORIALS,
 } from "@/lib/catalog";
 import { ANILIST_OFF } from "@/lib/flags";
@@ -924,14 +924,17 @@ export async function searchPurchaseSeriesAction(query: string) {
   await requireUserId(); // solo desde el form de compras (logueado)
   const q = query.trim();
   if (q.length < 2) return [];
-  // Catálogo local: buscamos en nuestros Works (no AniList). Devuelve id
-  // negativo (-workId), coherente con colección/links a /serie.
-  if (ANILIST_OFF) return searchWorksLite(q, 8);
+  // Catálogo local: una entrada POR EDICIÓN (Ivrea / VIZ), así al elegir ya
+  // sabemos serie + editorial + colección. id negativo (-workId).
+  if (ANILIST_OFF) return searchPurchaseEditions(q, 8);
   const raw = await searchMangaList(q, true).catch(() => []);
   return raw.slice(0, 8).map((m: any) => ({
     id: m.id as number,
     title: (m.title?.english || m.title?.romaji || m.title?.native) as string,
     coverImage: (m.coverImage?.large ?? null) as string | null,
+    publisher: null as string | null,
+    label: (m.title?.english || m.title?.romaji || m.title?.native) as string,
+    intl: false,
   }));
 }
 

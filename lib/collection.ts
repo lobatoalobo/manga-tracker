@@ -544,7 +544,13 @@ const PURCHASE_PUBLISHER_KEY: Record<string, string> = {
   "Larp Editores": "larp",
   "Distrito Manga": "distrito",
   "Planeta Cómic": "planeta",
+  "VIZ Media": "viz",
 };
+
+/** Región de la edición según la editorial (VIZ = internacional). */
+function publisherRegion(publisher: string | null | undefined): "AR" | "INT" {
+  return publisher && /viz/i.test(publisher) ? "INT" : "AR";
+}
 
 /**
  * Suma un tomo comprado a la colección. Resuelve la edición nacional desde el
@@ -591,15 +597,15 @@ export async function addPurchaseItemToCollection(
         label: row.publisher,
         publisher: row.publisher,
         slug: row.slug,
-        region: "AR",
+        region: publisherRegion(row.publisher),
         totalVolumes: Math.max(row.volumes, vol),
       }
     : {
-        key: "ar",
+        key: publisherRegion(item.edition) === "INT" ? "viz" : "ar",
         label: item.edition || "Edición nacional",
         publisher: item.edition || null,
         slug: null,
-        region: "AR",
+        region: publisherRegion(item.edition),
         totalVolumes: vol,
       };
 

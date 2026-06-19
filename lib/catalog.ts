@@ -445,6 +445,93 @@ export async function searchWorksLite(
   return works.map((w) => ({ id: -w.id, title: w.title, coverImage: w.coverImage }));
 }
 
+/** Etiqueta corta de editorial para el picker ("Ivrea Argentina" → "Ivrea"). */
+export const PUBLISHER_SHORT: Record<string, string> = {
+  "Ivrea Argentina": "Ivrea",
+  "VIZ Media": "VIZ",
+};
+export function publisherShort(p: string): string {
+  return PUBLISHER_SHORT[p] ?? p;
+}
+
+export interface PurchaseEditionResult {
+  id: number; // -workId
+  title: string;
+  coverImage: string | null;
+  publisher: string | null; // editorial de ESTA entrada (null = obra sin edición)
+  label: string; // "Título — Editorial"
+  intl: boolean; // edición internacional (VIZ)
+}
+
+/**
+ * Búsqueda para el form de compras: devuelve una entrada POR EDICIÓN visible
+ * (Ivrea, VIZ), de modo que al elegir "Chainsaw Man — VIZ" ya sabemos serie +
+ * editorial + a qué colección sumarlo (sin dropdown de editorial aparte).
+ */
+export async function searchPurchaseEditions(
+  q: string,
+  limit = 8,
+): Promise<PurchaseEditionResult[]> {
+  const term = q.trim();
+  if (term.length < 2) return [];
+  const works = await prisma.work.findMany({
+    where: {
+      AND: [
+        {
+          OR: [
+            { title: { contains: term, mode: "insensitive" } },
+            { normTitle: { contains: normalizeTitle(term) } },
+            { originalTitle: { contains: term, mode: "insensitive" } },
+          ],
+        },
+        inCatalogWhere(),
+      ],
+    },
+    orderBy: { normTitle: "asc" },
+    take: limit,
+    select: {
+      id: true,
+      title: true,
+      coverImage: true,
+      editions: { select: { publisher: true } },
+    },
+  });
+
+  const out: PurchaseEditionResult[] = [];
+  for (const w of works) {
+    const pubs = [
+      ...new Set(
+        w.editions
+          .map((e) => e.publisher)
+          .filter((p) => (VISIBLE_PUBLISHERS as readonly string[]).includes(p)),
+      ),
+    ];
+    if (pubs.length === 0) {
+      // Debut sin edición cargada: una sola entrada sin editorial.
+      out.push({
+        id: -w.id,
+        title: w.title,
+        coverImage: w.coverImage,
+        publisher: null,
+        label: w.title,
+        intl: false,
+      });
+      continue;
+    }
+    for (const p of pubs) {
+      out.push({
+        id: -w.id,
+        title: w.title,
+        coverImage: w.coverImage,
+        publisher: p,
+        label: `${w.title} — ${publisherShort(p)}`,
+        intl: INTL_SET.has(p),
+      });
+    }
+  }
+  return out.slice(0, limit + 4);
+}
+
 export interface WorkCard {
   id: number;
   title: string;

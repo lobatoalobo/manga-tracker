@@ -13,16 +13,6 @@ import {
 const input =
   "w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent";
 
-// Editoriales argentinas frecuentes para el dropdown del tomo.
-const EDITORIAL_OPTIONS = [
-  "Ivrea",
-  "Panini",
-  "Ovni Press",
-  "Distrito Manga",
-  "Kemuri",
-  "Utopía",
-];
-
 export interface InitialPurchase {
   id: number;
   store: string;
@@ -69,6 +59,7 @@ function rowsFrom(initial?: InitialPurchase): ItemRow[] {
       title: i.title,
       anilistId: i.anilistId,
       coverImage: i.coverImage,
+      publisher: i.edition ?? null,
     },
     volume: i.volume != null ? String(i.volume) : "",
     edition: i.edition ?? "",
@@ -127,7 +118,7 @@ export default function PurchaseForm({
         anilistId: it.series.anilistId,
         coverImage: it.series.coverImage,
         volume: it.volume ? Number(it.volume) : null,
-        edition: it.edition || null,
+        edition: it.series.publisher ?? (it.edition || null),
         price: Number(it.price),
       }));
     if (cleanItems.length === 0) {
@@ -258,7 +249,7 @@ export default function PurchaseForm({
                 value={it.series}
                 onChange={(series) => setItem(i, { series })}
               />
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <input
                   value={it.volume}
                   onChange={(e) => setItem(i, { volume: e.target.value })}
@@ -267,18 +258,6 @@ export default function PurchaseForm({
                   placeholder="Tomo #"
                   className={input}
                 />
-                <select
-                  value={it.edition}
-                  onChange={(e) => setItem(i, { edition: e.target.value })}
-                  className={input}
-                >
-                  <option value="">Editorial…</option>
-                  {EDITORIAL_OPTIONS.map((e) => (
-                    <option key={e} value={e}>
-                      {e}
-                    </option>
-                  ))}
-                </select>
                 <input
                   value={it.price}
                   onChange={(e) => setItem(i, { price: e.target.value })}
