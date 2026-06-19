@@ -50,8 +50,9 @@ export default async function CatalogoPage({
     releaseLabel: w.releaseLabel,
     genres: w.genres,
     demographic: w.demographic,
-    next: w.next
-      ? { volume: w.next.volume, date: w.next.date.toISOString(), kind: w.next.kind }
+    next: w.next ? { volume: w.next.volume, date: w.next.date.toISOString() } : null,
+    reissue: w.reissue
+      ? { volume: w.reissue.volume, date: w.reissue.date.toISOString() }
       : null,
   }));
 

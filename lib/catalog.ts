@@ -543,7 +543,8 @@ export interface WorkCard {
   releaseLabel: string | null;
   genres: string[];
   demographic: string | null;
-  next: { volume: number | null; date: Date; kind: "new" | "reissue" } | null;
+  next: { volume: number | null; date: Date } | null; // próximo tomo NUEVO
+  reissue: { volume: number | null; date: Date } | null; // próxima reedición
 }
 
 const AR_PUBLISHERS = new Set<string>(PUBLISHERS);
@@ -661,7 +662,15 @@ export async function browseWorks(opts: {
       if (a) all.push(...a);
     }
     all.sort((a, b) => a.date.getTime() - b.date.getTime());
-    const next: Rel | null = all.find((x) => x.kind === "new") ?? all[0] ?? null;
+    // Separados: tomo nuevo y reedición (la card muestra AMBOS chips si los hay).
+    const newRel = all.find((x) => x.kind === "new") ?? null;
+    const reissueRel = all.find((x) => x.kind === "reissue") ?? null;
+    const next: { volume: number | null; date: Date } | null = newRel
+      ? { volume: newRel.volume, date: newRel.date }
+      : null;
+    const reissue: { volume: number | null; date: Date } | null = reissueRel
+      ? { volume: reissueRel.volume, date: reissueRel.date }
+      : null;
     // Guard: una obra con edición publicada (volumes>0) NO es "próximo a salir",
     // aunque el flag `upcoming` haya quedado viejo (se setea entre crawls).
     const isUpcoming = w.upcoming && !w.editions.some((e) => e.volumes > 0);
@@ -687,6 +696,7 @@ export async function browseWorks(opts: {
       genres: w.genres,
       demographic: w.demographic,
       next,
+      reissue,
     };
   });
   return { items, total };

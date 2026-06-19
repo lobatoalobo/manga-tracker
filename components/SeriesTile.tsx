@@ -11,11 +11,8 @@ export interface SeriesTileData {
   national?: boolean;
   intl?: boolean; // edición internacional (VIZ): bandera US
   publishers?: string[]; // si se pasa, se muestra la línea de editorial
-  next?: {
-    volume: number | null;
-    date: string | Date;
-    kind?: "new" | "reissue";
-  } | null;
+  next?: { volume: number | null; date: string | Date } | null;
+  reissue?: { volume: number | null; date: string | Date } | null;
   upcoming?: boolean;
   releaseLabel?: string | null;
 }
@@ -76,21 +73,27 @@ export default function SeriesTile({
               ✓
             </span>
           )}
-          {data.next ? (
-            <span
-              className={`absolute bottom-1 left-1 right-1 rounded px-1.5 py-0.5 text-center text-[10px] font-medium text-white ${
-                data.next.kind === "reissue" ? "bg-violet-600/90" : "bg-emerald-600/90"
-              }`}
-            >
-              {data.next.kind === "reissue" ? "♻️" : "📅"}{" "}
-              {data.next.volume ? `#${data.next.volume} · ` : ""}
-              {formatProximaDate(new Date(data.next.date))}
-            </span>
-          ) : data.upcoming && !owned ? (
-            <span className="absolute bottom-1 left-1 right-1 rounded bg-amber-500/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
-              🔜 {formatReleaseLabel(data.releaseLabel ?? null) ?? "Próximo a salir"}
-            </span>
-          ) : null}
+          {(data.next || data.reissue || (data.upcoming && !owned)) && (
+            <div className="absolute bottom-1 left-1 right-1 flex flex-col gap-0.5">
+              {data.next && (
+                <span className="rounded bg-emerald-600/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+                  📅 {data.next.volume ? `#${data.next.volume} · ` : ""}
+                  {formatProximaDate(new Date(data.next.date))}
+                </span>
+              )}
+              {data.reissue && (
+                <span className="rounded bg-violet-600/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+                  ♻️ {data.reissue.volume ? `#${data.reissue.volume} · ` : ""}
+                  {formatProximaDate(new Date(data.reissue.date))}
+                </span>
+              )}
+              {!data.next && !data.reissue && data.upcoming && !owned && (
+                <span className="rounded bg-amber-500/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+                  🔜 {formatReleaseLabel(data.releaseLabel ?? null) ?? "Próximo a salir"}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <p className="mt-1.5 line-clamp-2 text-sm font-medium">{data.title}</p>
         {data.publishers !== undefined && (

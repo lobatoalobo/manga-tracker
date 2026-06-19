@@ -40,18 +40,28 @@ export async function reconcileIvreaProximas(
 ): Promise<ProximasResult> {
   const cards = await getIvreaProximas();
 
-  // Mapa slug → edición de Ivrea (editionId, anilistId) para el snapshot.
-  const slugs = [...new Set(cards.map((c) => c.slug).filter(Boolean))] as string[];
-  const editions = slugs.length
-    ? await prisma.publisherEdition.findMany({
-        where: { publisher: "Ivrea Argentina", slug: { in: slugs } },
-        select: { id: true, slug: true, anilistId: true, workId: true },
-      })
-    : [];
+  // Mapa de ediciones de Ivrea por slug y por título normalizado. El slug del
+  // link de /proximas/ a veces es genérico (ej. la reedición "BLEACH REMIX"
+  // linkea a /titulo/bleach/ → slug "bleach", la edición equivocada), así que
+  // cuando el TÍTULO de la tarjeta matchea exactamente UNA sola edición, esa gana.
+  const editions = await prisma.publisherEdition.findMany({
+    where: { publisher: "Ivrea Argentina" },
+    select: { id: true, slug: true, title: true, anilistId: true, workId: true },
+  });
   const bySlug = new Map(editions.map((e) => [e.slug, e]));
+  const byNormTitle = new Map<string, typeof editions>();
+  for (const e of editions) {
+    const k = normalizeTitle(e.title);
+    const arr = byNormTitle.get(k) ?? [];
+    arr.push(e);
+    byNormTitle.set(k, arr);
+  }
 
   const rows = cards.map((c) => {
-    const ed = c.slug ? bySlug.get(c.slug) : undefined;
+    const slugEd = c.slug ? bySlug.get(c.slug) : undefined;
+    const titleMatch = byNormTitle.get(normalizeTitle(c.title)) ?? [];
+    // Título inequívoco (1 sola edición) tiene prioridad sobre el slug del link.
+    const ed = titleMatch.length === 1 ? titleMatch[0] : slugEd;
     return {
       slug: c.slug,
       title: c.title,

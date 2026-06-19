@@ -19,7 +19,8 @@ export interface BrowseCard {
   releaseLabel: string | null;
   genres: string[];
   demographic: string | null;
-  next: { volume: number | null; date: string; kind?: "new" | "reissue" } | null;
+  next: { volume: number | null; date: string } | null;
+  reissue?: { volume: number | null; date: string } | null;
 }
 
 export interface BrowseState {
@@ -191,7 +192,7 @@ export default function CatalogBrowser({
     const nq = norm(q.trim());
     return cards.filter((c) => {
       if (tab === "series" && !c.upcoming) return false;
-      if (tab === "tomos" && !c.next) return false;
+      if (tab === "tomos" && !c.next && !c.reissue) return false;
       if (genres.length) {
         const ok =
           gmode === "all"
@@ -211,13 +212,15 @@ export default function CatalogBrowser({
 
   // Ordenar por fecha de salida (más pronto primero) en las pestañas de
   // próximos; en A-Z se respeta el alfabético que ya viene del server.
+  const soonest = (c: BrowseCard) => {
+    const ds = [c.next?.date, c.reissue?.date]
+      .filter(Boolean)
+      .map((d) => +new Date(d as string));
+    return ds.length ? Math.min(...ds) : Infinity;
+  };
   const ordered = useMemo(() => {
     if (tab === "tomos")
-      return [...filtered].sort(
-        (a, b) =>
-          (a.next ? +new Date(a.next.date) : Infinity) -
-          (b.next ? +new Date(b.next.date) : Infinity),
-      );
+      return [...filtered].sort((a, b) => soonest(a) - soonest(b));
     if (tab === "series")
       return [...filtered].sort((a, b) =>
         (a.releaseLabel ?? "9999").localeCompare(b.releaseLabel ?? "9999"),
@@ -473,23 +476,26 @@ export default function CatalogBrowser({
                         ✓
                       </span>
                     )}
-                    {w.next && (
-                      <span
-                        className={`absolute bottom-1 left-1 right-1 rounded px-1.5 py-0.5 text-center text-[10px] font-medium text-white ${
-                          w.next.kind === "reissue"
-                            ? "bg-violet-600/90"
-                            : "bg-emerald-600/90"
-                        }`}
-                      >
-                        {w.next.kind === "reissue" ? "♻️" : "📅"}{" "}
-                        {w.next.volume ? `#${w.next.volume} · ` : ""}
-                        {formatProximaDate(w.next.date)}
-                      </span>
-                    )}
-                    {!w.next && !owned && w.upcoming && (
-                      <span className="absolute bottom-1 left-1 right-1 rounded bg-amber-500/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
-                        🔜 {formatReleaseLabel(w.releaseLabel) ?? "Próximo a salir"}
-                      </span>
+                    {(w.next || w.reissue || (!owned && w.upcoming)) && (
+                      <div className="absolute bottom-1 left-1 right-1 flex flex-col gap-0.5">
+                        {w.next && (
+                          <span className="rounded bg-emerald-600/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+                            📅 {w.next.volume ? `#${w.next.volume} · ` : ""}
+                            {formatProximaDate(w.next.date)}
+                          </span>
+                        )}
+                        {w.reissue && (
+                          <span className="rounded bg-violet-600/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+                            ♻️ {w.reissue.volume ? `#${w.reissue.volume} · ` : ""}
+                            {formatProximaDate(w.reissue.date)}
+                          </span>
+                        )}
+                        {!w.next && !w.reissue && !owned && w.upcoming && (
+                          <span className="rounded bg-amber-500/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+                            🔜 {formatReleaseLabel(w.releaseLabel) ?? "Próximo a salir"}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
                   <p className="mt-1.5 line-clamp-2 text-sm font-medium">{w.title}</p>
