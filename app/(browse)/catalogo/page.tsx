@@ -22,15 +22,19 @@ export default async function CatalogoPage({
     genre?: string;
     genres?: string;
     gmode?: string;
+    demo?: string;
     page?: string;
   }>;
 }) {
   const sp = await searchParams;
+  const split = (v?: string) =>
+    (v ?? "").split(",").map((g) => g.trim()).filter(Boolean);
   const initial: BrowseState = {
     q: sp.q ?? "",
     tab: sp.tab === "series" || sp.tab === "tomos" ? sp.tab : "az",
-    genres: (sp.genres ?? sp.genre ?? "").split(",").map((g) => g.trim()).filter(Boolean),
+    genres: split(sp.genres ?? sp.genre),
     gmode: sp.gmode === "all" ? "all" : "any",
+    demographics: split(sp.demo),
     page: Math.max(1, Number(sp.page) || 1),
   };
   const session = await auth();
@@ -44,6 +48,7 @@ export default async function CatalogoPage({
     upcoming: w.upcoming,
     releaseLabel: w.releaseLabel,
     genres: w.genres,
+    demographic: w.demographic,
     next: w.next ? { volume: w.next.volume, date: w.next.date.toISOString() } : null,
   }));
 

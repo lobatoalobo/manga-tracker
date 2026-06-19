@@ -5,6 +5,7 @@ import Link from "next/link";
 import { formatProximaDate, formatReleaseLabel } from "@/lib/releaseDate";
 import { toggleWishAction } from "@/app/actions";
 import ArgentinaFlag from "@/components/ArgentinaFlag";
+import { GENRE_CATEGORIES, DEMOGRAPHICS } from "@/lib/genres";
 
 export interface BrowseCard {
   id: number;
@@ -15,6 +16,7 @@ export interface BrowseCard {
   upcoming: boolean;
   releaseLabel: string | null;
   genres: string[];
+  demographic: string | null;
   next: { volume: number | null; date: string } | null;
 }
 
@@ -23,6 +25,7 @@ export interface BrowseState {
   tab: Tab;
   genres: string[];
   gmode: GMode;
+  demographics: string[];
   page: number;
 }
 
@@ -39,20 +42,34 @@ type GMode = "all" | "any";
 const norm = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
+/** Estilo de chip toggle (género/demografía). */
+const chipCls = (on: boolean) =>
+  `rounded-full border px-2.5 py-1 text-xs transition ${
+    on
+      ? "border-accent bg-accent/15 text-accent"
+      : "border-border text-muted hover:text-foreground"
+  }`;
+
 function readUrl(): BrowseState {
-  const empty: BrowseState = { q: "", tab: "az", genres: [], gmode: "any", page: 1 };
+  const empty: BrowseState = {
+    q: "",
+    tab: "az",
+    genres: [],
+    gmode: "any",
+    demographics: [],
+    page: 1,
+  };
   if (typeof window === "undefined") return empty;
   const p = new URLSearchParams(window.location.search);
   const tab = p.get("tab");
-  const genres = (p.get("genres") ?? p.get("genre") ?? "")
-    .split(",")
-    .map((g) => g.trim())
-    .filter(Boolean);
+  const split = (v: string | null) =>
+    (v ?? "").split(",").map((g) => g.trim()).filter(Boolean);
   return {
     q: p.get("q") ?? "",
     tab: tab === "series" || tab === "tomos" ? tab : "az",
-    genres,
+    genres: split(p.get("genres") ?? p.get("genre")),
     gmode: p.get("gmode") === "all" ? "all" : "any",
+    demographics: split(p.get("demo")),
     page: Math.max(1, Number(p.get("page")) || 1),
   };
 }
@@ -111,15 +128,24 @@ export default function CatalogBrowser({
   const [tab, setTab] = useState<Tab>(initial.tab);
   const [genres, setGenres] = useState<string[]>(initial.genres);
   const [gmode, setGMode] = useState<GMode>(initial.gmode);
+  const [demographics, setDemographics] = useState<string[]>(
+    initial.demographics,
+  );
   const [page, setPage] = useState(initial.page);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
-  const genreOptions = useMemo(() => {
-    const counts = new Map<string, number>();
+  // Conteo por género / demografía sobre el catálogo actual (para mostrar el
+  // número y ocultar los que están en 0).
+  const genreCount = useMemo(() => {
+    const m = new Map<string, number>();
     for (const c of cards)
-      for (const g of c.genres) counts.set(g, (counts.get(g) ?? 0) + 1);
-    return [...counts.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([g, n]) => ({ g, n }));
+      for (const g of c.genres) m.set(g, (m.get(g) ?? 0) + 1);
+    return m;
+  }, [cards]);
+  const demoCount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of cards) if (c.demographic) m.set(c.demographic, (m.get(c.demographic) ?? 0) + 1);
+    return m;
   }, [cards]);
 
   function syncUrl(next: BrowseState, replace: boolean) {
@@ -128,6 +154,7 @@ export default function CatalogBrowser({
     if (next.q.trim()) params.set("q", next.q.trim());
     if (next.genres.length) params.set("genres", next.genres.join(","));
     if (next.genres.length > 1 && next.gmode === "all") params.set("gmode", "all");
+    if (next.demographics.length) params.set("demo", next.demographics.join(","));
     if (next.page > 1) params.set("page", String(next.page));
     const qs = params.toString();
     const url = `/catalogo${qs ? `?${qs}` : ""}`;
@@ -142,6 +169,7 @@ export default function CatalogBrowser({
       setTab(u.tab);
       setGenres(u.genres);
       setGMode(u.gmode);
+      setDemographics(u.demographics);
       setPage(u.page);
     };
     window.addEventListener("popstate", onPop);
@@ -160,27 +188,41 @@ export default function CatalogBrowser({
             : genres.some((g) => c.genres.includes(g));
         if (!ok) return false;
       }
+      if (
+        demographics.length &&
+        !(c.demographic && demographics.includes(c.demographic))
+      )
+        return false;
       if (nq && !norm(c.title).includes(nq)) return false;
       return true;
     });
-  }, [cards, q, tab, genres, gmode]);
+  }, [cards, q, tab, genres, gmode, demographics]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const cur = Math.min(page, pageCount);
   const shown = filtered.slice((cur - 1) * PER_PAGE, cur * PER_PAGE);
 
   function update(patch: Partial<BrowseState>, replace = false) {
-    const next: BrowseState = { q, tab, genres, gmode, page: 1, ...patch };
+    const next: BrowseState = {
+      q,
+      tab,
+      genres,
+      gmode,
+      demographics,
+      page: 1,
+      ...patch,
+    };
     setQ(next.q);
     setTab(next.tab);
     setGenres(next.genres);
     setGMode(next.gmode);
+    setDemographics(next.demographics);
     setPage(next.page);
     syncUrl(next, replace);
   }
   function goPage(p: number) {
     setPage(p);
-    syncUrl({ q, tab, genres, gmode, page: p }, false);
+    syncUrl({ q, tab, genres, gmode, demographics, page: p }, false);
     window.scrollTo({ top: 0 });
   }
 
@@ -211,46 +253,24 @@ export default function CatalogBrowser({
         ))}
       </div>
 
-      {/* Controles de género: fila ESTABLE (no cambia con la cantidad de chips). */}
-      <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-        <select
-          value=""
-          onChange={(e) => {
-            const g = e.target.value;
-            if (g && !genres.includes(g)) update({ genres: [...genres, g] });
-          }}
-          className="rounded-full border border-border bg-surface-2 px-3 py-1 text-sm outline-none focus:border-accent"
-          aria-label="Agregar género"
+      {/* Filtros: panel colapsable (demografía + géneros por categoría). */}
+      <div className="mb-2 flex items-center gap-2 text-sm">
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((o) => !o)}
+          aria-expanded={filtersOpen}
+          className="rounded-full border border-border bg-surface-2 px-3 py-1 transition hover:text-foreground"
         >
-          <option value="">+ Género…</option>
-          {genreOptions
-            .filter(({ g }) => !genres.includes(g))
-            .map(({ g, n }) => (
-              <option key={g} value={g}>
-                {g} ({n})
-              </option>
-            ))}
-        </select>
-        {genres.length >= 2 && (
-          <div className="flex shrink-0 overflow-hidden rounded-full border border-border text-xs">
-            {(["any", "all"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => update({ gmode: m })}
-                className={`px-2.5 py-1 transition ${
-                  gmode === m ? "bg-accent text-white" : "text-muted hover:text-foreground"
-                }`}
-              >
-                {m === "any" ? "Cualquiera" : "Todos"}
-              </button>
-            ))}
-          </div>
-        )}
-        {genres.length > 0 && (
+          Filtros
+          {genres.length + demographics.length > 0
+            ? ` · ${genres.length + demographics.length}`
+            : ""}{" "}
+          {filtersOpen ? "▲" : "▾"}
+        </button>
+        {(genres.length > 0 || demographics.length > 0) && (
           <button
             type="button"
-            onClick={() => update({ genres: [] })}
+            onClick={() => update({ genres: [], demographics: [] })}
             className="text-xs text-muted hover:text-foreground"
           >
             limpiar
@@ -258,12 +278,118 @@ export default function CatalogBrowser({
         )}
       </div>
 
-      {/* Chips seleccionados: fila propia; wrappean sin mover los controles. */}
-      {genres.length > 0 && (
+      {filtersOpen && (
+        <div className="mb-3 space-y-4 rounded-xl border border-border bg-surface p-4">
+          {DEMOGRAPHICS.some((d) => (demoCount.get(d) ?? 0) > 0) && (
+            <div>
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+                Demografía
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {DEMOGRAPHICS.filter((d) => (demoCount.get(d) ?? 0) > 0).map(
+                  (d) => {
+                    const on = demographics.includes(d);
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() =>
+                          update({
+                            demographics: on
+                              ? demographics.filter((x) => x !== d)
+                              : [...demographics, d],
+                          })
+                        }
+                        className={chipCls(on)}
+                      >
+                        {d} <span className="opacity-60">{demoCount.get(d)}</span>
+                      </button>
+                    );
+                  },
+                )}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                Géneros
+              </p>
+              {genres.length >= 2 && (
+                <div className="flex shrink-0 overflow-hidden rounded-full border border-border text-xs">
+                  {(["any", "all"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => update({ gmode: m })}
+                      className={`px-2.5 py-1 transition ${
+                        gmode === m ? "bg-accent text-white" : "text-muted hover:text-foreground"
+                      }`}
+                    >
+                      {m === "any" ? "Cualquiera" : "Todos"}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="space-y-3">
+              {GENRE_CATEGORIES.map((cat) => {
+                const items = cat.genres
+                  .map((g) => ({ g, n: genreCount.get(g) ?? 0 }))
+                  .filter((x) => x.n > 0)
+                  .sort((a, b) => b.n - a.n);
+                if (!items.length) return null;
+                return (
+                  <div key={cat.category}>
+                    <p className="mb-1 text-[11px] text-muted">{cat.category}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {items.map(({ g, n }) => {
+                        const on = genres.includes(g);
+                        return (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() =>
+                              update({
+                                genres: on
+                                  ? genres.filter((x) => x !== g)
+                                  : [...genres, g],
+                              })
+                            }
+                            className={chipCls(on)}
+                          >
+                            {g} <span className="opacity-60">{n}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chips activos (siempre visibles, aun con el panel cerrado). */}
+      {(genres.length > 0 || demographics.length > 0) && (
         <div className="mb-4 flex flex-wrap gap-2">
+          {demographics.map((d) => (
+            <button
+              key={`d-${d}`}
+              type="button"
+              onClick={() =>
+                update({ demographics: demographics.filter((x) => x !== d) })
+              }
+              className="rounded-full bg-sky-500/15 px-3 py-1 text-xs font-medium text-sky-300 transition hover:bg-sky-500/25"
+            >
+              {d} ✕
+            </button>
+          ))}
           {genres.map((g) => (
             <button
-              key={g}
+              key={`g-${g}`}
               type="button"
               onClick={() => update({ genres: genres.filter((x) => x !== g) })}
               className="rounded-full bg-accent/15 px-3 py-1 text-xs font-medium text-accent transition hover:bg-accent/25"

@@ -424,6 +424,7 @@ export interface WorkCard {
   upcoming: boolean;
   releaseLabel: string | null;
   genres: string[];
+  demographic: string | null;
   next: { volume: number | null; date: Date } | null;
 }
 
@@ -499,6 +500,7 @@ export async function browseWorks(opts: {
         upcoming: true,
         releaseLabel: true,
         genres: true,
+        demographic: true,
         editions: { select: { id: true, publisher: true, volumes: true } },
       },
     }),
@@ -547,6 +549,7 @@ export async function browseWorks(opts: {
       upcoming: isUpcoming,
       releaseLabel: w.releaseLabel,
       genres: w.genres,
+      demographic: w.demographic,
       next,
     };
   });
