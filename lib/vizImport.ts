@@ -1,5 +1,6 @@
 import { getMuLicensed } from "@/lib/providers/mangaupdates";
 import { getMangaDex } from "@/lib/providers/mangadex";
+import { googleBooksVizTitles } from "@/lib/providers/googleBooks";
 import {
   findOrCreateWork,
   upsertPublisherEdition,
@@ -20,18 +21,26 @@ const HENTAI = /hentai|lolicon|shotacon|doujinshi|pornographic/i;
 // mostrar; el resto ayuda a matchear en MU, que suele indexar en romaji
 // (p. ej. "My Hero Academia" → "Boku no Hero Academia").
 export const VIZ_SEED: string[][] = [
+  // --- Shonen Jump / Shueisha (vía VIZ) ---
   ["Naruto"],
+  ["Boruto", "Boruto: Naruto Next Generations"],
   ["Bleach"],
   ["One Piece"],
   ["Dragon Ball"],
+  ["Dragon Ball Super"],
+  ["Dr. Slump"],
   ["Death Note"],
+  ["Bakuman"],
+  ["Hikaru no Go"],
   ["My Hero Academia", "Boku no Hero Academia"],
+  ["My Hero Academia: Vigilantes", "Vigilante: Boku no Hero Academia Illegals"],
   ["Jujutsu Kaisen"],
   ["Chainsaw Man"],
   ["Demon Slayer", "Kimetsu no Yaiba"],
   ["Spy x Family"],
   ["Dr. Stone"],
   ["Tokyo Ghoul"],
+  ["Tokyo Ghoul: re", "Tokyo Ghoul:re"],
   ["One-Punch Man", "One Punch-Man"],
   ["Hunter x Hunter"],
   ["JoJo's Bizarre Adventure Part 1", "JoJo's Bizarre Adventure"],
@@ -40,6 +49,98 @@ export const VIZ_SEED: string[][] = [
   ["Blue Box", "Ao no Hako"],
   ["Yu-Gi-Oh!"],
   ["Vagabond"],
+  ["Yu Yu Hakusho", "Yuu Yuu Hakusho"],
+  ["Slam Dunk"],
+  ["Rurouni Kenshin", "Rurouni Kenshin: Meiji Kenkaku Romantan"],
+  ["Black Clover"],
+  ["The Promised Neverland", "Yakusoku no Neverland"],
+  ["Haikyu!!", "Haikyuu!!"],
+  ["Food Wars!: Shokugeki no Soma", "Shokugeki no Souma"],
+  ["Nisekoi: False Love", "Nisekoi"],
+  ["Toriko"],
+  ["Blue Exorcist", "Ao no Exorcist"],
+  ["Seraph of the End", "Owari no Seraph"],
+  ["World Trigger"],
+  ["Mob Psycho 100"],
+  ["Undead Unluck"],
+  ["Mission: Yozakura Family", "Yozakura-san Chi no Daisakusen"],
+  ["Mashle", "Mashle: Magic and Muscles"],
+  ["Me & Roboco", "Boku to Roboco"],
+  ["Akane-banashi"],
+  ["Beelzebub"],
+  ["Gintama"],
+  ["Magi: The Labyrinth of Magic", "Magi"],
+  ["Nura: Rise of the Yokai Clan", "Nurarihyon no Mago"],
+  ["Reborn!", "Katekyou Hitman Reborn!"],
+  ["Shaman King"],
+  ["D.Gray-man"],
+  ["Eyeshield 21"],
+  ["Claymore"],
+  ["Bobobo-bo Bo-bobo"],
+  ["Astra Lost in Space", "Kanata no Astra"],
+  ["Tegami Bachi: Letter Bee", "Tegami Bachi"],
+  ["Psyren"],
+  ["Dragon Quest: The Adventure of Dai", "Dragon Quest: Dai no Daibouken"],
+  ["Sand Land"],
+  ["Pokémon Adventures", "Pocket Monsters Special"],
+  ["Kagurabachi"],
+  ["Two on Ice", "Mecha Ike: Mecha Mote Iinchou"],
+  ["Cipher Academy", "Angou Gakuen no Iroha"],
+  ["Witch Watch"],
+  ["The Elusive Samurai", "Nige Jouzu no Wakagimi"],
+  ["Ms. Marvel"], // por las dudas: el guard descarta si MU no marca VIZ
+  // --- VIZ Signature / seinen ---
+  ["20th Century Boys", "20 Seiki Shounen"],
+  ["Monster"],
+  ["Pluto"],
+  ["Billy Bat"],
+  ["Master Keaton"],
+  ["Asadora!"],
+  ["Sanctuary"],
+  ["Goodnight Punpun", "Oyasumi Punpun"],
+  ["Solanin"],
+  ["A Girl on the Shore", "Umibe no Onnanoko"],
+  ["Dead Dead Demon's Dededede Destruction", "Dead Dead Demon's Dededededestruction"],
+  ["Children of the Sea", "Kaijuu no Kodomo"],
+  ["Dorohedoro"],
+  ["Ranma 1/2"],
+  ["Inuyasha"],
+  ["Urusei Yatsura"],
+  ["Maison Ikkoku"],
+  ["Rin-ne", "Kyoukai no Rinne"],
+  ["Mao", "MAO"],
+  ["Uzumaki"],
+  ["Tomie"],
+  ["Gyo"],
+  ["No Longer Human", "Ningen Shikkaku"],
+  ["The Drifting Classroom", "Hyouryuu Kyoushitsu"],
+  ["Phoenix", "Hi no Tori"],
+  ["Real"],
+  ["Dogs: Bullets & Carnage"],
+  ["Biomega"],
+  // --- Shojo Beat / shojo (VIZ) ---
+  ["Kimi ni Todoke: From Me to You", "Kimi ni Todoke"],
+  ["Vampire Knight"],
+  ["Skip Beat!"],
+  ["Hana-Kimi", "Hanazakari no Kimitachi e"],
+  ["Absolute Boyfriend", "Zettai Kareshi"],
+  ["Honey and Clover", "Hachimitsu to Clover"],
+  ["Nana"],
+  ["Kamisama Kiss", "Kamisama Hajimemashita"],
+  ["Yona of the Dawn", "Akatsuki no Yona"],
+  ["Ao Haru Ride", "Aoharaido"],
+  ["Daytime Shooting Star", "Hirunaka no Ryuusei"],
+  ["Komi Can't Communicate", "Komi-san wa, Comyushou desu."],
+  ["Snow White with the Red Hair", "Akagami no Shirayukihime"],
+  ["Requiem of the Rose King", "Baraou no Souretsu"],
+  ["Takane & Hana", "Takane to Hana"],
+  ["Anonymous Noise", "Fukumenkei Noise"],
+  ["A Devil and Her Love Song", "Akuma to Love Song"],
+  ["Library Wars: Love & War", "Toshokan Sensou: Love & War"],
+  ["Sleepy Princess in the Demon Castle", "Maoujou de Oyasumi"],
+  ["Ouran High School Host Club", "Ouran Koukou Host Club"],
+  ["Yurara", "Yurara no Tsuki"],
+  ["Fushigi Yûgi", "Fushigi Yuugi"],
 ];
 
 export interface VizResult {
@@ -160,4 +261,50 @@ export async function refreshVizCatalog(
     await new Promise((res) => setTimeout(res, 500)); // rate-limit MU/MD
   }
   return { scanned: works.length, ok, failed, updated };
+}
+
+export interface VizDiscoverResult {
+  source: number; // títulos que devolvió Google Books
+  candidates: number; // los que no teníamos aún
+  imported: number; // confirmados VIZ por MU e importados
+  skipped: number;
+  noKey?: boolean;
+}
+
+/**
+ * Descubrimiento (vía 2): enumera títulos de VIZ con Google Books, descarta los
+ * que ya tenemos, y pasa el resto por `importVizSeries` (MU confirma VIZ). Crece
+ * el catálogo más allá del seed manual. `limit` acota cuántos NUEVOS procesa por
+ * corrida (MU tiene rate-limit). Requiere GOOGLE_BOOKS_API_KEY.
+ */
+export async function discoverVizFromGoogleBooks(opts: {
+  limit?: number;
+  maxPages?: number;
+} = {}): Promise<VizDiscoverResult> {
+  const titles = await googleBooksVizTitles(opts.maxPages ?? 15);
+  if (titles === null)
+    return { source: 0, candidates: 0, imported: 0, skipped: 0, noKey: true };
+
+  // Descarta los que ya tenemos como Work (por normTitle) para no re-pegarle a MU.
+  const norm = (s: string) =>
+    s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+  const existing = await prisma.work.findMany({ select: { normTitle: true } });
+  const have = new Set(existing.map((w) => w.normTitle));
+  const candidates = titles.filter((t) => !have.has(norm(t)));
+
+  const toProcess = opts.limit ? candidates.slice(0, opts.limit) : candidates;
+  let imported = 0;
+  let skipped = 0;
+  for (const t of toProcess) {
+    const r = await importVizSeries(t).catch(() => null);
+    if (r?.ok) imported++;
+    else skipped++;
+    await new Promise((res) => setTimeout(res, 800)); // rate-limit MU/MD
+  }
+  return {
+    source: titles.length,
+    candidates: candidates.length,
+    imported,
+    skipped,
+  };
 }

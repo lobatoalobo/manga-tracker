@@ -13,7 +13,11 @@ import {
 } from "../lib/whakoomImport";
 import { logJobRun, groupSkipReasons } from "../lib/jobs";
 import { getRejected } from "../lib/rejectedSources";
-import { importVizSeries, VIZ_SEED } from "../lib/vizImport";
+import {
+  importVizSeries,
+  VIZ_SEED,
+  discoverVizFromGoogleBooks,
+} from "../lib/vizImport";
 import {
   detectAndNotifyNewVolumes,
   detectAndNotifyWishlistAvailable,
@@ -366,6 +370,20 @@ async function main() {
   if (which === "viz") {
     // viz [titulo extra…]  → procesa el seed + títulos sueltos opcionales
     await crawlViz(process.argv.slice(3));
+    console.log("\nListo.");
+    return;
+  }
+  if (which === "viz-discover") {
+    // viz-discover [limit]  → enumera VIZ con Google Books y los importa (MU confirma)
+    const limit = Number(process.argv[3]) || undefined;
+    console.log("\n=== Descubrir VIZ (Google Books) ===");
+    const r = await discoverVizFromGoogleBooks({ limit });
+    if (r.noKey) console.log("  Falta GOOGLE_BOOKS_API_KEY.");
+    else
+      console.log(
+        `  Google Books: ${r.source} títulos · ${r.candidates} nuevos · ` +
+          `${r.imported} importados · ${r.skipped} salteados`,
+      );
     console.log("\nListo.");
     return;
   }
