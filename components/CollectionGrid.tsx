@@ -36,6 +36,7 @@ export default function CollectionGrid({
   const [publisher, setPublisher] = useState("all");
   const [reading, setReading] = useState("all");
   const [sort, setSort] = useState<SortKey>("title");
+  const [incompleteOnly, setIncompleteOnly] = useState(false);
   const [view, setView] = useState<View>("list");
 
   // La vista elegida se recuerda por dispositivo.
@@ -62,7 +63,9 @@ export default function CollectionGrid({
         publisher === "all" || i.edition.label === publisher;
       const matchReading =
         reading === "all" || i.edition.readingStatus === reading;
-      return matchSearch && matchPublisher && matchReading;
+      const matchIncomplete =
+        !incompleteOnly || editionProgress(i.edition).status === "incompleta";
+      return matchSearch && matchPublisher && matchReading && matchIncomplete;
     });
 
     out.sort((a, b) => {
@@ -76,7 +79,7 @@ export default function CollectionGrid({
     });
 
     return out;
-  }, [items, search, publisher, reading, sort, favoriteId]);
+  }, [items, search, publisher, reading, sort, incompleteOnly, favoriteId]);
 
   if (items.length === 0) {
     return (
@@ -125,6 +128,19 @@ export default function CollectionGrid({
           <option value="progress">Orden: % completado</option>
           <option value="volumes">Orden: tomos</option>
         </Select>
+
+        <button
+          type="button"
+          onClick={() => setIncompleteOnly((v) => !v)}
+          aria-pressed={incompleteOnly}
+          className={`rounded-lg border px-3 py-2 text-sm transition ${
+            incompleteOnly
+              ? "border-accent bg-accent/15 text-accent"
+              : "border-border text-muted hover:text-foreground"
+          }`}
+        >
+          Incompletas
+        </button>
 
         <div className="flex overflow-hidden rounded-lg border border-border">
           <ViewBtn active={view === "grid"} onClick={() => changeView("grid")} label="Vista de tarjetas">

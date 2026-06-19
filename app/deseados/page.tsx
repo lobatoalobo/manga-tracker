@@ -14,7 +14,9 @@ export default async function DeseadosPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/");
 
-  const items = await getWishlist(session.user.id);
+  const items = (await getWishlist(session.user.id)).sort((a, b) =>
+    a.title.localeCompare(b.title, "es"),
+  );
   const nationalIds = await nationalEditionIds(items.map((w) => w.anilistId));
   const nationalCovers = await nationalCoversByAnilist(
     items.map((w) => w.anilistId),

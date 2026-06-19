@@ -198,9 +198,25 @@ export default function CatalogBrowser({
     });
   }, [cards, q, tab, genres, gmode, demographics]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
+  // Ordenar por fecha de salida (más pronto primero) en las pestañas de
+  // próximos; en A-Z se respeta el alfabético que ya viene del server.
+  const ordered = useMemo(() => {
+    if (tab === "tomos")
+      return [...filtered].sort(
+        (a, b) =>
+          (a.next ? +new Date(a.next.date) : Infinity) -
+          (b.next ? +new Date(b.next.date) : Infinity),
+      );
+    if (tab === "series")
+      return [...filtered].sort((a, b) =>
+        (a.releaseLabel ?? "9999").localeCompare(b.releaseLabel ?? "9999"),
+      );
+    return filtered;
+  }, [filtered, tab]);
+
+  const pageCount = Math.max(1, Math.ceil(ordered.length / PER_PAGE));
   const cur = Math.min(page, pageCount);
-  const shown = filtered.slice((cur - 1) * PER_PAGE, cur * PER_PAGE);
+  const shown = ordered.slice((cur - 1) * PER_PAGE, cur * PER_PAGE);
 
   function update(patch: Partial<BrowseState>, replace = false) {
     const next: BrowseState = {
