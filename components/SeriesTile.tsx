@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import ArgentinaFlag from "@/components/ArgentinaFlag";
+import UsaFlag from "@/components/UsaFlag";
 import { formatProximaDate, formatReleaseLabel } from "@/lib/releaseDate";
 
 export interface SeriesTileData {
@@ -8,6 +9,7 @@ export interface SeriesTileData {
   title: string;
   coverImage: string | null;
   national?: boolean;
+  intl?: boolean; // edición internacional (VIZ): bandera US
   publishers?: string[]; // si se pasa, se muestra la línea de editorial
   next?: { volume: number | null; date: string | Date } | null;
   upcoming?: boolean;
@@ -57,11 +59,15 @@ export default function SeriesTile({
               {data.title}
             </div>
           )}
-          {data.national && (
+          {data.national ? (
             <span className="absolute left-1 top-1 flex items-center rounded bg-black/60 px-1 py-0.5">
               <ArgentinaFlag className="h-2.5 w-4 rounded-[1px]" />
             </span>
-          )}
+          ) : data.intl ? (
+            <span className="absolute left-1 top-1 flex items-center rounded bg-black/60 px-1 py-0.5">
+              <UsaFlag className="h-2.5 w-4 rounded-[1px]" />
+            </span>
+          ) : null}
           {owned && (
             <span className="absolute right-1 top-1 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-white">
               ✓

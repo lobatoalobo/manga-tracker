@@ -5,6 +5,7 @@ import Link from "next/link";
 import { formatProximaDate, formatReleaseLabel } from "@/lib/releaseDate";
 import { toggleWishAction } from "@/app/actions";
 import ArgentinaFlag from "@/components/ArgentinaFlag";
+import UsaFlag from "@/components/UsaFlag";
 import { GENRE_CATEGORIES, DEMOGRAPHICS } from "@/lib/genres";
 
 export interface BrowseCard {
@@ -13,6 +14,7 @@ export interface BrowseCard {
   coverImage: string | null;
   publishers: string[];
   national: boolean;
+  intl?: boolean;
   upcoming: boolean;
   releaseLabel: string | null;
   genres: string[];
@@ -94,12 +96,21 @@ export default function CatalogBrowser({
   wished = [],
   canWish = false,
   initial,
+  basePath = "/catalogo",
+  showTabs = true,
+  emptyPublisher = "Ivrea Argentina",
 }: {
   cards: BrowseCard[];
   collected?: number[];
   wished?: number[];
   canWish?: boolean;
   initial: BrowseState;
+  /** Ruta base para sincronizar la URL (p. ej. "/internacional"). */
+  basePath?: string;
+  /** Mostrar las pestañas A-Z / Series nuevas / Próximos tomos (catálogo AR). */
+  showTabs?: boolean;
+  /** Editorial a mostrar cuando una card no trae publishers. */
+  emptyPublisher?: string;
 }) {
   const mine = useMemo(() => new Set(collected), [collected]);
   const [wishSet, setWishSet] = useState(() => new Set(wished));
@@ -157,7 +168,7 @@ export default function CatalogBrowser({
     if (next.demographics.length) params.set("demo", next.demographics.join(","));
     if (next.page > 1) params.set("page", String(next.page));
     const qs = params.toString();
-    const url = `/catalogo${qs ? `?${qs}` : ""}`;
+    const url = `${basePath}${qs ? `?${qs}` : ""}`;
     if (replace) window.history.replaceState(null, "", url);
     else window.history.pushState(null, "", url);
   }
@@ -253,7 +264,8 @@ export default function CatalogBrowser({
         className="mb-3 w-full rounded-lg border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-accent"
       />
 
-      {/* Tabs (fila propia). */}
+      {/* Tabs (fila propia). Solo catálogo nacional (releases de Ivrea). */}
+      {showTabs && (
       <div className="mb-2 flex flex-wrap gap-2 text-sm">
         {TABS.map(({ t, label }) => (
           <button
@@ -268,6 +280,7 @@ export default function CatalogBrowser({
           </button>
         ))}
       </div>
+      )}
 
       {/* Filtros: panel colapsable (demografía + géneros por categoría). */}
       <div className="mb-2 flex items-center gap-2 text-sm">
@@ -447,11 +460,15 @@ export default function CatalogBrowser({
                         {w.title}
                       </div>
                     )}
-                    {w.national && (
+                    {w.national ? (
                       <span className="absolute left-1 top-1 flex items-center rounded bg-black/60 px-1 py-0.5">
                         <ArgentinaFlag className="h-2.5 w-4 rounded-[1px]" />
                       </span>
-                    )}
+                    ) : w.intl ? (
+                      <span className="absolute left-1 top-1 flex items-center rounded bg-black/60 px-1 py-0.5">
+                        <UsaFlag className="h-2.5 w-4 rounded-[1px]" />
+                      </span>
+                    ) : null}
                     {owned && (
                       <span className="absolute right-1 top-1 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-white">
                         ✓
@@ -471,7 +488,7 @@ export default function CatalogBrowser({
                   </div>
                   <p className="mt-1.5 line-clamp-2 text-sm font-medium">{w.title}</p>
                   <p className="truncate text-xs text-muted">
-                    {w.publishers.length ? w.publishers.join(" · ") : "Ivrea Argentina"}
+                    {w.publishers.length ? w.publishers.join(" · ") : emptyPublisher}
                   </p>
                 </Link>
 

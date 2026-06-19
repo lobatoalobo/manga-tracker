@@ -12,7 +12,8 @@ import { getCrumbQuery } from "@/lib/storeLinks";
 import { formatReleaseLabel, formatProximaDate } from "@/lib/releaseDate";
 import AddEditionButton from "@/components/AddEditionButton";
 import ArgentinaFlag from "@/components/ArgentinaFlag";
-import { CATALOG_PUBLISHERS } from "@/lib/catalog";
+import UsaFlag from "@/components/UsaFlag";
+import { CATALOG_PUBLISHERS, INTL_PUBLISHERS } from "@/lib/catalog";
 import WishButton from "@/components/WishButton";
 import TrackingPanel from "@/components/TrackingPanel";
 import { SignIn } from "@/components/AuthButtons";
@@ -55,7 +56,10 @@ const PUB_KEY: Record<string, string> = {
   "Larp Editores": "larp",
   "Distrito Manga": "distrito",
   "Planeta Cómic": "planeta",
+  "VIZ Media": "viz",
 };
+
+const INTL_SET = new Set<string>(INTL_PUBLISHERS);
 
 /**
  * Detalle de una obra del catálogo LOCAL (`Work`), sin AniList. Generaliza el
@@ -115,16 +119,25 @@ export default async function SeriePage({
   const ivreaEditions = work.editions.filter((e) =>
     (CATALOG_PUBLISHERS as readonly string[]).includes(e.publisher),
   );
-  // MVP solo-Ivrea: la obra es del catálogo si tiene edición de Ivrea o es un
+  // Internacional (VIZ): mismas obras, sección aparte. Se muestran junto a las
+  // de Ivrea cuando una obra está en ambos catálogos (Work unificado).
+  const intlEditions = work.editions.filter((e) => INTL_SET.has(e.publisher));
+  // La obra es visible si tiene edición de Ivrea, edición internacional, o es un
   // debut GENUINO (próximo + sin ninguna edición). Una obra solo de otra
-  // editorial (ej. Kemuri) NO es visible → 404 (tampoco aparece en el browse).
+  // editorial nacional (ej. Kemuri) NO es visible → 404.
   const genuineDebut = work.upcoming && work.editions.length === 0;
-  if (ivreaEditions.length === 0 && !genuineDebut) notFound();
-  const shownEditions = ivreaEditions;
+  if (
+    ivreaEditions.length === 0 &&
+    intlEditions.length === 0 &&
+    !genuineDebut
+  )
+    notFound();
+  const shownEditions = [...ivreaEditions, ...intlEditions];
   // Guard: una obra con edición publicada (volumes>0) NO es "próximo a salir".
   const upcoming = work.upcoming && !work.editions.some((e) => e.volumes > 0);
   // Nacional = edición argentina (Ivrea) o debut genuino de Ivrea.
   const national = genuineDebut || ivreaEditions.length > 0;
+  const isIntl = intlEditions.length > 0;
 
   // Colección: id sintético negativo por workId (no choca con ids de AniList).
   const pseudoId = -workId;
@@ -166,6 +179,11 @@ export default async function SeriePage({
               <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500/15 px-2.5 py-0.5 text-xs font-medium text-sky-300">
                 <ArgentinaFlag className="h-3 w-4.5 rounded-[1px]" /> Edición
                 nacional
+              </span>
+            )}
+            {isIntl && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/15 px-2.5 py-0.5 text-xs font-medium text-indigo-300">
+                <UsaFlag className="h-3 w-4.5 rounded-[1px]" /> Edición en inglés
               </span>
             )}
             {upcoming && (
@@ -222,14 +240,16 @@ export default async function SeriePage({
             ) : (
               <SignIn className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90" />
             )}
-            <a
-              href={crumbSearch(crumbQuery)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
-            >
-              🛒 Comprar en Crumb
-            </a>
+            {national && (
+              <a
+                href={crumbSearch(crumbQuery)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
+              >
+                🛒 Comprar en Crumb
+              </a>
+            )}
           </div>
 
           {/* Ediciones de la obra (todas las editoriales). */}
@@ -262,10 +282,11 @@ export default async function SeriePage({
                 const next = nextByEdition.get(e.id);
                 const key = editionKey(e.publisher, e.id);
                 const isTracked = trackedKeys.includes(key);
+                const edIntl = INTL_SET.has(e.publisher);
                 const edition: Edition = {
                   id: key,
                   source: e.publisher,
-                  region: "AR",
+                  region: edIntl ? "INT" : "AR",
                   publisher: e.publisher,
                   slug: e.slug,
                   status: e.status || "EN CATÁLOGO",
@@ -280,7 +301,14 @@ export default async function SeriePage({
                       isTracked ? "border-accent" : "border-border"
                     }`}
                   >
-                    <span className="font-medium">{e.publisher}</span>
+                    <span className="flex items-center gap-1.5 font-medium">
+                      {edIntl ? (
+                        <UsaFlag className="h-3 w-4.5 rounded-[1px]" />
+                      ) : (
+                        <ArgentinaFlag className="h-3 w-4.5 rounded-[1px]" />
+                      )}
+                      {e.publisher}
+                    </span>
                     <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                       <EdField
                         label="Tomos"
@@ -291,6 +319,16 @@ export default async function SeriePage({
                         value={e.status ? e.status.toLowerCase() : "en catálogo"}
                       />
                     </dl>
+                    {edIntl && e.url && (
+                      <a
+                        href={e.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 inline-flex w-fit items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs transition hover:border-accent"
+                      >
+                        Ver en VIZ ↗
+                      </a>
+                    )}
                     {next && (
                       <p className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-300">
                         📅 Próximo tomo{next.volume ? ` #${next.volume}` : ""} ·{" "}

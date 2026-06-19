@@ -22,6 +22,17 @@ export const PUBLISHERS = [
 export const CATALOG_PUBLISHERS = ["Ivrea Argentina"] as const;
 
 /**
+ * Editoriales EXTRANJERAS que el catálogo muestra en la sección Internacional
+ * (separada del catálogo nacional). MVP: VIZ Media (inglés). Ver docs/plan-viz-en.md.
+ */
+export const INTL_PUBLISHERS = ["VIZ Media"] as const;
+
+/** Filtro Prisma: obras con alguna edición internacional (VIZ). */
+export function intlCatalogWhere(): import("@prisma/client").Prisma.WorkWhereInput {
+  return { editions: { some: { publisher: { in: [...INTL_PUBLISHERS] } } } };
+}
+
+/**
  * Filtro Prisma: una obra entra al catálogo visible si tiene una edición de una
  * editorial activa (CATALOG_PUBLISHERS) o es un debut próximo (upcoming, sin
  * edición aún). Fuente única para browse/búsqueda/autores/sitemap.
@@ -430,6 +441,7 @@ export interface WorkCard {
   coverImage: string | null;
   publishers: string[];
   national: boolean; // tiene alguna edición de editorial argentina
+  intl: boolean; // sección Internacional (edición VIZ/extranjera)
   upcoming: boolean;
   releaseLabel: string | null;
   genres: string[];
@@ -451,11 +463,16 @@ export async function browseWorks(opts: {
   tab?: "az" | "series" | "tomos";
   take?: number;
   page?: number;
+  /** "ar" (default) = catálogo nacional (Ivrea). "intl" = Internacional (VIZ). */
+  scope?: "ar" | "intl";
 }): Promise<{ items: WorkCard[]; total: number }> {
   const take = opts.take ?? 60;
   const page = Math.max(1, opts.page ?? 1);
   const today = new Date(new Date().toISOString().slice(0, 10));
   const q = opts.q?.trim();
+  const scope = opts.scope ?? "ar";
+  const activePublishers: readonly string[] =
+    scope === "intl" ? INTL_PUBLISHERS : CATALOG_PUBLISHERS;
 
   type WorkWhere = import("@prisma/client").Prisma.WorkWhereInput;
   const qFilter: WorkWhere | null = q
@@ -470,10 +487,16 @@ export async function browseWorks(opts: {
   // MVP: el catálogo muestra SOLO obras de las editoriales activas (Ivrea) o
   // debuts próximos de Ivrea (que aún no tienen edición). Excluye obras que solo
   // existen en otras editoriales (Panini/Ovni/españolas) hasta sumarlas bien.
-  const conds: WorkWhere[] = [inCatalogWhere()];
+  const conds: WorkWhere[] = [
+    scope === "intl" ? intlCatalogWhere() : inCatalogWhere(),
+  ];
   if (qFilter) conds.push(qFilter);
 
-  if (opts.tab === "series") {
+  // Las pestañas series/tomos son del catálogo nacional (releases de Ivrea); en
+  // Internacional no aplican.
+  if (scope === "intl") {
+    // sin filtros de tab
+  } else if (opts.tab === "series") {
     // Próximas SERIES: debuts GENUINOS (upcoming + sin ninguna edición). Si ya
     // tiene una edición (de Ivrea o de otra editorial), no es un debut próximo.
     conds.push({ upcoming: true, editions: { none: {} } });
@@ -546,15 +569,16 @@ export async function browseWorks(opts: {
       publishers: [
         ...new Set(
           w.editions
-            .filter((e) =>
-              (CATALOG_PUBLISHERS as readonly string[]).includes(e.publisher),
-            )
+            .filter((e) => activePublishers.includes(e.publisher))
             .map((e) => e.publisher),
         ),
       ],
       // Nacional = edición de editorial AR, o un debut/próxima de Ivrea (que aún
-      // no tiene edición cargada pero es nacional).
-      national: isUpcoming || w.editions.some((e) => AR_PUBLISHERS.has(e.publisher)),
+      // no tiene edición cargada pero es nacional). En scope intl no es nacional.
+      national:
+        scope === "ar" &&
+        (isUpcoming || w.editions.some((e) => AR_PUBLISHERS.has(e.publisher))),
+      intl: scope === "intl",
       upcoming: isUpcoming,
       releaseLabel: w.releaseLabel,
       genres: w.genres,
