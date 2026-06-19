@@ -120,3 +120,44 @@ export async function importVizSeries(
 
   return { ok: true, title, workId, volumes };
 }
+
+export interface VizRefreshResult {
+  scanned: number;
+  ok: number;
+  failed: number;
+  updated: { title: string; volumes: number }[];
+}
+
+/**
+ * Mantenimiento: re-resuelve contra MU las obras que YA tienen edición VIZ para
+ * actualizar el conteo de tomos (tomos nuevos). Idempotente. Re-matchea por el
+ * `originalTitle` (romaji de MU que guardamos) + el título mostrado, así no se
+ * pierde el match aunque mostremos el nombre en inglés. Para el cron de Vercel
+ * (MU/MD no bloquean datacenter). `limit` acota por corrida si el catálogo crece.
+ */
+export async function refreshVizCatalog(
+  limit?: number,
+): Promise<VizRefreshResult> {
+  const works = await prisma.work.findMany({
+    where: { editions: { some: { publisher: VIZ } } },
+    select: { id: true, title: true, originalTitle: true },
+    orderBy: { id: "asc" },
+    ...(limit ? { take: limit } : {}),
+  });
+
+  let ok = 0;
+  let failed = 0;
+  const updated: { title: string; volumes: number }[] = [];
+  for (const w of works) {
+    const aliases = [...new Set([w.originalTitle, w.title].filter(Boolean))] as string[];
+    const r = await importVizSeries(aliases).catch(() => null);
+    if (r?.ok) {
+      ok++;
+      if (r.volumes) updated.push({ title: r.title ?? w.title, volumes: r.volumes });
+    } else {
+      failed++;
+    }
+    await new Promise((res) => setTimeout(res, 500)); // rate-limit MU/MD
+  }
+  return { scanned: works.length, ok, failed, updated };
+}
