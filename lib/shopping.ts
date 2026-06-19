@@ -82,6 +82,7 @@ export interface ShoppingItem {
   owned: number;
   total: number;
   missing: number[]; // tomos que faltan (1..total sin los que tenés)
+  reissues: { volume: number; date: string }[]; // tomos faltantes que se reeditan pronto
   // Retailers que venden todas las editoriales (búsqueda por título):
   crumbUrl: string;
   laRevisteriaUrl: string;
@@ -124,7 +125,9 @@ export async function getShoppingList(userId: string): Promise<ShoppingItem[]> {
   if (incomplete.length === 0) return [];
 
   const ids = [...new Set(incomplete.map((i) => i.anilistId))];
-  const [crumbRows, pubRows] = await Promise.all([
+  const workIds = ids.filter((id) => id < 0).map((id) => -id);
+  const today = new Date(new Date().toISOString().slice(0, 10));
+  const [crumbRows, pubRows, reissueByWork] = await Promise.all([
     prisma.crumbMapping.findMany({ where: { anilistId: { in: ids } } }),
     prisma.publisherEdition.findMany({
       where: { anilistId: { in: ids } },
@@ -136,6 +139,7 @@ export async function getShoppingList(userId: string): Promise<ShoppingItem[]> {
         volumes: true,
       },
     }),
+    reissuesByWork(workIds, today),
   ]);
   const crumbBy = new Map(crumbRows.map((r) => [r.anilistId, r.query]));
   const pubBy = new Map<number, typeof pubRows>();
@@ -152,6 +156,15 @@ export async function getShoppingList(userId: string): Promise<ShoppingItem[]> {
       const owned = new Set(i.edition.ownedVolumes);
       const missing: number[] = [];
       for (let v = 1; v <= total; v++) if (!owned.has(v)) missing.push(v);
+
+      // Reediciones próximas que cubren un tomo que te FALTA (accionable).
+      const missingSet = new Set(missing);
+      const reissues =
+        i.anilistId < 0
+          ? (reissueByWork.get(-i.anilistId) ?? []).filter(
+              (r) => r.volume != null && missingSet.has(r.volume),
+            )
+          : [];
 
       const pubs = pubBy.get(i.anilistId) ?? [];
       // Link directo solo para Ovni (Ivrea/Panini no venden por su sitio).
@@ -174,10 +187,51 @@ export async function getShoppingList(userId: string): Promise<ShoppingItem[]> {
         owned: i.edition.ownedVolumes.length,
         total,
         missing,
+        reissues: reissues.map((r) => ({
+          volume: r.volume as number,
+          date: r.date.toISOString(),
+        })),
         crumbUrl: crumbSearch(query),
         laRevisteriaUrl: laRevisteriaSearch(query),
         ovniUrl,
       };
     })
     .sort((a, b) => a.title.localeCompare(b.title));
+}
+
+/** Reediciones próximas (kind=reissue, futuras) por workId, vía sus ediciones. */
+async function reissuesByWork(
+  workIds: number[],
+  today: Date,
+): Promise<Map<number, { volume: number | null; date: Date }[]>> {
+  const out = new Map<number, { volume: number | null; date: Date }[]>();
+  if (workIds.length === 0) return out;
+  const eds = await prisma.publisherEdition.findMany({
+    where: { workId: { in: workIds } },
+    select: { id: true, workId: true },
+  });
+  const edToWork = new Map(eds.map((e) => [e.id, e.workId as number]));
+  if (eds.length === 0) return out;
+  const rr = await prisma.ivreaRelease.findMany({
+    where: {
+      editionId: { in: eds.map((e) => e.id) },
+      kind: "reissue",
+      releaseDate: { gte: today },
+    },
+    orderBy: { releaseDate: "asc" },
+    select: { editionId: true, volume: true, releaseDate: true },
+  });
+  const seen = new Set<string>(); // dedup por work+tomo (la más cercana)
+  for (const r of rr) {
+    if (r.editionId == null || !r.releaseDate) continue;
+    const wid = edToWork.get(r.editionId);
+    if (wid == null) continue;
+    const k = `${wid}:${r.volume}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const arr = out.get(wid) ?? [];
+    arr.push({ volume: r.volume, date: r.releaseDate });
+    out.set(wid, arr);
+  }
+  return out;
 }

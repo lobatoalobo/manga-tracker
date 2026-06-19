@@ -19,7 +19,7 @@ export interface BrowseCard {
   releaseLabel: string | null;
   genres: string[];
   demographic: string | null;
-  next: { volume: number | null; date: string } | null;
+  next: { volume: number | null; date: string; kind?: "new" | "reissue" } | null;
 }
 
 export interface BrowseState {
@@ -474,8 +474,15 @@ export default function CatalogBrowser({
                       </span>
                     )}
                     {w.next && (
-                      <span className="absolute bottom-1 left-1 right-1 rounded bg-emerald-600/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
-                        📅 {w.next.volume ? `#${w.next.volume} · ` : ""}
+                      <span
+                        className={`absolute bottom-1 left-1 right-1 rounded px-1.5 py-0.5 text-center text-[10px] font-medium text-white ${
+                          w.next.kind === "reissue"
+                            ? "bg-violet-600/90"
+                            : "bg-emerald-600/90"
+                        }`}
+                      >
+                        {w.next.kind === "reissue" ? "♻️" : "📅"}{" "}
+                        {w.next.volume ? `#${w.next.volume} · ` : ""}
                         {formatProximaDate(w.next.date)}
                       </span>
                     )}

@@ -543,7 +543,7 @@ export interface WorkCard {
   releaseLabel: string | null;
   genres: string[];
   demographic: string | null;
-  next: { volume: number | null; date: Date } | null;
+  next: { volume: number | null; date: Date; kind: "new" | "reissue" } | null;
 }
 
 const AR_PUBLISHERS = new Set<string>(PUBLISHERS);
@@ -591,9 +591,10 @@ export async function browseWorks(opts: {
     // tiene una edición (de Ivrea o de otra editorial), no es un debut próximo.
     conds.push({ upcoming: true, editions: { none: {} } });
   } else if (opts.tab === "tomos") {
-    // Próximos TOMOS: obras con una salida futura (vía edición→work).
+    // Próximos TOMOS: obras con una salida futura (vía edición→work). Incluye
+    // reediciones (tomos agotados que vuelven); en la card se distinguen con chip.
     const rel = await prisma.ivreaRelease.findMany({
-      where: { editionId: { not: null }, kind: { not: "reissue" }, releaseDate: { gte: today } },
+      where: { editionId: { not: null }, releaseDate: { gte: today } },
       select: { editionId: true },
     });
     const edIds = [...new Set(rel.map((r) => r.editionId as number))];
@@ -629,26 +630,38 @@ export async function browseWorks(opts: {
     prisma.work.count({ where }),
   ]);
 
-  // Próximo tomo por work (para el badge en la card).
+  // Próxima salida por work (badge de la card). Incluye reediciones, con su
+  // `kind`. Si una serie tiene tomo NUEVO y reedición en camino, prioriza el
+  // tomo nuevo (más relevante); si solo hay reediciones, muestra la más cercana.
   const allEdIds = works.flatMap((w) => w.editions.map((e) => e.id));
   const rel = allEdIds.length
     ? await prisma.ivreaRelease.findMany({
-        where: { editionId: { in: allEdIds }, kind: { not: "reissue" }, releaseDate: { gte: today } },
+        where: { editionId: { in: allEdIds }, releaseDate: { gte: today } },
         orderBy: { releaseDate: "asc" },
-        select: { editionId: true, volume: true, releaseDate: true },
+        select: { editionId: true, volume: true, releaseDate: true, kind: true },
       })
     : [];
-  const nextByEd = new Map<number, { volume: number | null; date: Date }>();
+  type Rel = { volume: number | null; date: Date; kind: "new" | "reissue" };
+  const relByEd = new Map<number, Rel[]>();
   for (const r of rel)
-    if (r.editionId != null && r.releaseDate && !nextByEd.has(r.editionId))
-      nextByEd.set(r.editionId, { volume: r.volume, date: r.releaseDate });
+    if (r.editionId != null && r.releaseDate) {
+      const arr = relByEd.get(r.editionId) ?? [];
+      arr.push({
+        volume: r.volume,
+        date: r.releaseDate,
+        kind: r.kind === "reissue" ? "reissue" : "new",
+      });
+      relByEd.set(r.editionId, arr);
+    }
 
   const items = works.map((w) => {
-    let next: { volume: number | null; date: Date } | null = null;
+    const all: Rel[] = [];
     for (const e of w.editions) {
-      const n = nextByEd.get(e.id);
-      if (n && (!next || n.date < next.date)) next = n;
+      const a = relByEd.get(e.id);
+      if (a) all.push(...a);
     }
+    all.sort((a, b) => a.date.getTime() - b.date.getTime());
+    const next: Rel | null = all.find((x) => x.kind === "new") ?? all[0] ?? null;
     // Guard: una obra con edición publicada (volumes>0) NO es "próximo a salir",
     // aunque el flag `upcoming` haya quedado viejo (se setea entre crawls).
     const isUpcoming = w.upcoming && !w.editions.some((e) => e.volumes > 0);

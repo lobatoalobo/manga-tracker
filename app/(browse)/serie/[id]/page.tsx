@@ -115,6 +115,29 @@ export default async function SeriePage({
     nextByEdition.set(r.editionId, { volume: r.volume, date: r.releaseDate });
   }
 
+  // Reediciones próximas (tomos agotados que vuelven), por número de tomo.
+  const reissueRows = editionIds.length
+    ? await prisma.ivreaRelease.findMany({
+        where: {
+          editionId: { in: editionIds },
+          kind: "reissue",
+          releaseDate: { gte: today },
+        },
+        orderBy: { releaseDate: "asc" },
+        select: { volume: true, releaseDate: true },
+      })
+    : [];
+  // Dedup por tomo (la más cercana), tomos del usuario aparte.
+  const reissues: { volume: number | null; date: Date }[] = [];
+  const seenReissue = new Set<number>();
+  for (const r of reissueRows) {
+    if (!r.releaseDate) continue;
+    const v = r.volume ?? -1;
+    if (seenReissue.has(v)) continue;
+    seenReissue.add(v);
+    reissues.push({ volume: r.volume, date: r.releaseDate });
+  }
+
   const { title, coverImage, author, synopsis, genres } = work;
   const ivreaEditions = work.editions.filter((e) =>
     (CATALOG_PUBLISHERS as readonly string[]).includes(e.publisher),
@@ -354,6 +377,25 @@ export default async function SeriePage({
               })}
             </div>
           </div>
+
+          {/* Reediciones próximas (tomos agotados que vuelven). */}
+          {reissues.length > 0 && (
+            <div className="mt-6">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
+                ♻️ Reediciones próximas
+              </h2>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {reissues.map((r) => (
+                  <span
+                    key={`${r.volume}-${r.date.toISOString()}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-300"
+                  >
+                    Tomo{r.volume ? ` #${r.volume}` : ""} · {formatProximaDate(r.date)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {admin && (
             <AdminWorkEdit

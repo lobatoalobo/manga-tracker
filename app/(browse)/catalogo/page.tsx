@@ -50,7 +50,9 @@ export default async function CatalogoPage({
     releaseLabel: w.releaseLabel,
     genres: w.genres,
     demographic: w.demographic,
-    next: w.next ? { volume: w.next.volume, date: w.next.date.toISOString() } : null,
+    next: w.next
+      ? { volume: w.next.volume, date: w.next.date.toISOString(), kind: w.next.kind }
+      : null,
   }));
 
   // Obras que el usuario ya colecciona / desea (Manga y WishlistItem con

@@ -11,7 +11,11 @@ export interface SeriesTileData {
   national?: boolean;
   intl?: boolean; // edición internacional (VIZ): bandera US
   publishers?: string[]; // si se pasa, se muestra la línea de editorial
-  next?: { volume: number | null; date: string | Date } | null;
+  next?: {
+    volume: number | null;
+    date: string | Date;
+    kind?: "new" | "reissue";
+  } | null;
   upcoming?: boolean;
   releaseLabel?: string | null;
 }
@@ -73,8 +77,13 @@ export default function SeriesTile({
             </span>
           )}
           {data.next ? (
-            <span className="absolute bottom-1 left-1 right-1 rounded bg-emerald-600/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
-              📅 {data.next.volume ? `#${data.next.volume} · ` : ""}
+            <span
+              className={`absolute bottom-1 left-1 right-1 rounded px-1.5 py-0.5 text-center text-[10px] font-medium text-white ${
+                data.next.kind === "reissue" ? "bg-violet-600/90" : "bg-emerald-600/90"
+              }`}
+            >
+              {data.next.kind === "reissue" ? "♻️" : "📅"}{" "}
+              {data.next.volume ? `#${data.next.volume} · ` : ""}
               {formatProximaDate(new Date(data.next.date))}
             </span>
           ) : data.upcoming && !owned ? (
