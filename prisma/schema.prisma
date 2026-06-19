@@ -362,6 +362,18 @@ model AppState {
   updatedAt DateTime @updatedAt
 }
 
+// Fuentes (Whakoom/Ivrea) descartadas a mano: entradas duplicadas o
+// problemáticas que ya curaste/borraste. El crawl/import NO las vuelve a traer.
+// `source` = "whakoom" | "ivrea"; `sourceId` = whakoomId, o slug de Ivrea.
+model RejectedSource {
+  source    String
+  sourceId  String
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@id([source, sourceId])
+}
+
 // Contador de rate limiting (ventana fija). `key` = "<accion>:<userId|ip>".
 // Backed por DB para que funcione en serverless (varias instancias). Las filas
 // vencidas se pisan en el próximo hit; no requieren limpieza activa.

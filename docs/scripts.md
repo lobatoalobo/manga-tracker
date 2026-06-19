@@ -35,7 +35,7 @@ Migraciones: crear el SQL a mano en `prisma/migrations/<ts>_<nombre>/migration.s
 |---|---|
 | `npm run crawl ivrea` | Crawlea el catálogo de Ivrea (títulos → fichas → tomos + Work). Notifica tomos nuevos. |
 | `npm run crawl whakoom-all` | Importa TODAS las editoriales de Whakoom (Panini/Ovni/Kemuri/Utopía/Larp/Distrito). Corre LOCAL (Whakoom bloquea runners). |
-| `npm run crawl whakoom-pub "<url /all>" [reset] [baseline]` | Importa una editorial completa de Whakoom por su URL `/all`. |
+| `npm run crawl whakoom-pub "<url /all>" [reset] [baseline] [new]` | Importa una editorial completa de Whakoom. `new` = solo ediciones nuevas (incremental, no re-abre las que ya tenés). |
 | `npm run crawl whakoom <archivo.txt>` | Importa ediciones de Whakoom desde una lista de URLs. |
 | `npm run crawl resolve [reset] [publisher]` | 🟥 Resuelve el `anilistId` de cada edición (verificado por autor). |
 | `npm run crawl mangakas` | 🟥 Reconstruye el índice de mangakas (escanea AniList). |

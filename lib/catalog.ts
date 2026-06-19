@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { looksLikeComic } from "@/lib/comicTerms";
+import { rejectEditions } from "@/lib/rejectedSources";
 
 export const PUBLISHERS = [
   "Ivrea Argentina",
@@ -952,6 +953,8 @@ export async function updatePublisherEditionFields(
 }
 
 export async function deletePublisherEdition(id: number) {
+  // Registra la fuente como descartada para que el crawl no la re-importe.
+  await rejectEditions([id]).catch(() => {});
   await prisma.publisherEdition.deleteMany({ where: { id } });
 }
 
