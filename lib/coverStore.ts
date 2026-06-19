@@ -122,11 +122,17 @@ export async function backfillCoversToBlob(
   let migrated = 0;
   let failed = 0;
   for (const w of batch) {
-    const url = await storeCover(w.coverImage);
-    if (url && url !== w.coverImage) {
-      await prisma.work.update({ where: { id: w.id }, data: { coverImage: url } });
-      migrated++;
-    } else if (!url) {
+    // Resiliente: un fallo puntual (corte transitorio de DB, imagen rota) no
+    // corta toda la corrida; es reanudable, la próxima vuelta lo reintenta.
+    try {
+      const url = await storeCover(w.coverImage);
+      if (url && url !== w.coverImage) {
+        await prisma.work.update({ where: { id: w.id }, data: { coverImage: url } });
+        migrated++;
+      } else if (!url) {
+        failed++;
+      }
+    } catch {
       failed++;
     }
     await new Promise((r) => setTimeout(r, 100));
