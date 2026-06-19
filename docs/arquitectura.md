@@ -150,8 +150,10 @@ y 38 obras correctamente unificadas con sus ediciones de Ivrea.
   **banderas** distinguen el origen (🇦🇷 / 🇺🇸) y pueden coexistir en una obra.
 - **Próximos / reediciones**: tomos nuevos (📅) y reediciones (♻️) con fecha, en
   el catálogo, la ficha y la lista de compras.
-- **Portadas**: MU directo; MD vía proxy propio `/api/cover` (cache inmutable),
-  por el bloqueo de hotlinking de MangaDex.
+- **Portadas**: se **descargan a storage propio** (Vercel Blob) en la ingesta y
+  se sirven desde nuestro origen → independencia total también en imágenes (no
+  dependemos de Ivrea/MU/MD en runtime). Proxy `/api/cover` + cache como red de
+  seguridad durante la transición.
 
 ---
 
@@ -195,8 +197,9 @@ crons por `CRON_SECRET` (fail-closed).
 
 ## 11. Diferenciales técnicos (el "pitch")
 
-1. **Catálogo propio, no dependiente de terceros en runtime** → resiliencia y
-   velocidad; nadie nos puede romper el producto cambiando su API.
+1. **Catálogo propio, no dependiente de terceros en runtime** (metadata **y**
+   portadas en storage propio) → resiliencia y velocidad; nadie nos puede romper
+   el producto cambiando su API o sus imágenes.
 2. **Motor de resolución multi-fuente** con dedup y **unificación cross-idioma**:
    una obra = sus ediciones AR/US/ES/JP bajo una entidad, con banderas.
 3. **Datos de mercado argentino** (Ivrea): fechas, próximos tomos y reediciones
