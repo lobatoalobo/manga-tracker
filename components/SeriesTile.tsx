@@ -59,15 +59,14 @@ export default function SeriesTile({
               {data.title}
             </div>
           )}
-          {data.national ? (
-            <span className="absolute left-1 top-1 flex items-center rounded bg-black/60 px-1 py-0.5">
-              <ArgentinaFlag className="h-2.5 w-4 rounded-[1px]" />
+          {(data.national || data.intl) && (
+            <span className="absolute left-1 top-1 flex items-center gap-1 rounded bg-black/60 px-1 py-0.5">
+              {data.national && (
+                <ArgentinaFlag className="h-2.5 w-4 rounded-[1px]" />
+              )}
+              {data.intl && <UsaFlag className="h-2.5 w-4 rounded-[1px]" />}
             </span>
-          ) : data.intl ? (
-            <span className="absolute left-1 top-1 flex items-center rounded bg-black/60 px-1 py-0.5">
-              <UsaFlag className="h-2.5 w-4 rounded-[1px]" />
-            </span>
-          ) : null}
+          )}
           {owned && (
             <span className="absolute right-1 top-1 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-white">
               ✓

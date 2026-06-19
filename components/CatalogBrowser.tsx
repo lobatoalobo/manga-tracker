@@ -308,7 +308,7 @@ export default function CatalogBrowser({
       </div>
 
       {filtersOpen && (
-        <div className="mb-3 space-y-4 rounded-xl border border-border bg-surface p-4">
+        <div className="mb-3 max-h-[60vh] space-y-4 overflow-y-auto rounded-xl border border-border bg-surface p-4">
           {DEMOGRAPHICS.some((d) => (demoCount.get(d) ?? 0) > 0) && (
             <div>
               <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
@@ -460,15 +460,14 @@ export default function CatalogBrowser({
                         {w.title}
                       </div>
                     )}
-                    {w.national ? (
-                      <span className="absolute left-1 top-1 flex items-center rounded bg-black/60 px-1 py-0.5">
-                        <ArgentinaFlag className="h-2.5 w-4 rounded-[1px]" />
+                    {(w.national || w.intl) && (
+                      <span className="absolute left-1 top-1 flex items-center gap-1 rounded bg-black/60 px-1 py-0.5">
+                        {w.national && (
+                          <ArgentinaFlag className="h-2.5 w-4 rounded-[1px]" />
+                        )}
+                        {w.intl && <UsaFlag className="h-2.5 w-4 rounded-[1px]" />}
                       </span>
-                    ) : w.intl ? (
-                      <span className="absolute left-1 top-1 flex items-center rounded bg-black/60 px-1 py-0.5">
-                        <UsaFlag className="h-2.5 w-4 rounded-[1px]" />
-                      </span>
-                    ) : null}
+                    )}
                     {owned && (
                       <span className="absolute right-1 top-1 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-white">
                         ✓

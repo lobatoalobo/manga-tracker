@@ -45,6 +45,7 @@ export default async function CatalogoPage({
     coverImage: w.coverImage,
     publishers: w.publishers,
     national: w.national,
+    intl: w.intl,
     upcoming: w.upcoming,
     releaseLabel: w.releaseLabel,
     genres: w.genres,
