@@ -128,6 +128,66 @@ export async function getMangaUpdatesEnrich(
   return null;
 }
 
+export interface MuLicensed {
+  seriesId: number;
+  title: string; // título principal (romaji/oficial) de MU
+  author: string | null;
+  year: number | null;
+  genres: string[];
+  description: string | null;
+  coverImage: string | null;
+  standardVolumes: number | null;
+  /** Nombres de editoriales con type "English" (p. ej. "VIZ Media"). */
+  englishPublishers: string[];
+}
+
+/**
+ * Detalle rico de MU para una serie (por título): editoriales (qué licencia en
+ * inglés), conteo estándar, autor, géneros, año, sinopsis, portada. Para armar
+ * ediciones internacionales (VIZ). Devuelve null si no hay match confiable.
+ */
+export async function getMuLicensed(
+  titles: string[],
+): Promise<MuLicensed | null> {
+  const targets = titles.map(normalize).filter(Boolean);
+  const q = titles.find(Boolean);
+  if (!q) return null;
+  const candidates = await search(q);
+  const matched = candidates
+    .map((c) => ({ c, score: titleScore(c.title, c.associated, targets) }))
+    .filter((x) => x.score >= 80) // exacto o casi (evita falsos)
+    .sort((a, b) => b.score - a.score);
+  if (!matched.length) return null;
+
+  const id = matched[0].c.seriesId;
+  const r = await fetch(`${BASE}/series/${id}`, { next: { revalidate: DAY } });
+  if (!r.ok) return null;
+  const d = await r.json();
+  const formats = parseStatus(String(d.status || ""));
+  const standard = formats.find((f) => f.isStandard);
+  const englishPublishers: string[] = (d.publishers || [])
+    .filter((p: { type?: string }) => p.type === "English")
+    .map((p: { publisher_name?: string }) => stripHtml(p.publisher_name || ""))
+    .filter(Boolean);
+  const author =
+    (d.authors || [])
+      .filter((a: { type?: string }) => /author|story/i.test(a.type || ""))
+      .map((a: { name?: string }) => stripHtml(a.name || ""))[0] ??
+    (d.authors?.[0]?.name ? stripHtml(d.authors[0].name) : null);
+
+  return {
+    seriesId: id,
+    title: stripHtml(d.title || matched[0].c.title || ""),
+    author,
+    year: d.year ? Number(d.year) : null,
+    genres: (d.genres || []).map((g: { genre?: string }) => g.genre).filter(Boolean),
+    description: d.description ? stripHtml(d.description) : null,
+    coverImage: d.image?.url?.original ?? null,
+    standardVolumes: standard?.count ?? null,
+    englishPublishers,
+  };
+}
+
 async function getSeriesFull(id: number): Promise<MangaUpdatesEnrich | null> {
   const r = await fetch(`${BASE}/series/${id}`, { next: { revalidate: DAY } });
   if (!r.ok) return null;

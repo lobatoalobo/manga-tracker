@@ -237,7 +237,13 @@ export async function upsertPublisherEdition(e: {
   volumes: number;
   status?: string | null;
   url: string;
+  language?: string; // "es" (default) | "en" | "ja"
+  country?: string | null; // "AR" | "US" | …
 }): Promise<void> {
+  const intl =
+    e.language || e.country !== undefined
+      ? { language: e.language ?? "es", country: e.country ?? null }
+      : {};
   await prisma.publisherEdition.upsert({
     where: { publisher_slug: { publisher: e.publisher, slug: e.slug } },
     update: {
@@ -246,6 +252,7 @@ export async function upsertPublisherEdition(e: {
       volumes: e.volumes,
       status: e.status ?? null,
       url: e.url,
+      ...intl,
     },
     create: {
       publisher: e.publisher,
@@ -255,6 +262,7 @@ export async function upsertPublisherEdition(e: {
       volumes: e.volumes,
       status: e.status ?? null,
       url: e.url,
+      ...intl,
     },
   });
 }

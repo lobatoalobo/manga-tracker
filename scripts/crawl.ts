@@ -13,6 +13,7 @@ import {
 } from "../lib/whakoomImport";
 import { logJobRun, groupSkipReasons } from "../lib/jobs";
 import { getRejected } from "../lib/rejectedSources";
+import { importVizSeries, VIZ_SEED } from "../lib/vizImport";
 import {
   detectAndNotifyNewVolumes,
   detectAndNotifyWishlistAvailable,
@@ -158,6 +159,30 @@ async function crawlIvrea() {
     if (done % 50 === 0) console.log(`  ${done}/${entries.length} (guardados: ${saved})`);
   });
   console.log(`  Ivrea: ${saved} ediciones indexadas.`);
+}
+
+/**
+ * Catálogo VIZ (inglés): procesa el seed (lib/vizImport.VIZ_SEED) creando/
+ * asociando Works + ediciones VIZ (en/US). MU/MD no bloquean datacenter, así
+ * que puede correr en Vercel. Ver docs/plan-viz-en.md.
+ */
+async function crawlViz(extra: string[] = []) {
+  console.log("\n=== Catálogo VIZ (inglés) ===");
+  const titles = [...new Set([...VIZ_SEED, ...extra])];
+  let ok = 0;
+  const skipped: string[] = [];
+  for (const t of titles) {
+    const r = await importVizSeries(t);
+    if (r.ok) {
+      ok++;
+      console.log(`  ✓ ${r.title} (${r.volumes} tomos)`);
+    } else {
+      skipped.push(`${t} — ${r.reason}`);
+    }
+    await sleep(800); // respeta el rate-limit de MU/MD
+  }
+  console.log(`\n  VIZ: ${ok} importadas · ${skipped.length} salteadas`);
+  if (skipped.length) console.log("  Salteadas:\n   " + skipped.join("\n   "));
 }
 
 async function crawlMangakas() {
@@ -331,9 +356,15 @@ async function main() {
     process.exit(1);
   }
 
-  const which = process.argv[2]; // ivrea|panini|ovni|mangakas|resolve|whakoom*
+  const which = process.argv[2]; // ivrea|mangakas|resolve|whakoom*|viz
   if (which === "whakoom-all") {
     await crawlWhakoomAll();
+    console.log("\nListo.");
+    return;
+  }
+  if (which === "viz") {
+    // viz [titulo extra…]  → procesa el seed + títulos sueltos opcionales
+    await crawlViz(process.argv.slice(3));
     console.log("\nListo.");
     return;
   }

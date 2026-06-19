@@ -437,6 +437,10 @@ model PublisherEdition {
   notifiedVolumes Int     @default(0)
   status          String?
   url             String
+  // Idioma/país de la edición (para ediciones internacionales). Las existentes
+  // son español (AR). Ver docs/plan-viz-en.md.
+  language        String   @default("es") // "es" | "en" | "ja"
+  country         String? // "AR" | "ES" | "US" | "JP" | …
   // Id de la edición en Whakoom (de /ediciones/<id>/…). Identidad fuerte: sus
   // relaciones ya están debugueadas, así desambiguamos sin depender del título.
   whakoomId       String?  @unique
