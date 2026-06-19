@@ -168,16 +168,17 @@ async function crawlIvrea() {
  */
 async function crawlViz(extra: string[] = []) {
   console.log("\n=== Catálogo VIZ (inglés) ===");
-  const titles = [...new Set([...VIZ_SEED, ...extra])];
+  const titles: (string | string[])[] = [...VIZ_SEED, ...extra];
   let ok = 0;
   const skipped: string[] = [];
   for (const t of titles) {
+    const label = Array.isArray(t) ? t[0] : t;
     const r = await importVizSeries(t);
     if (r.ok) {
       ok++;
       console.log(`  ✓ ${r.title} (${r.volumes} tomos)`);
     } else {
-      skipped.push(`${t} — ${r.reason}`);
+      skipped.push(`${label} — ${r.reason}`);
     }
     await sleep(800); // respeta el rate-limit de MU/MD
   }

@@ -16,27 +16,30 @@ const HENTAI = /hentai|lolicon|shotacon|doujinshi|pornographic/i;
  * (que confirme VIZ como editorial inglesa); las que no, se saltean. Crece a
  * mano / por admin. Enumeración completa = Google Books (fase 2, ver doc).
  */
-export const VIZ_SEED = [
-  "Naruto",
-  "Bleach",
-  "One Piece",
-  "Dragon Ball",
-  "Death Note",
-  "My Hero Academia",
-  "Jujutsu Kaisen",
-  "Chainsaw Man",
-  "Demon Slayer: Kimetsu no Yaiba",
-  "Spy x Family",
-  "Dr. Stone",
-  "Tokyo Ghoul",
-  "One-Punch Man",
-  "Hunter x Hunter",
-  "JoJo's Bizarre Adventure",
-  "Sakamoto Days",
-  "Kaiju No. 8",
-  "Blue Box",
-  "Yu-Gi-Oh!",
-  "Vagabond",
+// Cada entrada es uno o varios títulos (alias): el primero es el nombre a
+// mostrar; el resto ayuda a matchear en MU, que suele indexar en romaji
+// (p. ej. "My Hero Academia" → "Boku no Hero Academia").
+export const VIZ_SEED: string[][] = [
+  ["Naruto"],
+  ["Bleach"],
+  ["One Piece"],
+  ["Dragon Ball"],
+  ["Death Note"],
+  ["My Hero Academia", "Boku no Hero Academia"],
+  ["Jujutsu Kaisen"],
+  ["Chainsaw Man"],
+  ["Demon Slayer", "Kimetsu no Yaiba"],
+  ["Spy x Family"],
+  ["Dr. Stone"],
+  ["Tokyo Ghoul"],
+  ["One-Punch Man", "One Punch-Man"],
+  ["Hunter x Hunter"],
+  ["JoJo's Bizarre Adventure Part 1", "JoJo's Bizarre Adventure"],
+  ["Sakamoto Days"],
+  ["Kaiju No. 8", "Kaijuu 8-gou"],
+  ["Blue Box", "Ao no Hako"],
+  ["Yu-Gi-Oh!"],
+  ["Vagabond"],
 ];
 
 export interface VizResult {
@@ -53,8 +56,12 @@ export interface VizResult {
  * así una serie que ya está por Ivrea suma la edición VIZ al MISMO Work) y la
  * edición `VIZ Media` (en/US). Idempotente (upsert por publisher+slug).
  */
-export async function importVizSeries(seedTitle: string): Promise<VizResult> {
-  const mu = await getMuLicensed([seedTitle]).catch(() => null);
+export async function importVizSeries(
+  seed: string | string[],
+): Promise<VizResult> {
+  const aliases = Array.isArray(seed) ? seed : [seed];
+  const seedTitle = aliases[0];
+  const mu = await getMuLicensed(aliases).catch(() => null);
   if (!mu) return { ok: false, reason: "sin match en MU" };
   if (!mu.englishPublishers.some((p) => /viz/i.test(p)))
     return {
@@ -69,8 +76,11 @@ export async function importVizSeries(seedTitle: string): Promise<VizResult> {
   const rawGenres = [...mu.genres, ...(md?.genres ?? [])];
   const { genres, demographic } = normalizeGenres(rawGenres);
 
+  // Catálogo inglés: mostramos el título en inglés (el del seed); guardamos el
+  // principal de MU (suele ser romaji) como originalTitle para el dedup al Work.
+  const displayTitle = seedTitle || mu.title;
   const workId = await findOrCreateWork({
-    title: mu.title || seedTitle,
+    title: displayTitle,
     coverImage: cover,
     author: mu.author,
     synopsis: mu.description,
@@ -90,7 +100,7 @@ export async function importVizSeries(seedTitle: string): Promise<VizResult> {
   if (Object.keys(patch).length)
     await prisma.work.update({ where: { id: workId }, data: patch }).catch(() => {});
 
-  const title = mu.title || seedTitle;
+  const title = displayTitle;
   const slug = slugifyTitle(title);
   const volumes = mu.standardVolumes ?? 0;
   await upsertPublisherEdition({

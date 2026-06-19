@@ -156,10 +156,31 @@ export async function getMuLicensed(
   const matched = candidates
     .map((c) => ({ c, score: titleScore(c.title, c.associated, targets) }))
     .filter((x) => x.score >= 80) // exacto o casi (evita falsos)
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4);
   if (!matched.length) return null;
 
-  const id = matched[0].c.seriesId;
+  // MU tiene varias fichas por serie (serie principal vs. one-shot/spin-off con
+  // el mismo nombre). Traemos el detalle de los mejores y elegimos el más
+  // confiable: que licencie en inglés y tenga edición estándar con conteo.
+  const parsed = (
+    await Promise.all(matched.map((m) => fetchLicensed(m.c.seriesId)))
+  ).filter((x): x is MuLicensed => x !== null);
+  if (!parsed.length) return null;
+
+  parsed.sort((a, b) => licensedScore(b) - licensedScore(a));
+  return parsed[0];
+}
+
+/** Prioriza fichas que licencian en inglés y tienen conteo estándar. */
+function licensedScore(d: MuLicensed): number {
+  let s = 0;
+  if (d.englishPublishers.length) s += 1000;
+  if (d.standardVolumes) s += 100 + d.standardVolumes;
+  return s;
+}
+
+async function fetchLicensed(id: number): Promise<MuLicensed | null> {
   const r = await fetch(`${BASE}/series/${id}`, { next: { revalidate: DAY } });
   if (!r.ok) return null;
   const d = await r.json();
@@ -177,7 +198,7 @@ export async function getMuLicensed(
 
   return {
     seriesId: id,
-    title: stripHtml(d.title || matched[0].c.title || ""),
+    title: stripHtml(d.title || ""),
     author,
     year: d.year ? Number(d.year) : null,
     genres: (d.genres || []).map((g: { genre?: string }) => g.genre).filter(Boolean),
@@ -258,7 +279,10 @@ function parseStatus(status: string): MUFormat[] {
     .map((l) => l.trim())
     .filter(Boolean)
     .map((line) => {
-      const m = line.match(/^(\d+)\s+([A-Za-z\- ]+?)\s*\(/);
+      // Toma el conteo inicial y el label (palabras) que le sigue, ignorando
+      // sufijos como "+ 1 Extra Volume" o "(2000 - Complete)".
+      // Ej.: "12 Volumes + 1 Extra Volume (Complete)" → 12 / "Volumes".
+      const m = line.match(/^(\d+)\s+([A-Za-z][A-Za-z\-]*(?:\s+[A-Za-z][A-Za-z\-]*)*)/);
       if (!m) return null;
 
       const count = Number(m[1]);
