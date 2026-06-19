@@ -1,4 +1,4 @@
-# Taxonomía de géneros — análisis (no implementado)
+ava# Taxonomía de géneros — análisis (no implementado)
 
 Análisis de cómo normalizar los géneros. **No aplicado** — es plan/diseño.
 

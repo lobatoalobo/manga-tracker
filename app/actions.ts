@@ -88,6 +88,7 @@ import {
 } from "@/lib/social";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimit, RL } from "@/lib/rateLimit";
+import { rejectEditions } from "@/lib/rejectedSources";
 import { safeHttpUrl, seriesHref } from "@/lib/url";
 
 export async function addEditionAction(input: AddEditionInput) {
@@ -484,6 +485,7 @@ export async function bulkEditionAction(
       where: { id: { in: unique } },
       select: { anilistId: true },
     });
+    await rejectEditions(unique); // que el crawl no las re-importe
     await prisma.publisherEdition.deleteMany({ where: { id: { in: unique } } });
     await flushEditionCaches(...rows.map((r) => r.anilistId));
     // Limpiamos works que quedaron sin ediciones.

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getCollectionItems } from "@/lib/collection";
 import { getShoppingCount } from "@/lib/shopping";
 import { getPurchaseStats } from "@/lib/purchases";
-import MangaCard from "@/components/MangaCard";
+import ContinueCarousel from "@/components/ContinueCarousel";
 
 const ars = new Intl.NumberFormat("es-AR", {
   style: "currency",
@@ -33,8 +33,7 @@ export default async function Dashboard({
         i.edition.ownedVolumes.length < i.edition.totalVolumes,
     )
     .map((i) => ({ i, missing: i.edition.totalVolumes - i.edition.ownedVolumes.length }))
-    .sort((a, b) => a.missing - b.missing)
-    .slice(0, 5);
+    .sort((a, b) => a.missing - b.missing);
 
   return (
     <main className="mx-auto max-w-5xl px-5 pb-12 pt-4">
@@ -78,15 +77,7 @@ export default async function Dashboard({
       {inProgress.length > 0 && (
         <section className="mt-8">
           <h2 className="mb-3 text-lg font-semibold">Continuar colección</h2>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-            {inProgress.map(({ i }) => (
-              <MangaCard
-                key={`${i.anilistId}-${i.edition.key}`}
-                item={i}
-                readOnly
-              />
-            ))}
-          </div>
+          <ContinueCarousel items={inProgress.map(({ i }) => i)} />
         </section>
       )}
 

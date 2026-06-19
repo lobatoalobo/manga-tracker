@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { looksLikeComic } from "@/lib/comicTerms";
+import { rejectEditions } from "@/lib/rejectedSources";
 
 export const PUBLISHERS = [
   "Ivrea Argentina",
@@ -28,8 +29,12 @@ export const CATALOG_PUBLISHERS = ["Ivrea Argentina"] as const;
 export function inCatalogWhere(): import("@prisma/client").Prisma.WorkWhereInput {
   return {
     OR: [
+      // Tiene edición de una editorial activa (Ivrea).
       { editions: { some: { publisher: { in: [...CATALOG_PUBLISHERS] } } } },
-      { upcoming: true },
+      // O es un debut GENUINO: próximo a salir y sin NINGUNA edición todavía.
+      // (Una obra con edición de otra editorial —ej. Kemuri— NO entra aunque
+      // tenga el flag upcoming por un match dudoso del reconcile.)
+      { upcoming: true, editions: { none: {} } },
     ],
   };
 }
@@ -420,6 +425,7 @@ export interface WorkCard {
   upcoming: boolean;
   releaseLabel: string | null;
   genres: string[];
+  demographic: string | null;
   next: { volume: number | null; date: Date } | null;
 }
 
@@ -460,10 +466,9 @@ export async function browseWorks(opts: {
   if (qFilter) conds.push(qFilter);
 
   if (opts.tab === "series") {
-    // Próximas SERIES: debuts marcados upcoming (sembrados desde /news/). Guard:
-    // si ya tiene una edición con tomos, NO es próxima (el flag puede estar viejo
-    // entre corridas del reconcile).
-    conds.push({ upcoming: true, editions: { none: { volumes: { gt: 0 } } } });
+    // Próximas SERIES: debuts GENUINOS (upcoming + sin ninguna edición). Si ya
+    // tiene una edición (de Ivrea o de otra editorial), no es un debut próximo.
+    conds.push({ upcoming: true, editions: { none: {} } });
   } else if (opts.tab === "tomos") {
     // Próximos TOMOS: obras con una salida futura (vía edición→work).
     const rel = await prisma.ivreaRelease.findMany({
@@ -496,6 +501,7 @@ export async function browseWorks(opts: {
         upcoming: true,
         releaseLabel: true,
         genres: true,
+        demographic: true,
         editions: { select: { id: true, publisher: true, volumes: true } },
       },
     }),
@@ -544,6 +550,7 @@ export async function browseWorks(opts: {
       upcoming: isUpcoming,
       releaseLabel: w.releaseLabel,
       genres: w.genres,
+      demographic: w.demographic,
       next,
     };
   });
@@ -946,6 +953,8 @@ export async function updatePublisherEditionFields(
 }
 
 export async function deletePublisherEdition(id: number) {
+  // Registra la fuente como descartada para que el crawl no la re-importe.
+  await rejectEditions([id]).catch(() => {});
   await prisma.publisherEdition.deleteMany({ where: { id } });
 }
 

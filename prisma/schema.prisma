@@ -362,6 +362,18 @@ model AppState {
   updatedAt DateTime @updatedAt
 }
 
+// Fuentes (Whakoom/Ivrea) descartadas a mano: entradas duplicadas o
+// problemáticas que ya curaste/borraste. El crawl/import NO las vuelve a traer.
+// `source` = "whakoom" | "ivrea"; `sourceId` = whakoomId, o slug de Ivrea.
+model RejectedSource {
+  source    String
+  sourceId  String
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@id([source, sourceId])
+}
+
 // Contador de rate limiting (ventana fija). `key` = "<accion>:<userId|ip>".
 // Backed por DB para que funcione en serverless (varias instancias). Las filas
 // vencidas se pisan en el próximo hit; no requieren limpieza activa.
@@ -386,7 +398,12 @@ model Work {
   coverImage String?
   author     String? // autor(es), editable; semilla de la ficha de la editorial
   synopsis   String? // sinopsis, editable
-  genres     String[] // géneros (enriquecidos de MU/MD o editados a mano); para filtrar
+  genres     String[] // géneros CANÓNICOS (es) para filtrar; ver lib/genres.ts
+  // Géneros crudos de MU/MD (en inglés) antes de mapear: backup para re-mapear
+  // sin re-enriquecer.
+  rawGenres   String[]
+  // Demografía (Shonen/Shojo/Seinen/Josei/Kodomo): eje aparte del género.
+  demographic String?
   // Cuándo se enriqueció desde MU/MD (null = pendiente). Para el job batch.
   enrichedAt DateTime?
   upcoming   Boolean  @default(false) // "Próximo a salir" en AR (preventa/anunciada)

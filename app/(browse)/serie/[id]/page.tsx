@@ -112,18 +112,19 @@ export default async function SeriePage({
   }
 
   const { title, coverImage, author, synopsis, genres } = work;
-  // MVP: en la ficha mostramos solo las ediciones de las editoriales activas
-  // (Ivrea). Las demás siguen en la DB pero no se listan acá.
-  const shownEditions = work.editions.filter((e) =>
+  const ivreaEditions = work.editions.filter((e) =>
     (CATALOG_PUBLISHERS as readonly string[]).includes(e.publisher),
   );
-  // Guard: una obra con edición publicada (volumes>0) NO es "próximo a salir",
-  // aunque el flag haya quedado viejo entre corridas del reconcile.
+  // MVP solo-Ivrea: la obra es del catálogo si tiene edición de Ivrea o es un
+  // debut GENUINO (próximo + sin ninguna edición). Una obra solo de otra
+  // editorial (ej. Kemuri) NO es visible → 404 (tampoco aparece en el browse).
+  const genuineDebut = work.upcoming && work.editions.length === 0;
+  if (ivreaEditions.length === 0 && !genuineDebut) notFound();
+  const shownEditions = ivreaEditions;
+  // Guard: una obra con edición publicada (volumes>0) NO es "próximo a salir".
   const upcoming = work.upcoming && !work.editions.some((e) => e.volumes > 0);
-  // Nacional = edición de editorial argentina (PUB_KEY) o debut/próxima de Ivrea
-  // (sin edición cargada aún). A futuro, las internacionales no llevarán el chip.
-  const national =
-    upcoming || work.editions.some((e) => PUB_KEY[e.publisher] != null);
+  // Nacional = edición argentina (Ivrea) o debut genuino de Ivrea.
+  const national = genuineDebut || ivreaEditions.length > 0;
 
   // Colección: id sintético negativo por workId (no choca con ids de AniList).
   const pseudoId = -workId;

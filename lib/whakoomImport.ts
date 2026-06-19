@@ -11,6 +11,7 @@ import {
   findOrCreateWork,
 } from "./catalog";
 import { ovniSearchUrl } from "./ovni";
+import { getRejected, whakoomIdFromUrl } from "./rejectedSources";
 import { prisma } from "./prisma";
 
 /**
@@ -252,6 +253,9 @@ export async function importWhakoomUrls(
     // Si es false, no consulta AniList (más rápido y sin depender de su API):
     // el seed bulk lo deja en null y el mapeo se hace después como enriquecimiento.
     resolveAnilist?: boolean;
+    // Incremental: saltea las ediciones cuyo whakoomId YA tenemos (solo trae las
+    // nuevas). Acelera el refresh; no detecta tomos nuevos en las existentes.
+    skipExisting?: boolean;
     onProgress?: (p: { done: number; total: number; mapped: number }) => void;
   } = {},
 ): Promise<ImportResult> {
@@ -265,10 +269,30 @@ export async function importWhakoomUrls(
     ),
   ];
 
+  // Saltear las descartadas a mano (no re-importar lo que ya curaste/borraste).
+  const rejected = await getRejected("whakoom");
+  // Incremental: set de whakoomIds que ya tenemos (para traer solo lo nuevo).
+  const existing = opts.skipExisting
+    ? new Set(
+        (
+          await prisma.publisherEdition.findMany({
+            where: { whakoomId: { not: null } },
+            select: { whakoomId: true },
+          })
+        ).map((e) => e.whakoomId as string),
+      )
+    : null;
+
   const res: ImportResult = { processed: 0, imported: 0, mapped: 0, skipped: [] };
 
   for (const url of clean) {
     res.processed++;
+    const wId = whakoomIdFromUrl(url);
+    if (wId && rejected.has(wId)) {
+      res.skipped.push(`${url} — descartada (rejected)`);
+      continue;
+    }
+    if (existing && wId && existing.has(wId)) continue; // ya la tenemos
 
     const ed = await getWhakoomEdition(url).catch(() => null);
     if (!ed) {

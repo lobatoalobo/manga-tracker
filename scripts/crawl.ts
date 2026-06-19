@@ -12,6 +12,7 @@ import {
   enumeratePublisherEditions,
 } from "../lib/whakoomImport";
 import { logJobRun, groupSkipReasons } from "../lib/jobs";
+import { getRejected } from "../lib/rejectedSources";
 import {
   detectAndNotifyNewVolumes,
   detectAndNotifyWishlistAvailable,
@@ -91,8 +92,12 @@ async function crawlIvrea() {
     }
   });
 
-  const entries = [...titles.entries()];
-  console.log(`  ${entries.length} títulos en el catálogo. Trayendo fichas…`);
+  // Slugs descartados a mano: no re-importarlos.
+  const rejected = await getRejected("ivrea");
+  const entries = [...titles.entries()].filter(([slug]) => !rejected.has(slug));
+  console.log(
+    `  ${entries.length} títulos en el catálogo${rejected.size ? ` (${rejected.size} descartados saltados)` : ""}. Trayendo fichas…`,
+  );
 
   let done = 0;
   let saved = 0;
@@ -240,6 +245,7 @@ async function crawlWhakoomPublisher(
   reset: boolean,
   baseline: boolean,
   tail = true,
+  skipExisting = false,
 ) {
   console.log("\n=== Importar editorial completa desde Whakoom ===");
   const startedAt = new Date();
@@ -258,6 +264,7 @@ async function crawlWhakoomPublisher(
   });
   console.log(`  ${urls.length} ediciones encontradas. Importando + mapeando…`);
   const res = await importWhakoomUrls(urls, {
+    skipExisting,
     onProgress: (pr) => {
       if (pr.done % 20 === 0)
         console.log(`  ${pr.done}/${pr.total} (mapeadas: ${pr.mapped})`);
@@ -301,7 +308,8 @@ async function crawlWhakoomPublisher(
 async function crawlWhakoomAll() {
   for (const url of WHAKOOM_ALL_URLS) {
     try {
-      await crawlWhakoomPublisher(url, false, false, false);
+      // Incremental: solo trae ediciones NUEVAS (no re-abre las que ya tenemos).
+      await crawlWhakoomPublisher(url, false, false, false, true);
     } catch (e) {
       console.error(`  Falló ${url} (sigo con el resto):`, e);
     }
@@ -355,8 +363,14 @@ async function main() {
       );
       process.exit(1);
     }
-    const mods = process.argv.slice(4);
-    await crawlWhakoomPublisher(url, mods.includes("reset"), mods.includes("baseline"));
+    const mods = process.argv.slice(4); // reset | baseline | new
+    await crawlWhakoomPublisher(
+      url,
+      mods.includes("reset"),
+      mods.includes("baseline"),
+      true,
+      mods.includes("new"),
+    );
     console.log("\nListo.");
     return;
   }
