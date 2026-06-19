@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "migrate:staging": "node scripts/with-staging.mjs npx prisma migrate deploy",
     "studio:staging": "node scripts/with-staging.mjs npx prisma studio",
+    "sync:staging": "node scripts/sync-staging.mjs",
     "crawl": "tsx scripts/crawl.ts",
     "import:whakoom": "tsx scripts/import-whakoom.ts",
     "seed:whakoom": "tsx scripts/seed-whakoom.ts",

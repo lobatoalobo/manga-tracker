@@ -52,6 +52,7 @@ Migraciones: crear el SQL a mano en `prisma/migrations/<ts>_<nombre>/migration.s
 | `powershell -File scripts/refresh-catalog.ps1` | Wrapper para el Task Scheduler (loguea en `logs/`). |
 | `powershell -File scripts/install-refresh-task.ps1 [-At HH:mm]` | Registra la tarea programada diaria de Windows. |
 | `node scripts/with-staging.mjs <cmd…>` | Corre cualquier comando con `DATABASE_URL` apuntando a staging. |
+| `npm run sync:staging` / `… --yes` | Clona PROD → staging (Neon branching) + migraciones + scrub de PII. Sin `--yes` = dry. Ver [staging-mirror.md](staging-mirror.md). |
 
 ---
 
