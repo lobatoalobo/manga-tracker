@@ -162,7 +162,14 @@ export async function importVizSeries(
 ): Promise<VizResult> {
   const aliases = Array.isArray(seed) ? seed : [seed];
   const seedTitle = aliases[0];
-  const mu = await getMuLicensed(aliases).catch(() => null);
+
+  // MD primero: con el título (a veces inglés) trae TODOS los nombres conocidos,
+  // incluido el romaji. Eso es clave para que MU matchee series indexadas en
+  // romaji (ej. GB da "My Hero Academia", MU la tiene como "Boku no Hero Academia").
+  const md = await getMangaDex(aliases).catch(() => null);
+  const muAliases = [...new Set([...aliases, ...(md?.aliases ?? [])])];
+
+  const mu = await getMuLicensed(muAliases).catch(() => null);
   if (!mu) return { ok: false, reason: "sin match en MU" };
   if (!mu.englishPublishers.some((p) => /viz/i.test(p)))
     return {
@@ -172,7 +179,6 @@ export async function importVizSeries(
   if (mu.genres.some((g) => HENTAI.test(g)))
     return { ok: false, reason: "bloqueado (hentai/doujin)" };
 
-  const md = await getMangaDex([mu.title, seedTitle]).catch(() => null);
   const cover = md?.coverImage ?? mu.coverImage ?? null;
   const rawGenres = [...mu.genres, ...(md?.genres ?? [])];
   const { genres, demographic } = normalizeGenres(rawGenres);
@@ -279,17 +285,24 @@ export interface VizDiscoverResult {
  */
 export async function discoverVizFromGoogleBooks(opts: {
   limit?: number;
-  maxPages?: number;
+  pagesPerQuery?: number;
 } = {}): Promise<VizDiscoverResult> {
-  const titles = await googleBooksVizTitles(opts.maxPages ?? 15);
+  const titles = await googleBooksVizTitles(opts.pagesPerQuery ?? 5);
   if (titles === null)
     return { source: 0, candidates: 0, imported: 0, skipped: 0, noKey: true };
 
-  // Descarta los que ya tenemos como Work (por normTitle) para no re-pegarle a MU.
+  // Descarta lo que ya tenemos como Work (por normTitle y por originalTitle/romaji)
+  // para no re-pegarle a MU al pedo.
   const norm = (s: string) =>
     s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
-  const existing = await prisma.work.findMany({ select: { normTitle: true } });
-  const have = new Set(existing.map((w) => w.normTitle));
+  const existing = await prisma.work.findMany({
+    select: { normTitle: true, originalTitle: true },
+  });
+  const have = new Set<string>();
+  for (const w of existing) {
+    if (w.normTitle) have.add(w.normTitle);
+    if (w.originalTitle) have.add(norm(w.originalTitle));
+  }
   const candidates = titles.filter((t) => !have.has(norm(t)));
 
   const toProcess = opts.limit ? candidates.slice(0, opts.limit) : candidates;
