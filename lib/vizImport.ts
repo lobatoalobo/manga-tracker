@@ -7,6 +7,7 @@ import {
   slugifyTitle,
 } from "@/lib/catalog";
 import { normalizeGenres } from "@/lib/genres";
+import { proxiedCover } from "@/lib/coverProxy";
 import { prisma } from "@/lib/prisma";
 
 const VIZ = "VIZ Media";
@@ -179,7 +180,8 @@ export async function importVizSeries(
   if (mu.genres.some((g) => HENTAI.test(g)))
     return { ok: false, reason: "bloqueado (hentai/doujin)" };
 
-  const cover = md?.coverImage ?? mu.coverImage ?? null;
+  // MD da mejores portadas pero bloquea hotlinking → la servimos por proxy.
+  const cover = proxiedCover(md?.coverImage ?? mu.coverImage ?? null);
   const rawGenres = [...mu.genres, ...(md?.genres ?? [])];
   const { genres, demographic } = normalizeGenres(rawGenres);
 
@@ -271,6 +273,26 @@ export async function refreshVizCatalog(
     await new Promise((res) => setTimeout(res, 500)); // rate-limit MU/MD
   }
   return { scanned: works.length, ok, failed, updated };
+}
+
+/**
+ * Backfill: reescribe al proxy las portadas directas de MangaDex ya guardadas
+ * (que rompen por hotlinking). Afecta cualquier Work (no solo VIZ). Idempotente.
+ */
+export async function backfillMangadexCovers(): Promise<number> {
+  const works = await prisma.work.findMany({
+    where: { coverImage: { contains: "uploads.mangadex.org" } },
+    select: { id: true, coverImage: true },
+  });
+  let n = 0;
+  for (const w of works) {
+    const fixed = proxiedCover(w.coverImage);
+    if (fixed && fixed !== w.coverImage) {
+      await prisma.work.update({ where: { id: w.id }, data: { coverImage: fixed } });
+      n++;
+    }
+  }
+  return n;
 }
 
 export interface VizDiscoverResult {

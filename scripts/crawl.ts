@@ -17,6 +17,7 @@ import {
   importVizSeries,
   VIZ_SEED,
   discoverVizFromGoogleBooks,
+  backfillMangadexCovers,
 } from "../lib/vizImport";
 import {
   detectAndNotifyNewVolumes,
@@ -371,6 +372,12 @@ async function main() {
     // viz [titulo extra…]  → procesa el seed + títulos sueltos opcionales
     await crawlViz(process.argv.slice(3));
     console.log("\nListo.");
+    return;
+  }
+  if (which === "viz-covers") {
+    // viz-covers  → reescribe al proxy las portadas de MangaDex ya guardadas
+    const n = await backfillMangadexCovers();
+    console.log(`\nPortadas de MangaDex reescritas al proxy: ${n}`);
     return;
   }
   if (which === "viz-discover") {
