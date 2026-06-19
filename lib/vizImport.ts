@@ -245,12 +245,16 @@ export interface VizRefreshResult {
 export async function refreshVizCatalog(
   limit?: number,
 ): Promise<VizRefreshResult> {
-  const works = await prisma.work.findMany({
-    where: { editions: { some: { publisher: VIZ } } },
-    select: { id: true, title: true, originalTitle: true },
-    orderBy: { id: "asc" },
+  // Rotamos: refrescamos las ediciones MENOS recientes primero (updatedAt asc).
+  // Como el refresh bumpea updatedAt, en sucesivas corridas avanza por el resto.
+  // Así el cron escala aunque el catálogo crezca (no recorre todo cada vez).
+  const eds = await prisma.publisherEdition.findMany({
+    where: { publisher: VIZ, workId: { not: null } },
+    select: { work: { select: { id: true, title: true, originalTitle: true } } },
+    orderBy: { updatedAt: "asc" },
     ...(limit ? { take: limit } : {}),
   });
+  const works = eds.map((e) => e.work!).filter(Boolean);
 
   let ok = 0;
   let failed = 0;
