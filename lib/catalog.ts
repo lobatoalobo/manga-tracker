@@ -28,8 +28,12 @@ export const CATALOG_PUBLISHERS = ["Ivrea Argentina"] as const;
 export function inCatalogWhere(): import("@prisma/client").Prisma.WorkWhereInput {
   return {
     OR: [
+      // Tiene edición de una editorial activa (Ivrea).
       { editions: { some: { publisher: { in: [...CATALOG_PUBLISHERS] } } } },
-      { upcoming: true },
+      // O es un debut GENUINO: próximo a salir y sin NINGUNA edición todavía.
+      // (Una obra con edición de otra editorial —ej. Kemuri— NO entra aunque
+      // tenga el flag upcoming por un match dudoso del reconcile.)
+      { upcoming: true, editions: { none: {} } },
     ],
   };
 }
@@ -460,10 +464,9 @@ export async function browseWorks(opts: {
   if (qFilter) conds.push(qFilter);
 
   if (opts.tab === "series") {
-    // Próximas SERIES: debuts marcados upcoming (sembrados desde /news/). Guard:
-    // si ya tiene una edición con tomos, NO es próxima (el flag puede estar viejo
-    // entre corridas del reconcile).
-    conds.push({ upcoming: true, editions: { none: { volumes: { gt: 0 } } } });
+    // Próximas SERIES: debuts GENUINOS (upcoming + sin ninguna edición). Si ya
+    // tiene una edición (de Ivrea o de otra editorial), no es un debut próximo.
+    conds.push({ upcoming: true, editions: { none: {} } });
   } else if (opts.tab === "tomos") {
     // Próximos TOMOS: obras con una salida futura (vía edición→work).
     const rel = await prisma.ivreaRelease.findMany({
