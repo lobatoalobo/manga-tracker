@@ -13,6 +13,7 @@ import {
   setSharing,
   importEdition,
   addPurchaseItemToCollection,
+  removePurchaseItemFromCollection,
   type AddEditionInput,
   type ReadingStatus,
 } from "@/lib/collection";
@@ -885,10 +886,19 @@ export async function updatePurchaseAction(
     return { ok: false as const, error: "No se encontró la compra." };
   }
 
-  // Sumar a colección solo los tomos nuevos linkeados (los existentes no se
-  // re-agregan para no pisar lo que el usuario haya tocado).
+  // Sincronizar la colección con los cambios de la compra:
+  // 1) Quitar la contribución de los tomos removidos o cuyo dato (serie/edición/
+  //    número) cambió. Corre siempre; el guard interno respeta tomos cubiertos
+  //    por otra compra.
+  for (const it of [...res.removed, ...res.changed.map((c) => c.before)]) {
+    if (it.anilistId && it.status !== "CANCELLED") {
+      await removePurchaseItemFromCollection(userId, it).catch(() => {});
+    }
+  }
+  // 2) Sumar los tomos nuevos y los cambiados (con su dato nuevo), si corresponde.
   if (input.addToCollection) {
-    for (const it of res.created) {
+    const toAdd = [...res.created, ...res.changed.map((c) => c.after)];
+    for (const it of toAdd) {
       if (it.anilistId && it.status !== "CANCELLED") {
         await addPurchaseItemToCollection(userId, {
           anilistId: it.anilistId,
@@ -899,9 +909,8 @@ export async function updatePurchaseAction(
         }).catch(() => {});
       }
     }
-    revalidatePath("/collection");
   }
-
+  revalidatePath("/collection");
   revalidatePath("/compras");
   return { ok: true as const };
 }
@@ -940,7 +949,15 @@ export async function searchPurchaseSeriesAction(query: string) {
 
 export async function deletePurchaseAction(id: number) {
   const userId = await requireUserId();
-  await deletePurchase(userId, id);
+  const items = await deletePurchase(userId, id);
+  // Quita de la colección los tomos de esta compra (los cancelados nunca se
+  // sumaron). El guard interno respeta tomos cubiertos por otra compra.
+  for (const it of items) {
+    if (it.anilistId && it.status !== "CANCELLED") {
+      await removePurchaseItemFromCollection(userId, it).catch(() => {});
+    }
+  }
+  revalidatePath("/collection");
   revalidatePath("/compras");
 }
 

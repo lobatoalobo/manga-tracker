@@ -552,6 +552,36 @@ function publisherRegion(publisher: string | null | undefined): "AR" | "INT" {
   return publisher && /viz/i.test(publisher) ? "INT" : "AR";
 }
 
+type PubRow = { publisher: string; slug: string | null; volumes: number };
+
+/** Ediciones (PublisherEdition) de la obra, ordenadas por conteo. */
+async function purchaseEditionRows(anilistId: number): Promise<PubRow[]> {
+  return prisma.publisherEdition.findMany({
+    where: anilistId < 0 ? { workId: -anilistId } : { anilistId },
+    orderBy: { volumes: "desc" },
+    select: { publisher: true, slug: true, volumes: true },
+  });
+}
+
+/** Elige la edición que coincide con la editorial de la compra (o la de más tomos). */
+function chooseRow(rows: PubRow[], edition?: string | null): PubRow | null {
+  let row = rows[0] ?? null;
+  if (edition && rows.length > 1) {
+    const want = edition.toLowerCase();
+    const match = rows.find((r) =>
+      r.publisher.toLowerCase().split(" ").some((w) => w.length > 2 && want.includes(w)),
+    );
+    if (match) row = match;
+  }
+  return row;
+}
+
+/** Key de TrackedEdition para un tomo comprado (coherente con la ficha). */
+function purchaseKey(row: PubRow | null, edition?: string | null): string {
+  if (row) return PURCHASE_PUBLISHER_KEY[row.publisher] ?? "ar";
+  return publisherRegion(edition) === "INT" ? "viz" : "ar";
+}
+
 /**
  * Suma un tomo comprado a la colección. Resuelve la edición nacional desde el
  * mapeo (PublisherEdition) para que coincida con la que muestra la ficha; si la
@@ -569,31 +599,18 @@ export async function addPurchaseItemToCollection(
 ): Promise<void> {
   if (!item.anilistId) return;
 
-  // Obra local: id negativo = -workId → buscamos sus ediciones por workId.
-  const rows = await prisma.publisherEdition.findMany({
-    where:
-      item.anilistId < 0
-        ? { workId: -item.anilistId }
-        : { anilistId: item.anilistId },
-    orderBy: { volumes: "desc" },
-  });
-
-  // Si la compra dice la editorial, preferimos esa edición; si no, la de más tomos.
-  let row = rows[0] ?? null;
-  if (item.edition && rows.length > 1) {
-    const want = item.edition.toLowerCase();
-    const match = rows.find((r) =>
-      r.publisher.toLowerCase().split(" ").some((w) => w.length > 2 && want.includes(w)),
-    );
-    if (match) row = match;
-  }
+  // Obra local: id negativo = -workId → buscamos sus ediciones por workId, y
+  // preferimos la que coincide con la editorial de la compra (si no, la de más
+  // tomos).
+  const rows = await purchaseEditionRows(item.anilistId);
+  const row = chooseRow(rows, item.edition);
 
   // El tomo comprado puede superar el conteo cacheado de la edición (catálogo
   // desactualizado); en ese caso ampliamos el total para que el tomo se vea.
   const vol = item.volume ?? 0;
   const edition = row
     ? {
-        key: PURCHASE_PUBLISHER_KEY[row.publisher] ?? "ar",
+        key: purchaseKey(row, item.edition),
         label: row.publisher,
         publisher: row.publisher,
         slug: row.slug,
@@ -601,7 +618,7 @@ export async function addPurchaseItemToCollection(
         totalVolumes: Math.max(row.volumes, vol),
       }
     : {
-        key: publisherRegion(item.edition) === "INT" ? "viz" : "ar",
+        key: purchaseKey(null, item.edition),
         label: item.edition || "Edición nacional",
         publisher: item.edition || null,
         slug: null,
@@ -632,6 +649,66 @@ export async function addPurchaseItemToCollection(
   await prisma.ownedVolume
     .create({ data: { editionId: ed.id, volume: item.volume } })
     .catch(() => {}); // @@unique: ya lo tenía
+
+  const ownedCount = await prisma.ownedVolume.count({
+    where: { editionId: ed.id },
+  });
+  await prisma.trackedEdition.update({
+    where: { id: ed.id },
+    data: {
+      status:
+        ed.totalVolumes > 0 && ownedCount >= ed.totalVolumes
+          ? "COMPLETED"
+          : "IN_PROGRESS",
+    },
+  });
+}
+
+/**
+ * Quita de la colección el tomo de una compra (al borrar/editar la compra).
+ * Inverso de `addPurchaseItemToCollection`. Guard: si OTRA compra no cancelada
+ * todavía cubre ese tomo de esa misma edición, no lo quita (evita borrar de más
+ * cuando se compró el mismo tomo dos veces). Llamar DESPUÉS de borrar/actualizar
+ * la compra en cuestión (así sus ítems ya no cuentan en el guard).
+ */
+export async function removePurchaseItemFromCollection(
+  userId: string,
+  item: { anilistId: number | null; edition?: string | null; volume?: number | null },
+): Promise<void> {
+  if (!item.anilistId || !item.volume) return;
+
+  const rows = await purchaseEditionRows(item.anilistId);
+  const key = purchaseKey(chooseRow(rows, item.edition), item.edition);
+
+  // ¿Queda otra compra (no cancelada) que cubra este tomo de esta edición?
+  const others = await prisma.purchaseItem.findMany({
+    where: {
+      purchase: { userId },
+      anilistId: item.anilistId,
+      volume: item.volume,
+      status: { not: "CANCELLED" },
+    },
+    select: { edition: true },
+  });
+  const stillCovered = others.some(
+    (o) => purchaseKey(chooseRow(rows, o.edition), o.edition) === key,
+  );
+  if (stillCovered) return;
+
+  const manga = await prisma.manga.findUnique({
+    where: { userId_anilistId: { userId, anilistId: item.anilistId } },
+    select: { id: true },
+  });
+  if (!manga) return;
+  const ed = await prisma.trackedEdition.findUnique({
+    where: { mangaId_key: { mangaId: manga.id, key } },
+    select: { id: true, totalVolumes: true },
+  });
+  if (!ed) return;
+
+  await prisma.ownedVolume.deleteMany({
+    where: { editionId: ed.id, volume: item.volume },
+  });
 
   const ownedCount = await prisma.ownedVolume.count({
     where: { editionId: ed.id },
