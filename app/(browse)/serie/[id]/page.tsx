@@ -7,6 +7,7 @@ import { getSeries } from "@/lib/collection";
 import AdminWorkEdit from "@/components/AdminWorkEdit";
 import ExpandableText from "@/components/ExpandableText";
 import { getWishedKeys } from "@/lib/wishlist";
+import { isEnabled } from "@/lib/featureFlags";
 import {
   publisherKey,
   publisherRegionOf,
@@ -144,6 +145,9 @@ export default async function SeriePage({
   }
 
   const { title, coverImage, author, synopsis, genres } = work;
+  // Los chips de género llevan al catálogo filtrado; si la feature está apagada,
+  // ese filtro no aplica → los ocultamos para no dejar links muertos.
+  const genresEnabled = await isEnabled("genre-filters");
   const ivreaEditions = work.editions.filter((e) =>
     (CATALOG_PUBLISHERS as readonly string[]).includes(e.publisher),
   );
@@ -259,7 +263,7 @@ export default async function SeriePage({
             </p>
           )}
 
-          {genres.length > 0 && (
+          {genresEnabled && genres.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
               {genres.map((g) => (
                 <Link
