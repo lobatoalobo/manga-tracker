@@ -52,6 +52,9 @@ const steps = [
   // Ivrea desacoplado a Vercel (/api/cron/ivrea-catalogo). Acá solo Whakoom + enrich.
   { name: "Whakoom (todas)", args: ["scripts/crawl.ts", "whakoom-all"] },
   { name: "Enrich works", args: ["scripts/enrich-works.ts", "--limit", "300"] },
+  // Portadas a Blob: corre LOCAL (IP residencial) porque Whakoom bloquea el
+  // datacenter; acá sí se pueden bajar sus portadas para guardarlas propias.
+  { name: "Portadas a Blob", args: ["scripts/crawl.ts", "covers-blob"] },
 ];
 
 const ts = () => new Date().toISOString().replace("T", " ").slice(0, 19);

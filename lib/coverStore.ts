@@ -125,10 +125,16 @@ export async function backfillCoversToBlob(
 ): Promise<{ migrated: number; failed: number; remaining: number }> {
   if (!process.env.BLOB_READ_WRITE_TOKEN)
     return { migrated: 0, failed: 0, remaining: 0 };
+  // Whakoom bloquea el datacenter (Cloudflare): desde la nube (Vercel) no se
+  // pueden bajar sus portadas. Las saltamos en cloud para no trabar el cron; se
+  // migran desde el refresh LOCAL (IP residencial, no bloqueada). Hotlinkeadas
+  // funcionan igual mientras tanto.
+  const exclude = [{ coverImage: { contains: BLOB_HOST } }];
+  if (process.env.VERCEL) exclude.push({ coverImage: { contains: "whakoom" } });
   const pending = await prisma.work.findMany({
     where: {
       coverImage: { not: null },
-      NOT: { coverImage: { contains: BLOB_HOST } },
+      NOT: { OR: exclude },
     },
     select: { id: true, coverImage: true },
     orderBy: { id: "asc" },
