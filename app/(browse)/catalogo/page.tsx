@@ -1,6 +1,11 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { browseWorks } from "@/lib/catalog";
+import {
+  browseWorks,
+  publisherKey,
+  publisherRegionOf,
+  publisherShort,
+} from "@/lib/catalog";
 import CatalogBrowser, {
   type BrowseCard,
   type BrowseState,
@@ -45,17 +50,23 @@ export default async function CatalogoPage({
     coverImage: w.coverImage,
     publishers: w.publishers,
     national: w.national,
+    intl: w.intl,
     upcoming: w.upcoming,
     releaseLabel: w.releaseLabel,
     genres: w.genres,
     demographic: w.demographic,
     next: w.next ? { volume: w.next.volume, date: w.next.date.toISOString() } : null,
+    reissue: w.reissue
+      ? { volume: w.reissue.volume, date: w.reissue.date.toISOString() }
+      : null,
+    // Ediciones deseables (dedup por key); debut sin ediciones → nacional implícita.
+    editions: wishEditionsFor(w.publishers, w.national),
   }));
 
   // Obras que el usuario ya colecciona / desea (Manga y WishlistItem con
   // anilistId negativo = -workId), para resaltarlas en la grilla.
   let collected: number[] = [];
-  let wished: number[] = [];
+  const wishedMap: Record<number, string[]> = {};
   if (session?.user?.id) {
     const [mangas, wishes] = await Promise.all([
       prisma.manga.findMany({
@@ -64,11 +75,14 @@ export default async function CatalogoPage({
       }),
       prisma.wishlistItem.findMany({
         where: { userId: session.user.id, anilistId: { lt: 0 } },
-        select: { anilistId: true },
+        select: { anilistId: true, editionKey: true },
       }),
     ]);
     collected = mangas.map((r) => -r.anilistId);
-    wished = wishes.map((r) => -r.anilistId);
+    for (const w of wishes) {
+      const id = -w.anilistId;
+      (wishedMap[id] ??= []).push(w.editionKey);
+    }
   }
 
   return (
@@ -77,10 +91,25 @@ export default async function CatalogoPage({
       <CatalogBrowser
         cards={cards}
         collected={collected}
-        wished={wished}
+        wishedMap={wishedMap}
         canWish={!!session?.user?.id}
         initial={initial}
       />
     </main>
   );
+}
+
+/** Ediciones deseables de una obra a partir de sus editoriales visibles. */
+function wishEditionsFor(publishers: string[], national: boolean) {
+  const seen = new Set<string>();
+  const eds = [];
+  for (const p of publishers) {
+    const key = publisherKey(p);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    eds.push({ key, publisher: p, region: publisherRegionOf(p), label: publisherShort(p) });
+  }
+  if (eds.length === 0 && national)
+    eds.push({ key: "ivrea", publisher: "Ivrea Argentina", region: "AR", label: "Ivrea" });
+  return eds;
 }

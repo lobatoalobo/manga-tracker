@@ -174,6 +174,11 @@ model WishlistItem {
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   anilistId  Int
+  // Deseado POR EDICIÓN: "" = legacy/cualquiera; "ivrea"/"viz"/… = edición puntual.
+  // Así las notis y "ya salió" no mezclan ediciones de la misma serie.
+  editionKey String  @default("")
+  publisher  String? // label de la editorial deseada (display)
+  region     String? // AR | INT | … (para la bandera)
   title      String
   coverImage String
   // Ya avisamos "salió en Argentina" por esta deseada (idempotente, evita
@@ -181,7 +186,7 @@ model WishlistItem {
   notifiedAvailable Boolean @default(false)
   createdAt  DateTime @default(now())
 
-  @@unique([userId, anilistId])
+  @@unique([userId, anilistId, editionKey])
 }
 
 // Historial de compras del usuario (lo que antes llevaba en un Excel).
@@ -437,6 +442,10 @@ model PublisherEdition {
   notifiedVolumes Int     @default(0)
   status          String?
   url             String
+  // Idioma/país de la edición (para ediciones internacionales). Las existentes
+  // son español (AR). Ver docs/plan-viz-en.md.
+  language        String   @default("es") // "es" | "en" | "ja"
+  country         String? // "AR" | "ES" | "US" | "JP" | …
   // Id de la edición en Whakoom (de /ediciones/<id>/…). Identidad fuerte: sus
   // relaciones ya están debugueadas, así desambiguamos sin depender del título.
   whakoomId       String?  @unique

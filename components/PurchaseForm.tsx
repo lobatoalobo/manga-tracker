@@ -9,19 +9,10 @@ import {
   PURCHASE_STATUS_META,
   PURCHASE_STATUS_ORDER,
 } from "@/lib/purchaseStatus";
+import { volumeCap } from "@/lib/volumes";
 
 const input =
   "w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent";
-
-// Editoriales argentinas frecuentes para el dropdown del tomo.
-const EDITORIAL_OPTIONS = [
-  "Ivrea",
-  "Panini",
-  "Ovni Press",
-  "Distrito Manga",
-  "Kemuri",
-  "Utopía",
-];
 
 export interface InitialPurchase {
   id: number;
@@ -69,6 +60,7 @@ function rowsFrom(initial?: InitialPurchase): ItemRow[] {
       title: i.title,
       anilistId: i.anilistId,
       coverImage: i.coverImage,
+      publisher: i.edition ?? null,
     },
     volume: i.volume != null ? String(i.volume) : "",
     edition: i.edition ?? "",
@@ -119,6 +111,19 @@ export default function PurchaseForm({
 
   function submit() {
     setError(null);
+    // Bloqueo anti-typo: no se puede cargar un tomo muy por encima del máximo
+    // conocido de la edición (ej. tomo 500 de una serie de 10).
+    const bad = items.find((it) => {
+      const t = it.series.volumes ?? 0;
+      const v = it.volume ? Number(it.volume) : 0;
+      return it.series.title.trim() && v > volumeCap(t);
+    });
+    if (bad) {
+      setError(
+        `El tomo #${bad.volume} supera el máximo de "${bad.series.title}" (${bad.series.volumes} tomos). Corregí el número.`,
+      );
+      return;
+    }
     const cleanItems = items
       .filter((it) => it.series.title.trim() && it.price !== "")
       .map((it) => ({
@@ -127,7 +132,7 @@ export default function PurchaseForm({
         anilistId: it.series.anilistId,
         coverImage: it.series.coverImage,
         volume: it.volume ? Number(it.volume) : null,
-        edition: it.edition || null,
+        edition: it.series.publisher ?? (it.edition || null),
         price: Number(it.price),
       }));
     if (cleanItems.length === 0) {
@@ -258,7 +263,7 @@ export default function PurchaseForm({
                 value={it.series}
                 onChange={(series) => setItem(i, { series })}
               />
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <input
                   value={it.volume}
                   onChange={(e) => setItem(i, { volume: e.target.value })}
@@ -267,18 +272,6 @@ export default function PurchaseForm({
                   placeholder="Tomo #"
                   className={input}
                 />
-                <select
-                  value={it.edition}
-                  onChange={(e) => setItem(i, { edition: e.target.value })}
-                  className={input}
-                >
-                  <option value="">Editorial…</option>
-                  {EDITORIAL_OPTIONS.map((e) => (
-                    <option key={e} value={e}>
-                      {e}
-                    </option>
-                  ))}
-                </select>
                 <input
                   value={it.price}
                   onChange={(e) => setItem(i, { price: e.target.value })}
@@ -289,6 +282,22 @@ export default function PurchaseForm({
                   className={input}
                 />
               </div>
+              {(() => {
+                const total = it.series.volumes ?? 0;
+                const v = Number(it.volume) || 0;
+                if (total <= 0 || v <= total) return null;
+                return v > volumeCap(total) ? (
+                  <p className="text-xs text-red-400">
+                    ⚠️ El tomo #{v} supera el máximo de la edición ({total}). No vas
+                    a poder guardar hasta corregirlo.
+                  </p>
+                ) : (
+                  <p className="text-xs text-amber-400">
+                    La edición figura con {total} tomo{total === 1 ? "" : "s"}.
+                    ¿Es correcto el tomo #{v}?
+                  </p>
+                );
+              })()}
             </div>
           </div>
         ))}

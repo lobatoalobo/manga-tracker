@@ -36,12 +36,17 @@ export default function NavBar({
   signOut: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLDivElement>(null);
   const close = () => setOpen(false);
+  const closeNav = () => setNavOpen(false);
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (navRef.current && !navRef.current.contains(e.target as Node))
+        setNavOpen(false);
     }
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
@@ -77,22 +82,47 @@ export default function NavBar({
 
   return (
     <nav className="sticky top-0 z-30 border-b border-border bg-surface/80 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-2 px-5 py-3.5">
+      <div className="mx-auto flex max-w-6xl items-center gap-x-5 px-5 py-3.5">
         <Link href="/" onClick={close} className="shrink-0 font-bold">
           📚 <span className="hidden sm:inline">Nakama</span>
         </Link>
 
-        {primary.map((l) => (
-          <Link
-            key={l.href}
-            href={l.href}
-            className="text-sm text-muted transition hover:text-foreground"
-          >
-            {l.label}
-          </Link>
-        ))}
+        {/* Links de descubrimiento: inline en desktop. */}
+        <div className="hidden items-center gap-x-5 md:flex">
+          {primary.map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className="text-sm text-muted transition hover:text-foreground"
+            >
+              {l.label}
+            </Link>
+          ))}
+        </div>
 
         <div className="ml-auto flex items-center gap-3">
+          {/* Hamburguesa: links de descubrimiento en mobile. */}
+          <div className="relative md:hidden" ref={navRef}>
+            <button
+              type="button"
+              onClick={() => setNavOpen((o) => !o)}
+              aria-expanded={navOpen}
+              aria-label="Menú"
+              className="rounded-lg px-2 py-1 text-lg leading-none text-muted transition hover:bg-surface-2 hover:text-foreground"
+            >
+              ☰
+            </button>
+            {navOpen && (
+              <div className="absolute left-0 z-40 mt-2 w-44 rounded-xl border border-border bg-surface p-1.5 shadow-lg">
+                {primary.map((l) => (
+                  <MenuItem key={l.href} href={l.href} onClick={closeNav}>
+                    {l.label}
+                  </MenuItem>
+                ))}
+              </div>
+            )}
+          </div>
+
           {loggedIn ? (
             <>
               <Link

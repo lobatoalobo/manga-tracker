@@ -22,6 +22,27 @@ export const PUBLISHERS = [
 export const CATALOG_PUBLISHERS = ["Ivrea Argentina"] as const;
 
 /**
+ * Editoriales EXTRANJERAS que el catálogo muestra en la sección Internacional
+ * (separada del catálogo nacional). MVP: VIZ Media (inglés). Ver docs/plan-viz-en.md.
+ */
+export const INTL_PUBLISHERS = ["VIZ Media"] as const;
+
+/** Filtro Prisma: obras con alguna edición internacional (VIZ). */
+export function intlCatalogWhere(): import("@prisma/client").Prisma.WorkWhereInput {
+  return { editions: { some: { publisher: { in: [...INTL_PUBLISHERS] } } } };
+}
+
+/**
+ * Editoriales que el catálogo VISIBLE muestra: nacionales activas (Ivrea) +
+ * internacionales (VIZ). El catálogo es uno solo; las banderas distinguen el
+ * origen de cada obra dentro de la lista combinada (A-Z).
+ */
+export const VISIBLE_PUBLISHERS = [
+  ...CATALOG_PUBLISHERS,
+  ...INTL_PUBLISHERS,
+] as const;
+
+/**
  * Filtro Prisma: una obra entra al catálogo visible si tiene una edición de una
  * editorial activa (CATALOG_PUBLISHERS) o es un debut próximo (upcoming, sin
  * edición aún). Fuente única para browse/búsqueda/autores/sitemap.
@@ -29,11 +50,12 @@ export const CATALOG_PUBLISHERS = ["Ivrea Argentina"] as const;
 export function inCatalogWhere(): import("@prisma/client").Prisma.WorkWhereInput {
   return {
     OR: [
-      // Tiene edición de una editorial activa (Ivrea).
-      { editions: { some: { publisher: { in: [...CATALOG_PUBLISHERS] } } } },
+      // Tiene una edición visible (Ivrea/VIZ). NO exigimos volumes>0: una serie
+      // real puede tener 0 tomos por un gap de conteo (Whakoom) o por ser
+      // reciente — mejor mostrarla que hacerla desaparecer. (El conteo lo arregla
+      // el crawl; el caso novela/artbook se resuelve con Work.type, no ocultando.)
+      { editions: { some: { publisher: { in: [...VISIBLE_PUBLISHERS] } } } },
       // O es un debut GENUINO: próximo a salir y sin NINGUNA edición todavía.
-      // (Una obra con edición de otra editorial —ej. Kemuri— NO entra aunque
-      // tenga el flag upcoming por un match dudoso del reconcile.)
       { upcoming: true, editions: { none: {} } },
     ],
   };
@@ -237,7 +259,13 @@ export async function upsertPublisherEdition(e: {
   volumes: number;
   status?: string | null;
   url: string;
+  language?: string; // "es" (default) | "en" | "ja"
+  country?: string | null; // "AR" | "US" | …
 }): Promise<void> {
+  const intl =
+    e.language || e.country !== undefined
+      ? { language: e.language ?? "es", country: e.country ?? null }
+      : {};
   await prisma.publisherEdition.upsert({
     where: { publisher_slug: { publisher: e.publisher, slug: e.slug } },
     update: {
@@ -246,6 +274,7 @@ export async function upsertPublisherEdition(e: {
       volumes: e.volumes,
       status: e.status ?? null,
       url: e.url,
+      ...intl,
     },
     create: {
       publisher: e.publisher,
@@ -255,6 +284,7 @@ export async function upsertPublisherEdition(e: {
       volumes: e.volumes,
       status: e.status ?? null,
       url: e.url,
+      ...intl,
     },
   });
 }
@@ -374,15 +404,32 @@ export async function getLocalAuthors(): Promise<{ name: string; count: number }
 }
 
 /** Obras de un autor (match por substring en `Work.author`). */
-export async function getWorksByAuthor(
-  name: string,
-): Promise<{ id: number; title: string; coverImage: string | null }[]> {
+export interface AuthorWork {
+  id: number;
+  title: string;
+  coverImage: string | null;
+  national: boolean;
+  intl: boolean;
+  publishers: string[];
+}
+
+export async function getWorksByAuthor(name: string): Promise<AuthorWork[]> {
   const works = await prisma.work.findMany({
     where: { author: { contains: name, mode: "insensitive" }, ...inCatalogWhere() },
     orderBy: { normTitle: "asc" },
-    select: { id: true, title: true, coverImage: true },
+    select: {
+      id: true,
+      title: true,
+      coverImage: true,
+      upcoming: true,
+      editions: { select: { publisher: true, volumes: true } },
+    },
   });
-  return works;
+  // Mismas banderas que el catálogo (helper único, no hardcodear Ivrea).
+  return works.map((w) => {
+    const { national, intl, publishers } = workCardFlags(w.editions, w.upcoming);
+    return { id: w.id, title: w.title, coverImage: w.coverImage, national, intl, publishers };
+  });
 }
 
 /**
@@ -416,20 +463,162 @@ export async function searchWorksLite(
   return works.map((w) => ({ id: -w.id, title: w.title, coverImage: w.coverImage }));
 }
 
+/** Etiqueta corta de editorial para el picker ("Ivrea Argentina" → "Ivrea"). */
+export const PUBLISHER_SHORT: Record<string, string> = {
+  "Ivrea Argentina": "Ivrea",
+  "VIZ Media": "VIZ",
+};
+export function publisherShort(p: string): string {
+  return PUBLISHER_SHORT[p] ?? p;
+}
+
+/** Key estable de edición por editorial (coherente con colección/compras/ficha). */
+export const PUBLISHER_KEY: Record<string, string> = {
+  "Ivrea Argentina": "ivrea",
+  "Panini Argentina": "panini",
+  "Ovni Press": "ovni",
+  "Kemuri Ediciones": "kemuri",
+  "Utopía Editorial": "utopia",
+  "Larp Editores": "larp",
+  "Distrito Manga": "distrito",
+  "Planeta Cómic": "planeta",
+  "VIZ Media": "viz",
+};
+export function publisherKey(p: string): string {
+  return PUBLISHER_KEY[p] ?? "ar";
+}
+/** Región de la edición por editorial (VIZ = internacional). */
+export function publisherRegionOf(p: string): string {
+  return /viz/i.test(p) ? "INT" : "AR";
+}
+
+export interface PurchaseEditionResult {
+  id: number; // -workId
+  title: string;
+  coverImage: string | null;
+  publisher: string | null; // editorial de ESTA entrada (null = obra sin edición)
+  label: string; // "Título — Editorial"
+  intl: boolean; // edición internacional (VIZ)
+  volumes: number; // tomos conocidos de la edición (para validar el # de tomo)
+}
+
+/**
+ * Búsqueda para el form de compras: devuelve una entrada POR EDICIÓN visible
+ * (Ivrea, VIZ), de modo que al elegir "Chainsaw Man — VIZ" ya sabemos serie +
+ * editorial + a qué colección sumarlo (sin dropdown de editorial aparte).
+ */
+export async function searchPurchaseEditions(
+  q: string,
+  limit = 8,
+): Promise<PurchaseEditionResult[]> {
+  const term = q.trim();
+  if (term.length < 2) return [];
+  const works = await prisma.work.findMany({
+    where: {
+      AND: [
+        {
+          OR: [
+            { title: { contains: term, mode: "insensitive" } },
+            { normTitle: { contains: normalizeTitle(term) } },
+            { originalTitle: { contains: term, mode: "insensitive" } },
+          ],
+        },
+        inCatalogWhere(),
+      ],
+    },
+    orderBy: { normTitle: "asc" },
+    take: limit,
+    select: {
+      id: true,
+      title: true,
+      coverImage: true,
+      editions: { select: { publisher: true, volumes: true } },
+    },
+  });
+
+  const out: PurchaseEditionResult[] = [];
+  for (const w of works) {
+    // Tomos por editorial (la de más tomos si hubiera varias del mismo publisher).
+    const volsByPub = new Map<string, number>();
+    for (const e of w.editions) {
+      if (!(VISIBLE_PUBLISHERS as readonly string[]).includes(e.publisher)) continue;
+      volsByPub.set(e.publisher, Math.max(volsByPub.get(e.publisher) ?? 0, e.volumes));
+    }
+    const pubs = [...volsByPub.keys()];
+    if (pubs.length === 0) {
+      // Debut sin edición cargada: una sola entrada sin editorial.
+      out.push({
+        id: -w.id,
+        title: w.title,
+        coverImage: w.coverImage,
+        publisher: null,
+        label: w.title,
+        intl: false,
+        volumes: 0,
+      });
+      continue;
+    }
+    for (const p of pubs) {
+      out.push({
+        id: -w.id,
+        title: w.title,
+        coverImage: w.coverImage,
+        publisher: p,
+        label: `${w.title} — ${publisherShort(p)}`,
+        intl: INTL_SET.has(p),
+        volumes: volsByPub.get(p) ?? 0,
+      });
+    }
+  }
+  return out.slice(0, limit + 4);
+}
+
 export interface WorkCard {
   id: number;
   title: string;
   coverImage: string | null;
   publishers: string[];
   national: boolean; // tiene alguna edición de editorial argentina
+  intl: boolean; // sección Internacional (edición VIZ/extranjera)
   upcoming: boolean;
   releaseLabel: string | null;
   genres: string[];
   demographic: string | null;
-  next: { volume: number | null; date: Date } | null;
+  next: { volume: number | null; date: Date } | null; // próximo tomo NUEVO
+  reissue: { volume: number | null; date: Date } | null; // próxima reedición
 }
 
 const AR_PUBLISHERS = new Set<string>(PUBLISHERS);
+const INTL_SET = new Set<string>(INTL_PUBLISHERS);
+
+/**
+ * Banderas y editoriales visibles de una obra. ÚNICA fuente de verdad para las
+ * cards (catálogo, autor, etc.) → no se desincronizan.
+ * - `national` = tiene edición Ivrea (la AR visible) o es un debut GENUINO
+ *   (anunciado y SIN ninguna edición). NO se marca nacional por el flag
+ *   `upcoming` si ya tiene otra edición (ej. una obra solo-VIZ no es AR).
+ * - `intl` = tiene edición VIZ.
+ * - `isUpcoming` = badge "próximo a salir" (anunciado y sin tomos publicados).
+ */
+export function workCardFlags(
+  editions: { publisher: string; volumes: number }[],
+  upcoming: boolean,
+): { national: boolean; intl: boolean; isUpcoming: boolean; publishers: string[] } {
+  const genuineDebut = upcoming && editions.length === 0;
+  const isUpcoming = upcoming && !editions.some((e) => e.volumes > 0);
+  const national =
+    genuineDebut ||
+    editions.some((e) => (CATALOG_PUBLISHERS as readonly string[]).includes(e.publisher));
+  const intl = editions.some((e) => INTL_SET.has(e.publisher));
+  const publishers = [
+    ...new Set(
+      editions
+        .filter((e) => (VISIBLE_PUBLISHERS as readonly string[]).includes(e.publisher))
+        .map((e) => e.publisher),
+    ),
+  ];
+  return { national, intl, isUpcoming, publishers };
+}
 
 /**
  * Browse/búsqueda del catálogo LOCAL (`Work`), sin AniList. `tab`:
@@ -465,14 +654,22 @@ export async function browseWorks(opts: {
   const conds: WorkWhere[] = [inCatalogWhere()];
   if (qFilter) conds.push(qFilter);
 
+  // A-Z combina nacional + internacional. Las pestañas series/tomos son del
+  // catálogo nacional (debuts y releases de Ivrea): naturalmente solo traen
+  // obras nacionales (las VIZ no tienen debut/release de Ivrea).
   if (opts.tab === "series") {
     // Próximas SERIES: debuts GENUINOS (upcoming + sin ninguna edición). Si ya
     // tiene una edición (de Ivrea o de otra editorial), no es un debut próximo.
     conds.push({ upcoming: true, editions: { none: {} } });
   } else if (opts.tab === "tomos") {
-    // Próximos TOMOS: obras con una salida futura (vía edición→work).
+    // Próximos TOMOS: obras con un tomo nuevo o reedición futura (vía edición→
+    // work). NO incluye debuts/oneshots (esos son "series nuevas", otro tab/chip).
     const rel = await prisma.ivreaRelease.findMany({
-      where: { editionId: { not: null }, kind: { not: "reissue" }, releaseDate: { gte: today } },
+      where: {
+        editionId: { not: null },
+        kind: { in: ["volume", "reissue"] },
+        releaseDate: { gte: today },
+      },
       select: { editionId: true },
     });
     const edIds = [...new Set(rel.map((r) => r.editionId as number))];
@@ -508,50 +705,64 @@ export async function browseWorks(opts: {
     prisma.work.count({ where }),
   ]);
 
-  // Próximo tomo por work (para el badge en la card).
+  // Próxima salida por work (badge de la card). Incluye reediciones, con su
+  // `kind`. Si una serie tiene tomo NUEVO y reedición en camino, prioriza el
+  // tomo nuevo (más relevante); si solo hay reediciones, muestra la más cercana.
   const allEdIds = works.flatMap((w) => w.editions.map((e) => e.id));
   const rel = allEdIds.length
     ? await prisma.ivreaRelease.findMany({
-        where: { editionId: { in: allEdIds }, kind: { not: "reissue" }, releaseDate: { gte: today } },
+        where: {
+          editionId: { in: allEdIds },
+          kind: { in: ["volume", "reissue"] }, // NO debut/oneshot (son "nueva serie")
+          releaseDate: { gte: today },
+        },
         orderBy: { releaseDate: "asc" },
-        select: { editionId: true, volume: true, releaseDate: true },
+        select: { editionId: true, volume: true, releaseDate: true, kind: true },
       })
     : [];
-  const nextByEd = new Map<number, { volume: number | null; date: Date }>();
+  type Rel = { volume: number | null; date: Date; kind: "new" | "reissue" };
+  const relByEd = new Map<number, Rel[]>();
   for (const r of rel)
-    if (r.editionId != null && r.releaseDate && !nextByEd.has(r.editionId))
-      nextByEd.set(r.editionId, { volume: r.volume, date: r.releaseDate });
+    if (r.editionId != null && r.releaseDate) {
+      const arr = relByEd.get(r.editionId) ?? [];
+      arr.push({
+        volume: r.volume,
+        date: r.releaseDate,
+        kind: r.kind === "reissue" ? "reissue" : "new",
+      });
+      relByEd.set(r.editionId, arr);
+    }
 
   const items = works.map((w) => {
-    let next: { volume: number | null; date: Date } | null = null;
+    const all: Rel[] = [];
     for (const e of w.editions) {
-      const n = nextByEd.get(e.id);
-      if (n && (!next || n.date < next.date)) next = n;
+      const a = relByEd.get(e.id);
+      if (a) all.push(...a);
     }
-    // Guard: una obra con edición publicada (volumes>0) NO es "próximo a salir",
-    // aunque el flag `upcoming` haya quedado viejo (se setea entre crawls).
-    const isUpcoming = w.upcoming && !w.editions.some((e) => e.volumes > 0);
+    all.sort((a, b) => a.date.getTime() - b.date.getTime());
+    // Separados: tomo nuevo y reedición (la card muestra AMBOS chips si los hay).
+    const newRel = all.find((x) => x.kind === "new") ?? null;
+    const reissueRel = all.find((x) => x.kind === "reissue") ?? null;
+    const next: { volume: number | null; date: Date } | null = newRel
+      ? { volume: newRel.volume, date: newRel.date }
+      : null;
+    const reissue: { volume: number | null; date: Date } | null = reissueRel
+      ? { volume: reissueRel.volume, date: reissueRel.date }
+      : null;
+    const flags = workCardFlags(w.editions, w.upcoming);
     return {
       id: w.id,
       title: w.title,
       coverImage: w.coverImage,
-      publishers: [
-        ...new Set(
-          w.editions
-            .filter((e) =>
-              (CATALOG_PUBLISHERS as readonly string[]).includes(e.publisher),
-            )
-            .map((e) => e.publisher),
-        ),
-      ],
-      // Nacional = edición de editorial AR, o un debut/próxima de Ivrea (que aún
-      // no tiene edición cargada pero es nacional).
-      national: isUpcoming || w.editions.some((e) => AR_PUBLISHERS.has(e.publisher)),
-      upcoming: isUpcoming,
+      publishers: flags.publishers,
+      national: flags.national,
+      intl: flags.intl,
+      upcoming: flags.isUpcoming,
       releaseLabel: w.releaseLabel,
       genres: w.genres,
       demographic: w.demographic,
       next,
+      reissue,
     };
   });
   return { items, total };
@@ -566,7 +777,7 @@ export async function nextIvreaRelease(
 ): Promise<{ volume: number | null; date: Date } | null> {
   const today = new Date(new Date().toISOString().slice(0, 10));
   const r = await prisma.ivreaRelease.findFirst({
-    where: { anilistId, kind: { not: "reissue" }, releaseDate: { gte: today } },
+    where: { anilistId, kind: "volume", releaseDate: { gte: today } },
     orderBy: { releaseDate: "asc" },
     select: { volume: true, releaseDate: true },
   });

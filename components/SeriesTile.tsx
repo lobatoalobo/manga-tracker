@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import ArgentinaFlag from "@/components/ArgentinaFlag";
+import UsaFlag from "@/components/UsaFlag";
 import { formatProximaDate, formatReleaseLabel } from "@/lib/releaseDate";
 
 export interface SeriesTileData {
@@ -8,8 +9,10 @@ export interface SeriesTileData {
   title: string;
   coverImage: string | null;
   national?: boolean;
+  intl?: boolean; // edición internacional (VIZ): bandera US
   publishers?: string[]; // si se pasa, se muestra la línea de editorial
   next?: { volume: number | null; date: string | Date } | null;
+  reissue?: { volume: number | null; date: string | Date } | null;
   upcoming?: boolean;
   releaseLabel?: string | null;
 }
@@ -57,9 +60,12 @@ export default function SeriesTile({
               {data.title}
             </div>
           )}
-          {data.national && (
-            <span className="absolute left-1 top-1 flex items-center rounded bg-black/60 px-1 py-0.5">
-              <ArgentinaFlag className="h-2.5 w-4 rounded-[1px]" />
+          {(data.national || data.intl) && (
+            <span className="absolute left-1 top-1 flex items-center gap-1 rounded bg-black/60 px-1 py-0.5">
+              {data.national && (
+                <ArgentinaFlag className="h-2.5 w-4 rounded-[1px]" />
+              )}
+              {data.intl && <UsaFlag className="h-2.5 w-4 rounded-[1px]" />}
             </span>
           )}
           {owned && (
@@ -67,16 +73,27 @@ export default function SeriesTile({
               ✓
             </span>
           )}
-          {data.next ? (
-            <span className="absolute bottom-1 left-1 right-1 rounded bg-emerald-600/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
-              📅 {data.next.volume ? `#${data.next.volume} · ` : ""}
-              {formatProximaDate(new Date(data.next.date))}
-            </span>
-          ) : data.upcoming && !owned ? (
-            <span className="absolute bottom-1 left-1 right-1 rounded bg-amber-500/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
-              🔜 {formatReleaseLabel(data.releaseLabel ?? null) ?? "Próximo a salir"}
-            </span>
-          ) : null}
+          {(data.next || data.reissue || (data.upcoming && !owned)) && (
+            <div className="absolute bottom-1 left-1 right-1 flex flex-col gap-0.5">
+              {data.next && (
+                <span className="rounded bg-emerald-600/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+                  📅 {data.next.volume ? `#${data.next.volume} · ` : ""}
+                  {formatProximaDate(new Date(data.next.date))}
+                </span>
+              )}
+              {data.reissue && (
+                <span className="rounded bg-violet-600/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+                  ♻️ {data.reissue.volume ? `#${data.reissue.volume} · ` : ""}
+                  {formatProximaDate(new Date(data.reissue.date))}
+                </span>
+              )}
+              {!data.next && !data.reissue && data.upcoming && !owned && (
+                <span className="rounded bg-amber-500/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+                  🔜 {formatReleaseLabel(data.releaseLabel ?? null) ?? "Próximo a salir"}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <p className="mt-1.5 line-clamp-2 text-sm font-medium">{data.title}</p>
         {data.publishers !== undefined && (

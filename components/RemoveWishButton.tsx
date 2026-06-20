@@ -4,7 +4,13 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { removeWishAction } from "@/app/actions";
 
-export default function RemoveWishButton({ anilistId }: { anilistId: number }) {
+export default function RemoveWishButton({
+  anilistId,
+  editionKey = "",
+}: {
+  anilistId: number;
+  editionKey?: string;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -12,7 +18,7 @@ export default function RemoveWishButton({ anilistId }: { anilistId: number }) {
     e.preventDefault();
     e.stopPropagation();
     startTransition(async () => {
-      await removeWishAction(anilistId);
+      await removeWishAction(anilistId, editionKey);
       router.refresh();
     });
   }

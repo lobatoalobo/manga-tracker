@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getMangaById, searchMangaList } from "@/lib/anilist";
 import { nationalCoversByAnilist, upcomingForIds } from "@/lib/catalog";
+import { isPlausibleVolume } from "@/lib/volumes";
 import type { TrackedEdition, OwnedVolume } from "@prisma/client";
 
 type EditionRow = TrackedEdition & { ownedVolumes: OwnedVolume[] };
@@ -544,7 +545,43 @@ const PURCHASE_PUBLISHER_KEY: Record<string, string> = {
   "Larp Editores": "larp",
   "Distrito Manga": "distrito",
   "Planeta Cómic": "planeta",
+  "VIZ Media": "viz",
 };
+
+/** Región de la edición según la editorial (VIZ = internacional). */
+function publisherRegion(publisher: string | null | undefined): "AR" | "INT" {
+  return publisher && /viz/i.test(publisher) ? "INT" : "AR";
+}
+
+type PubRow = { publisher: string; slug: string | null; volumes: number };
+
+/** Ediciones (PublisherEdition) de la obra, ordenadas por conteo. */
+async function purchaseEditionRows(anilistId: number): Promise<PubRow[]> {
+  return prisma.publisherEdition.findMany({
+    where: anilistId < 0 ? { workId: -anilistId } : { anilistId },
+    orderBy: { volumes: "desc" },
+    select: { publisher: true, slug: true, volumes: true },
+  });
+}
+
+/** Elige la edición que coincide con la editorial de la compra (o la de más tomos). */
+function chooseRow(rows: PubRow[], edition?: string | null): PubRow | null {
+  let row = rows[0] ?? null;
+  if (edition && rows.length > 1) {
+    const want = edition.toLowerCase();
+    const match = rows.find((r) =>
+      r.publisher.toLowerCase().split(" ").some((w) => w.length > 2 && want.includes(w)),
+    );
+    if (match) row = match;
+  }
+  return row;
+}
+
+/** Key de TrackedEdition para un tomo comprado (coherente con la ficha). */
+function purchaseKey(row: PubRow | null, edition?: string | null): string {
+  if (row) return PURCHASE_PUBLISHER_KEY[row.publisher] ?? "ar";
+  return publisherRegion(edition) === "INT" ? "viz" : "ar";
+}
 
 /**
  * Suma un tomo comprado a la colección. Resuelve la edición nacional desde el
@@ -563,44 +600,36 @@ export async function addPurchaseItemToCollection(
 ): Promise<void> {
   if (!item.anilistId) return;
 
-  // Obra local: id negativo = -workId → buscamos sus ediciones por workId.
-  const rows = await prisma.publisherEdition.findMany({
-    where:
-      item.anilistId < 0
-        ? { workId: -item.anilistId }
-        : { anilistId: item.anilistId },
-    orderBy: { volumes: "desc" },
-  });
+  // Obra local: id negativo = -workId → buscamos sus ediciones por workId, y
+  // preferimos la que coincide con la editorial de la compra (si no, la de más
+  // tomos).
+  const rows = await purchaseEditionRows(item.anilistId);
+  const row = chooseRow(rows, item.edition);
 
-  // Si la compra dice la editorial, preferimos esa edición; si no, la de más tomos.
-  let row = rows[0] ?? null;
-  if (item.edition && rows.length > 1) {
-    const want = item.edition.toLowerCase();
-    const match = rows.find((r) =>
-      r.publisher.toLowerCase().split(" ").some((w) => w.length > 2 && want.includes(w)),
-    );
-    if (match) row = match;
-  }
-
-  // El tomo comprado puede superar el conteo cacheado de la edición (catálogo
-  // desactualizado); en ese caso ampliamos el total para que el tomo se vea.
+  // El tomo comprado puede superar el conteo cacheado (catálogo algo
+  // desactualizado) y en ese caso ampliamos el total. PERO con un tope: un tomo
+  // muy por encima del conocido es un error de carga (ej. tomo 500 de una serie
+  // de 10) y NO debe inflar la colección.
   const vol = item.volume ?? 0;
+  const known = row?.volumes ?? 0;
+  const plausible = isPlausibleVolume(known, vol); // typo (ej. #500 de 10) → no expande
+  const total = plausible ? Math.max(known, vol) : known;
   const edition = row
     ? {
-        key: PURCHASE_PUBLISHER_KEY[row.publisher] ?? "ar",
+        key: purchaseKey(row, item.edition),
         label: row.publisher,
         publisher: row.publisher,
         slug: row.slug,
-        region: "AR",
-        totalVolumes: Math.max(row.volumes, vol),
+        region: publisherRegion(row.publisher),
+        totalVolumes: total,
       }
     : {
-        key: "ar",
+        key: purchaseKey(null, item.edition),
         label: item.edition || "Edición nacional",
         publisher: item.edition || null,
         slug: null,
-        region: "AR",
-        totalVolumes: vol,
+        region: publisherRegion(item.edition),
+        totalVolumes: plausible ? vol : 0,
       };
 
   await addEdition(userId, {
@@ -610,7 +639,8 @@ export async function addPurchaseItemToCollection(
     edition,
   });
 
-  if (!item.volume) return;
+  // Tomo implausible (typo) → agregamos la edición pero NO el tomo dueño.
+  if (!item.volume || !plausible) return;
 
   const manga = await prisma.manga.findUnique({
     where: { userId_anilistId: { userId, anilistId: item.anilistId } },
@@ -626,6 +656,66 @@ export async function addPurchaseItemToCollection(
   await prisma.ownedVolume
     .create({ data: { editionId: ed.id, volume: item.volume } })
     .catch(() => {}); // @@unique: ya lo tenía
+
+  const ownedCount = await prisma.ownedVolume.count({
+    where: { editionId: ed.id },
+  });
+  await prisma.trackedEdition.update({
+    where: { id: ed.id },
+    data: {
+      status:
+        ed.totalVolumes > 0 && ownedCount >= ed.totalVolumes
+          ? "COMPLETED"
+          : "IN_PROGRESS",
+    },
+  });
+}
+
+/**
+ * Quita de la colección el tomo de una compra (al borrar/editar la compra).
+ * Inverso de `addPurchaseItemToCollection`. Guard: si OTRA compra no cancelada
+ * todavía cubre ese tomo de esa misma edición, no lo quita (evita borrar de más
+ * cuando se compró el mismo tomo dos veces). Llamar DESPUÉS de borrar/actualizar
+ * la compra en cuestión (así sus ítems ya no cuentan en el guard).
+ */
+export async function removePurchaseItemFromCollection(
+  userId: string,
+  item: { anilistId: number | null; edition?: string | null; volume?: number | null },
+): Promise<void> {
+  if (!item.anilistId || !item.volume) return;
+
+  const rows = await purchaseEditionRows(item.anilistId);
+  const key = purchaseKey(chooseRow(rows, item.edition), item.edition);
+
+  // ¿Queda otra compra (no cancelada) que cubra este tomo de esta edición?
+  const others = await prisma.purchaseItem.findMany({
+    where: {
+      purchase: { userId },
+      anilistId: item.anilistId,
+      volume: item.volume,
+      status: { not: "CANCELLED" },
+    },
+    select: { edition: true },
+  });
+  const stillCovered = others.some(
+    (o) => purchaseKey(chooseRow(rows, o.edition), o.edition) === key,
+  );
+  if (stillCovered) return;
+
+  const manga = await prisma.manga.findUnique({
+    where: { userId_anilistId: { userId, anilistId: item.anilistId } },
+    select: { id: true },
+  });
+  if (!manga) return;
+  const ed = await prisma.trackedEdition.findUnique({
+    where: { mangaId_key: { mangaId: manga.id, key } },
+    select: { id: true, totalVolumes: true },
+  });
+  if (!ed) return;
+
+  await prisma.ownedVolume.deleteMany({
+    where: { editionId: ed.id, volume: item.volume },
+  });
 
   const ownedCount = await prisma.ownedVolume.count({
     where: { editionId: ed.id },

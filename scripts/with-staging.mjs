@@ -28,7 +28,8 @@ function loadEnv() {
   return out;
 }
 
-const staging = loadEnv().STAGING_DATABASE_URL;
+const fileEnv = loadEnv();
+const staging = fileEnv.STAGING_DATABASE_URL;
 if (!staging) {
   console.error("Falta STAGING_DATABASE_URL en .env");
   process.exit(1);
@@ -41,9 +42,10 @@ if (args.length === 0) {
 }
 
 console.log("→ Ejecutando contra STAGING:", args.join(" "));
+// Carga todo el .env (p. ej. GOOGLE_BOOKS_API_KEY) + override de DATABASE_URL.
 const res = spawnSync(args[0], args.slice(1), {
   stdio: "inherit",
   shell: true,
-  env: { ...process.env, DATABASE_URL: staging },
+  env: { ...process.env, ...fileEnv, DATABASE_URL: staging },
 });
 process.exit(res.status ?? 1);

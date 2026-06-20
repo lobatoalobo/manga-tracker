@@ -1,10 +1,3 @@
-import * as cheerio from "cheerio";
-import { getIvreaDataBySlug } from "../lib/providers/ivrea";
-import {
-  upsertPublisherEdition,
-  findOrCreateWork,
-  normalizeTitle,
-} from "../lib/catalog";
 import { seedMangakaIndex } from "../lib/mangakas";
 import { resolveEditionSeries } from "../lib/resolveSeries";
 import {
@@ -12,7 +5,15 @@ import {
   enumeratePublisherEditions,
 } from "../lib/whakoomImport";
 import { logJobRun, groupSkipReasons } from "../lib/jobs";
-import { getRejected } from "../lib/rejectedSources";
+import {
+  importVizSeries,
+  VIZ_SEED,
+  discoverVizFromGoogleBooks,
+  backfillMangadexCovers,
+  fillMissingVizCovers,
+} from "../lib/vizImport";
+import { backfillCoversToBlob } from "../lib/coverStore";
+import { crawlIvreaCatalog } from "../lib/ivreaCatalog";
 import {
   detectAndNotifyNewVolumes,
   detectAndNotifyWishlistAvailable,
@@ -37,127 +38,37 @@ function publisherFromAllUrl(url: string): string | null {
   return null;
 }
 
-const UA = { "User-Agent": "Mozilla/5.0" };
-
-// --- helpers ---------------------------------------------------------------
-
-async function pool<T>(items: T[], limit: number, fn: (item: T, i: number) => Promise<void>) {
-  let i = 0;
-  async function worker() {
-    while (i < items.length) {
-      const idx = i++;
-      try {
-        await fn(items[idx], idx);
-      } catch {
-        /* seguimos */
-      }
-    }
-  }
-  await Promise.all(Array.from({ length: limit }, worker));
-}
-
-function humanize(slug: string): string {
-  return slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-// --- Ivrea: /catalogo/ (500 títulos) -> ficha de cada uno -------------------
+// --- Ivrea: /catalogo/ (lib/ivreaCatalog) ----------------------------------
 
 async function crawlIvrea() {
   console.log("\n=== Ivrea ===");
-  // El fetch del catálogo va con retry: desde CI a veces falla la red/IP y un
-  // throw acá tira todo el crawl (exit 1).
-  let html = "";
-  for (let a = 0; a < 3 && !html; a++) {
-    try {
-      const r = await fetch("https://www.ivrea.com.ar/catalogo/", { headers: UA });
-      if (r.ok) html = await r.text();
-    } catch {
-      /* reintenta */
+  const r = await crawlIvreaCatalog();
+  console.log(`  Ivrea: ${r.saved}/${r.catalog} ediciones indexadas.`);
+}
+
+/**
+ * Catálogo VIZ (inglés): procesa el seed (lib/vizImport.VIZ_SEED) creando/
+ * asociando Works + ediciones VIZ (en/US). MU/MD no bloquean datacenter, así
+ * que puede correr en Vercel. Ver docs/plan-viz-en.md.
+ */
+async function crawlViz(extra: string[] = []) {
+  console.log("\n=== Catálogo VIZ (inglés) ===");
+  const titles: (string | string[])[] = [...VIZ_SEED, ...extra];
+  let ok = 0;
+  const skipped: string[] = [];
+  for (const t of titles) {
+    const label = Array.isArray(t) ? t[0] : t;
+    const r = await importVizSeries(t);
+    if (r.ok) {
+      ok++;
+      console.log(`  ✓ ${r.title} (${r.volumes} tomos)`);
+    } else {
+      skipped.push(`${label} — ${r.reason}`);
     }
-    if (!html) await new Promise((res) => setTimeout(res, 2000));
+    await sleep(800); // respeta el rate-limit de MU/MD
   }
-  if (!html) {
-    console.error("  No se pudo bajar el catálogo de Ivrea (red). Abortando Ivrea.");
-    return;
-  }
-  const $ = cheerio.load(html);
-
-  const titles = new Map<string, string>(); // slug -> title
-  $("a[href*='/titulo/']").each((_, el) => {
-    const href = $(el).attr("href") || "";
-    const m = href.match(/\/titulo\/([^/]+)\//);
-    if (m) {
-      const text = $(el).text().trim().replace(/\s+/g, " ");
-      if (!titles.has(m[1]) || text) titles.set(m[1], text || humanize(m[1]));
-    }
-  });
-
-  // Slugs descartados a mano: no re-importarlos.
-  const rejected = await getRejected("ivrea");
-  const entries = [...titles.entries()].filter(([slug]) => !rejected.has(slug));
-  console.log(
-    `  ${entries.length} títulos en el catálogo${rejected.size ? ` (${rejected.size} descartados saltados)` : ""}. Trayendo fichas…`,
-  );
-
-  let done = 0;
-  let saved = 0;
-  await pool(entries, 6, async ([slug, title]) => {
-    const d = await getIvreaDataBySlug(slug);
-    done++;
-    if (d && d.argentinaVolumes > 0) {
-      const t = d.title || title;
-      const norm = normalizeTitle(t);
-      // Anti-duplicado: si Ivrea cambió el slug de la URL, ya existe una edición
-      // con el mismo título normalizado pero otro slug → la actualizamos (slug,
-      // url, tomos) en vez de crear una nueva (que dejaría un duplicado huérfano).
-      const dup = await prisma.publisherEdition.findFirst({
-        where: { publisher: "Ivrea Argentina", normTitle: norm, slug: { not: slug } },
-        select: { id: true },
-      });
-      if (dup) {
-        await prisma.publisherEdition
-          .update({
-            where: { id: dup.id },
-            data: {
-              title: t, normTitle: norm, slug, url: d.url,
-              volumes: d.argentinaVolumes, status: d.argentinaStatus,
-            },
-          })
-          .catch(() => {});
-      } else {
-        await upsertPublisherEdition({
-          publisher: "Ivrea Argentina",
-          slug,
-          title: t,
-          volumes: d.argentinaVolumes,
-          status: d.argentinaStatus,
-          url: d.url,
-        });
-      }
-      // Copiamos autor/sinopsis/portada de Ivrea al Work (somos dueños del dato,
-      // sin fetch en vivo). findOrCreateWork completa sin pisar lo editado a mano.
-      const row = await prisma.publisherEdition.findUnique({
-        where: { publisher_slug: { publisher: "Ivrea Argentina", slug } },
-        select: { id: true, workId: true },
-      });
-      if (row) {
-        const workId = await findOrCreateWork({
-          title: d.title || title,
-          coverImage: d.coverImage,
-          author: d.author,
-          synopsis: d.synopsis,
-          originalTitle: d.originalTitle,
-        }).catch(() => null);
-        if (workId && row.workId !== workId)
-          await prisma.publisherEdition
-            .update({ where: { id: row.id }, data: { workId } })
-            .catch(() => {});
-      }
-      saved++;
-    }
-    if (done % 50 === 0) console.log(`  ${done}/${entries.length} (guardados: ${saved})`);
-  });
-  console.log(`  Ivrea: ${saved} ediciones indexadas.`);
+  console.log(`\n  VIZ: ${ok} importadas · ${skipped.length} salteadas`);
+  if (skipped.length) console.log("  Salteadas:\n   " + skipped.join("\n   "));
 }
 
 async function crawlMangakas() {
@@ -331,9 +242,53 @@ async function main() {
     process.exit(1);
   }
 
-  const which = process.argv[2]; // ivrea|panini|ovni|mangakas|resolve|whakoom*
+  const which = process.argv[2]; // ivrea|mangakas|resolve|whakoom*|viz
   if (which === "whakoom-all") {
     await crawlWhakoomAll();
+    console.log("\nListo.");
+    return;
+  }
+  if (which === "viz") {
+    // viz [titulo extra…]  → procesa el seed + títulos sueltos opcionales
+    await crawlViz(process.argv.slice(3));
+    console.log("\nListo.");
+    return;
+  }
+  if (which === "viz-covers") {
+    // viz-covers  → reescribe al proxy las portadas de MangaDex ya guardadas
+    const n = await backfillMangadexCovers();
+    console.log(`\nPortadas de MangaDex reescritas al proxy: ${n}`);
+    return;
+  }
+  if (which === "viz-fillcovers") {
+    // viz-fillcovers [limit]  → rellena portadas faltantes de obras VIZ (MU/MD → Blob)
+    const limit = Number(process.argv[3]) || undefined;
+    const r = await fillMissingVizCovers(limit);
+    console.log(
+      `\nPortadas VIZ: ${r.filled} rellenadas · ${r.failed} sin fuente · de ${r.scanned}`,
+    );
+    return;
+  }
+  if (which === "covers-blob") {
+    // covers-blob [limit]  → migra portadas externas a Vercel Blob (storage propio)
+    const limit = Number(process.argv[3]) || undefined;
+    const r = await backfillCoversToBlob(limit);
+    console.log(
+      `\nPortadas a Blob: ${r.migrated} migradas · ${r.failed} fallidas · ${r.remaining} restantes`,
+    );
+    return;
+  }
+  if (which === "viz-discover") {
+    // viz-discover [limit]  → enumera VIZ con Google Books y los importa (MU confirma)
+    const limit = Number(process.argv[3]) || undefined;
+    console.log("\n=== Descubrir VIZ (Google Books) ===");
+    const r = await discoverVizFromGoogleBooks({ limit });
+    if (r.noKey) console.log("  Falta GOOGLE_BOOKS_API_KEY.");
+    else
+      console.log(
+        `  Google Books: ${r.source} títulos · ${r.candidates} nuevos · ` +
+          `${r.imported} importados · ${r.skipped} salteados`,
+      );
     console.log("\nListo.");
     return;
   }

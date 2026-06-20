@@ -13,6 +13,7 @@ import {
   setSharing,
   importEdition,
   addPurchaseItemToCollection,
+  removePurchaseItemFromCollection,
   type AddEditionInput,
   type ReadingStatus,
 } from "@/lib/collection";
@@ -37,7 +38,7 @@ import {
   upsertPublisherEdition,
   slugifyTitle,
   normalizeTitle,
-  searchWorksLite,
+  searchPurchaseEditions,
   EDITORIALS,
 } from "@/lib/catalog";
 import { ANILIST_OFF } from "@/lib/flags";
@@ -885,10 +886,19 @@ export async function updatePurchaseAction(
     return { ok: false as const, error: "No se encontró la compra." };
   }
 
-  // Sumar a colección solo los tomos nuevos linkeados (los existentes no se
-  // re-agregan para no pisar lo que el usuario haya tocado).
+  // Sincronizar la colección con los cambios de la compra:
+  // 1) Quitar la contribución de los tomos removidos o cuyo dato (serie/edición/
+  //    número) cambió. Corre siempre; el guard interno respeta tomos cubiertos
+  //    por otra compra.
+  for (const it of [...res.removed, ...res.changed.map((c) => c.before)]) {
+    if (it.anilistId && it.status !== "CANCELLED") {
+      await removePurchaseItemFromCollection(userId, it).catch(() => {});
+    }
+  }
+  // 2) Sumar los tomos nuevos y los cambiados (con su dato nuevo), si corresponde.
   if (input.addToCollection) {
-    for (const it of res.created) {
+    const toAdd = [...res.created, ...res.changed.map((c) => c.after)];
+    for (const it of toAdd) {
       if (it.anilistId && it.status !== "CANCELLED") {
         await addPurchaseItemToCollection(userId, {
           anilistId: it.anilistId,
@@ -899,9 +909,8 @@ export async function updatePurchaseAction(
         }).catch(() => {});
       }
     }
-    revalidatePath("/collection");
   }
-
+  revalidatePath("/collection");
   revalidatePath("/compras");
   return { ok: true as const };
 }
@@ -924,20 +933,32 @@ export async function searchPurchaseSeriesAction(query: string) {
   await requireUserId(); // solo desde el form de compras (logueado)
   const q = query.trim();
   if (q.length < 2) return [];
-  // Catálogo local: buscamos en nuestros Works (no AniList). Devuelve id
-  // negativo (-workId), coherente con colección/links a /serie.
-  if (ANILIST_OFF) return searchWorksLite(q, 8);
+  // Catálogo local: una entrada POR EDICIÓN (Ivrea / VIZ), así al elegir ya
+  // sabemos serie + editorial + colección. id negativo (-workId).
+  if (ANILIST_OFF) return searchPurchaseEditions(q, 8);
   const raw = await searchMangaList(q, true).catch(() => []);
   return raw.slice(0, 8).map((m: any) => ({
     id: m.id as number,
     title: (m.title?.english || m.title?.romaji || m.title?.native) as string,
     coverImage: (m.coverImage?.large ?? null) as string | null,
+    publisher: null as string | null,
+    label: (m.title?.english || m.title?.romaji || m.title?.native) as string,
+    intl: false,
+    volumes: (m.volumes ?? 0) as number,
   }));
 }
 
 export async function deletePurchaseAction(id: number) {
   const userId = await requireUserId();
-  await deletePurchase(userId, id);
+  const items = await deletePurchase(userId, id);
+  // Quita de la colección los tomos de esta compra (los cancelados nunca se
+  // sumaron). El guard interno respeta tomos cubiertos por otra compra.
+  for (const it of items) {
+    if (it.anilistId && it.status !== "CANCELLED") {
+      await removePurchaseItemFromCollection(userId, it).catch(() => {});
+    }
+  }
+  revalidatePath("/collection");
   revalidatePath("/compras");
 }
 
@@ -994,10 +1015,14 @@ export async function toggleWishAction(item: {
   title: string;
   coverImage: string;
   wished: boolean;
+  editionKey?: string;
+  publisher?: string | null;
+  region?: string | null;
 }) {
   const userId = await requireUserId();
+  const editionKey = item.editionKey ?? "";
   if (item.wished) {
-    await removeWish(userId, item.anilistId);
+    await removeWish(userId, item.anilistId, editionKey);
   } else {
     await addWish(userId, item);
   }
@@ -1005,9 +1030,9 @@ export async function toggleWishAction(item: {
   revalidatePath(seriesHref(item.anilistId));
 }
 
-export async function removeWishAction(anilistId: number) {
+export async function removeWishAction(anilistId: number, editionKey = "") {
   const userId = await requireUserId();
-  await removeWish(userId, anilistId);
+  await removeWish(userId, anilistId, editionKey);
   revalidatePath("/deseados");
   revalidatePath(seriesHref(anilistId));
 }

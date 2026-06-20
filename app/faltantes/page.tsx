@@ -3,6 +3,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { getShoppingList, getWishlistToBuy } from "@/lib/shopping";
 import { seriesHref } from "@/lib/url";
+import { formatProximaDate } from "@/lib/releaseDate";
 
 export const metadata = { title: "Para comprar · Nakama" };
 
@@ -105,6 +106,19 @@ export default async function FaltantesPage({
                       <span className="text-xs text-muted">…</span>
                     )}
                   </p>
+
+                  {i.reissues.length > 0 && (
+                    <p className="mt-1.5 text-sm">
+                      <span className="font-medium text-violet-300">
+                        ♻️ Se reeditan:{" "}
+                      </span>
+                      {i.reissues.map((r, idx) => (
+                        <span key={r.volume} className="text-xs text-violet-300">
+                          {idx > 0 && ", "}#{r.volume} ({formatProximaDate(new Date(r.date))})
+                        </span>
+                      ))}
+                    </p>
+                  )}
 
                   <div className="mt-2 flex flex-wrap gap-2">
                     <a

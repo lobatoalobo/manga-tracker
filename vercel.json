@@ -1,5 +1,7 @@
 {
   "crons": [
-    { "path": "/api/cron/ivrea-proximas", "schedule": "0 7 * * *" }
+    { "path": "/api/cron/ivrea-catalogo", "schedule": "0 5 * * *" },
+    { "path": "/api/cron/ivrea-proximas", "schedule": "0 7 * * *" },
+    { "path": "/api/cron/viz", "schedule": "0 8 * * 1" }
   ]
 }

@@ -33,8 +33,9 @@ export default async function AutorPage({
               href: `/serie/${w.id}`,
               title: w.title,
               coverImage: w.coverImage,
-              national: true,
-              publishers: ["Ivrea Argentina"],
+              national: w.national,
+              intl: w.intl,
+              publishers: w.publishers,
             }}
           />
         ))}

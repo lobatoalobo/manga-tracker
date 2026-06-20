@@ -2,14 +2,26 @@
 
 import { useEffect, useRef, useState } from "react";
 import { searchPurchaseSeriesAction } from "@/app/actions";
+import ArgentinaFlag from "@/components/ArgentinaFlag";
+import UsaFlag from "@/components/UsaFlag";
 
 export interface SeriesValue {
   title: string;
   anilistId: number | null;
   coverImage: string | null;
+  publisher?: string | null; // editorial elegida (de la entrada por edición)
+  volumes?: number; // tomos conocidos de la edición (para validar el # de tomo)
 }
 
-type Result = { id: number; title: string; coverImage: string | null };
+type Result = {
+  id: number;
+  title: string;
+  coverImage: string | null;
+  publisher: string | null;
+  label: string;
+  intl: boolean;
+  volumes: number;
+};
 
 const input =
   "w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent";
@@ -70,18 +82,27 @@ export default function PurchaseSeriesPicker({
         <input
           value={value.title}
           onChange={(e) =>
-            onChange({ title: e.target.value, anilistId: null, coverImage: null })
+            onChange({
+              title: e.target.value,
+              anilistId: null,
+              coverImage: null,
+              publisher: null,
+            })
           }
           onFocus={() => results.length && setOpen(true)}
           placeholder="Serie / título *"
           className={input}
         />
-        {value.anilistId && (
-          <span
-            title="Linkeado a AniList"
-            className="shrink-0 text-xs text-emerald-400"
-          >
-            ✓
+        {value.publisher && (
+          <span className="flex shrink-0 items-center gap-1 rounded-full bg-surface px-2 py-0.5 text-xs text-muted">
+            {/viz/i.test(value.publisher) ? (
+              <UsaFlag className="h-2.5 w-4 rounded-[1px]" />
+            ) : (
+              <ArgentinaFlag className="h-2.5 w-4 rounded-[1px]" />
+            )}
+            {/viz/i.test(value.publisher)
+              ? "VIZ"
+              : value.publisher.replace(" Argentina", "")}
           </span>
         )}
       </div>
@@ -91,8 +112,8 @@ export default function PurchaseSeriesPicker({
           {loading && (
             <li className="px-3 py-2 text-xs text-muted">Buscando…</li>
           )}
-          {results.map((r) => (
-            <li key={r.id}>
+          {results.map((r, i) => (
+            <li key={`${r.id}-${r.publisher ?? "x"}-${i}`}>
               <button
                 type="button"
                 onClick={() => {
@@ -100,6 +121,8 @@ export default function PurchaseSeriesPicker({
                     title: r.title,
                     anilistId: r.id,
                     coverImage: r.coverImage,
+                    publisher: r.publisher,
+                    volumes: r.volumes,
                   });
                   setOpen(false);
                 }}
@@ -113,7 +136,17 @@ export default function PurchaseSeriesPicker({
                     className="h-9 w-7 shrink-0 rounded object-cover"
                   />
                 )}
-                <span className="truncate">{r.title}</span>
+                <span className="min-w-0 flex-1 truncate">{r.title}</span>
+                {r.publisher && (
+                  <span className="flex shrink-0 items-center gap-1 text-xs text-muted">
+                    {r.intl ? (
+                      <UsaFlag className="h-2.5 w-4 rounded-[1px]" />
+                    ) : (
+                      <ArgentinaFlag className="h-2.5 w-4 rounded-[1px]" />
+                    )}
+                    {r.intl ? "VIZ" : r.publisher.replace(" Argentina", "")}
+                  </span>
+                )}
               </button>
             </li>
           ))}

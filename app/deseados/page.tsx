@@ -3,7 +3,11 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { getWishlist } from "@/lib/wishlist";
 import { nationalEditionIds } from "@/lib/getMangaDetails";
-import { nationalCoversByAnilist, upcomingForIds } from "@/lib/catalog";
+import {
+  nationalCoversByAnilist,
+  upcomingForIds,
+  publisherShort,
+} from "@/lib/catalog";
 import { seriesHref } from "@/lib/url";
 import RemoveWishButton from "@/components/RemoveWishButton";
 import SeriesTile from "@/components/SeriesTile";
@@ -50,19 +54,34 @@ export default async function DeseadosPage() {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {items.map((w) => (
-            <SeriesTile
-              key={w.id}
-              data={{
-                href: seriesHref(w.anilistId),
-                title: w.title,
-                coverImage: nationalCovers.get(w.anilistId) ?? w.coverImage,
-                national: nationalIds.has(w.anilistId),
-                upcoming: upcoming.has(w.anilistId),
-              }}
-              overlay={<RemoveWishButton anilistId={w.anilistId} />}
-            />
-          ))}
+          {items.map((w) => {
+            const isIntl = w.region === "INT";
+            return (
+              <SeriesTile
+                key={w.id}
+                data={{
+                  href: seriesHref(w.anilistId),
+                  title: w.title,
+                  coverImage: nationalCovers.get(w.anilistId) ?? w.coverImage,
+                  national:
+                    !isIntl &&
+                    (w.region === "AR" ||
+                      (w.region == null && nationalIds.has(w.anilistId))),
+                  intl: isIntl,
+                  // Mostrá la editorial deseada (desambigua si la obra está en
+                  // deseados en dos ediciones distintas).
+                  publishers: w.publisher ? [publisherShort(w.publisher)] : undefined,
+                  upcoming: upcoming.has(w.anilistId),
+                }}
+                overlay={
+                  <RemoveWishButton
+                    anilistId={w.anilistId}
+                    editionKey={w.editionKey}
+                  />
+                }
+              />
+            );
+          })}
         </div>
       )}
     </main>

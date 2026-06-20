@@ -8,6 +8,7 @@ export interface MangaDexData {
   genres: string[]; // tags de grupo genre/theme
   coverImage: string | null; // portada del original (thumb 512)
   description: string | null; // inglés
+  aliases: string[]; // todos los nombres conocidos (incluye romaji ja-ro)
 }
 
 const norm = (s: string) =>
@@ -70,6 +71,14 @@ export async function getMangaDex(
     .filter((t: any) => ["genre", "theme"].includes(t.attributes?.group))
     .map((t: any) => t.attributes?.name?.en)
     .filter(Boolean);
+  // Todos los nombres conocidos (title en todos los idiomas + altTitles): sirve
+  // para alimentar a MU con el romaji aunque hayamos buscado por el título inglés.
+  const aliases = [
+    ...Object.values(a.title ?? {}),
+    ...(a.altTitles ?? []).flatMap((t: any) => Object.values(t)),
+  ]
+    .map((x) => String(x).trim())
+    .filter(Boolean);
 
   return {
     id: m.id,
@@ -80,5 +89,6 @@ export async function getMangaDex(
       ? `https://uploads.mangadex.org/covers/${m.id}/${cover}.512.jpg`
       : null,
     description: a.description?.en ?? null,
+    aliases: [...new Set(aliases)],
   };
 }

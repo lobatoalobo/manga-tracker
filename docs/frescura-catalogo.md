@@ -1,20 +1,27 @@
 # Frescura del catálogo (refresh programado)
 
-El catálogo se actualiza crawleando **Whakoom** (Panini/Ovni/Kemuri/Utopía/Larp/
-Distrito) e **Ivrea**. Whakoom **bloquea a los runners de GitHub/Vercel**, así que
-el refresh NO puede correr en la nube: vive en una PC propia como **tarea
-programada de Windows**. Corre contra **producción** (la `DATABASE_URL` de `.env`).
+El catálogo se actualiza desde varias fuentes. La clave es **qué corre en la nube
+y qué local**:
 
-## Qué hace el refresh
+- **En Vercel (crons, automático):** Ivrea (no bloquea el datacenter) y VIZ.
+  - `/api/cron/ivrea-catalogo` (diario) — **catálogo de Ivrea**: tomos/estado/
+    portada (`PublisherEdition.volumes`) + propaga totales + notifica "tomo nuevo"
+    / "salió en AR". **Acá se actualiza el máximo de tomos de Ivrea.**
+  - `/api/cron/ivrea-proximas` (diario) — próximos/reediciones/debuts.
+  - `/api/cron/viz` (semanal) — descubre + refresca + rellena portadas + Blob.
+- **Local (tarea de Windows):** SOLO **Whakoom** (Cloudflare bloquea la nube) +
+  enrich. `scripts/refresh-catalog.mjs`, contra **producción** (`DATABASE_URL`).
+
+## Qué hace el refresh LOCAL
 
 `scripts/refresh-catalog.mjs` corre, en orden y tolerando fallos por paso:
 
-1. **Ivrea** — catálogo + tomos + works (`crawl.ts ivrea`).
-2. **Whakoom (todas)** — el resto de las editoriales (`crawl.ts whakoom-all`).
-3. **Enrich** — géneros/portada/sinopsis desde MangaUpdates + MangaDex
+1. **Whakoom (todas)** — Panini/Ovni/Kemuri/Utopía/Larp/Distrito (`crawl.ts whakoom-all`).
+2. **Enrich** — géneros/portada/sinopsis desde MangaUpdates + MangaDex
    (`enrich-works.ts`, de a lotes, resumable).
 
-Los pasos 1 y 2 disparan las notis de "tomo nuevo" y "salió en AR" (deseados).
+> Ivrea **ya no corre acá** — se desacopló a Vercel (`/api/cron/ivrea-catalogo`),
+> así la frescura del conteo de Ivrea NO depende de la PC local.
 
 ## Instalar la tarea (una vez)
 

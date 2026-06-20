@@ -6,13 +6,19 @@ import { prisma } from "@/lib/prisma";
 import { getSeries } from "@/lib/collection";
 import AdminWorkEdit from "@/components/AdminWorkEdit";
 import ExpandableText from "@/components/ExpandableText";
-import { isWished } from "@/lib/wishlist";
+import { getWishedKeys } from "@/lib/wishlist";
+import {
+  publisherKey,
+  publisherRegionOf,
+  publisherShort,
+} from "@/lib/catalog";
 import { crumbSearch } from "@/lib/crumb";
 import { getCrumbQuery } from "@/lib/storeLinks";
 import { formatReleaseLabel, formatProximaDate } from "@/lib/releaseDate";
 import AddEditionButton from "@/components/AddEditionButton";
 import ArgentinaFlag from "@/components/ArgentinaFlag";
-import { CATALOG_PUBLISHERS } from "@/lib/catalog";
+import UsaFlag from "@/components/UsaFlag";
+import { CATALOG_PUBLISHERS, INTL_PUBLISHERS } from "@/lib/catalog";
 import WishButton from "@/components/WishButton";
 import TrackingPanel from "@/components/TrackingPanel";
 import { SignIn } from "@/components/AuthButtons";
@@ -55,7 +61,10 @@ const PUB_KEY: Record<string, string> = {
   "Larp Editores": "larp",
   "Distrito Manga": "distrito",
   "Planeta Cómic": "planeta",
+  "VIZ Media": "viz",
 };
+
+const INTL_SET = new Set<string>(INTL_PUBLISHERS);
 
 /**
  * Detalle de una obra del catálogo LOCAL (`Work`), sin AniList. Generaliza el
@@ -97,7 +106,7 @@ export default async function SeriePage({
     ? await prisma.ivreaRelease.findMany({
         where: {
           editionId: { in: editionIds },
-          kind: { not: "reissue" },
+          kind: "volume", // próximo TOMO (no debut/oneshot/reedición)
           releaseDate: { gte: today },
         },
         orderBy: { releaseDate: "asc" },
@@ -111,27 +120,75 @@ export default async function SeriePage({
     nextByEdition.set(r.editionId, { volume: r.volume, date: r.releaseDate });
   }
 
+  // Reediciones próximas (tomos agotados que vuelven), por número de tomo.
+  const reissueRows = editionIds.length
+    ? await prisma.ivreaRelease.findMany({
+        where: {
+          editionId: { in: editionIds },
+          kind: "reissue",
+          releaseDate: { gte: today },
+        },
+        orderBy: { releaseDate: "asc" },
+        select: { volume: true, releaseDate: true },
+      })
+    : [];
+  // Dedup por tomo (la más cercana), tomos del usuario aparte.
+  const reissues: { volume: number | null; date: Date }[] = [];
+  const seenReissue = new Set<number>();
+  for (const r of reissueRows) {
+    if (!r.releaseDate) continue;
+    const v = r.volume ?? -1;
+    if (seenReissue.has(v)) continue;
+    seenReissue.add(v);
+    reissues.push({ volume: r.volume, date: r.releaseDate });
+  }
+
   const { title, coverImage, author, synopsis, genres } = work;
   const ivreaEditions = work.editions.filter((e) =>
     (CATALOG_PUBLISHERS as readonly string[]).includes(e.publisher),
   );
-  // MVP solo-Ivrea: la obra es del catálogo si tiene edición de Ivrea o es un
-  // debut GENUINO (próximo + sin ninguna edición). Una obra solo de otra
-  // editorial (ej. Kemuri) NO es visible → 404 (tampoco aparece en el browse).
+  // Internacional (VIZ): mismas obras, sección aparte. Se muestran junto a las
+  // de Ivrea cuando una obra está en ambos catálogos (Work unificado).
+  const intlEditions = work.editions.filter((e) => INTL_SET.has(e.publisher));
+  // La obra es visible si tiene edición Ivrea/VIZ o es un debut genuino (próximo
+  // + sin ninguna edición). NO se oculta por tener 0 tomos: una serie real con
+  // gap de conteo debe verse (el crawl arregla el conteo; novelas/artbooks se
+  // resuelven con Work.type). Solo-otra-editorial (ej. Kemuri) → 404.
+  const shownEditions = [...ivreaEditions, ...intlEditions];
   const genuineDebut = work.upcoming && work.editions.length === 0;
-  if (ivreaEditions.length === 0 && !genuineDebut) notFound();
-  const shownEditions = ivreaEditions;
+  if (ivreaEditions.length === 0 && intlEditions.length === 0 && !genuineDebut)
+    notFound();
   // Guard: una obra con edición publicada (volumes>0) NO es "próximo a salir".
   const upcoming = work.upcoming && !work.editions.some((e) => e.volumes > 0);
   // Nacional = edición argentina (Ivrea) o debut genuino de Ivrea.
   const national = genuineDebut || ivreaEditions.length > 0;
+  const isIntl = intlEditions.length > 0;
+
+  // Ediciones deseables (una por editorial visible, dedup por key). Debut sin
+  // edición cargada → una nacional implícita.
+  const wishSeen = new Set<string>();
+  const wishEditions = shownEditions
+    .filter((e) => {
+      const k = publisherKey(e.publisher);
+      if (wishSeen.has(k)) return false;
+      wishSeen.add(k);
+      return true;
+    })
+    .map((e) => ({
+      key: publisherKey(e.publisher),
+      publisher: e.publisher,
+      region: publisherRegionOf(e.publisher),
+      label: publisherShort(e.publisher),
+    }));
+  if (wishEditions.length === 0)
+    wishEditions.push({ key: "ivrea", publisher: "Ivrea Argentina", region: "AR", label: "Ivrea" });
 
   // Colección: id sintético negativo por workId (no choca con ids de AniList).
   const pseudoId = -workId;
   const session = await auth();
   const userId = session?.user?.id ?? null;
   const series = userId ? await getSeries(userId, pseudoId) : null;
-  const wished = userId ? await isWished(userId, pseudoId) : false;
+  const wishedKeys = userId ? await getWishedKeys(userId, pseudoId) : [];
   const trackedKeys = series?.editions.map((e) => e.key) ?? [];
   const admin = isAdmin(session?.user?.email);
   // Override admin del término de búsqueda de Crumb (keyeado por el id local).
@@ -166,6 +223,11 @@ export default async function SeriePage({
               <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500/15 px-2.5 py-0.5 text-xs font-medium text-sky-300">
                 <ArgentinaFlag className="h-3 w-4.5 rounded-[1px]" /> Edición
                 nacional
+              </span>
+            )}
+            {isIntl && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/15 px-2.5 py-0.5 text-xs font-medium text-indigo-300">
+                <UsaFlag className="h-3 w-4.5 rounded-[1px]" /> Edición en inglés
               </span>
             )}
             {upcoming && (
@@ -217,19 +279,22 @@ export default async function SeriePage({
                 anilistId={pseudoId}
                 title={title}
                 coverImage={coverImage ?? ""}
-                initialWished={wished}
+                editions={wishEditions}
+                initialWishedKeys={wishedKeys}
               />
             ) : (
               <SignIn className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90" />
             )}
-            <a
-              href={crumbSearch(crumbQuery)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
-            >
-              🛒 Comprar en Crumb
-            </a>
+            {national && (
+              <a
+                href={crumbSearch(crumbQuery)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-border px-4 py-2 text-sm transition hover:border-accent"
+              >
+                🛒 Comprar en Crumb
+              </a>
+            )}
           </div>
 
           {/* Ediciones de la obra (todas las editoriales). */}
@@ -262,10 +327,11 @@ export default async function SeriePage({
                 const next = nextByEdition.get(e.id);
                 const key = editionKey(e.publisher, e.id);
                 const isTracked = trackedKeys.includes(key);
+                const edIntl = INTL_SET.has(e.publisher);
                 const edition: Edition = {
                   id: key,
                   source: e.publisher,
-                  region: "AR",
+                  region: edIntl ? "INT" : "AR",
                   publisher: e.publisher,
                   slug: e.slug,
                   status: e.status || "EN CATÁLOGO",
@@ -280,7 +346,14 @@ export default async function SeriePage({
                       isTracked ? "border-accent" : "border-border"
                     }`}
                   >
-                    <span className="font-medium">{e.publisher}</span>
+                    <span className="flex items-center gap-1.5 font-medium">
+                      {edIntl ? (
+                        <UsaFlag className="h-3 w-4.5 rounded-[1px]" />
+                      ) : (
+                        <ArgentinaFlag className="h-3 w-4.5 rounded-[1px]" />
+                      )}
+                      {e.publisher}
+                    </span>
                     <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                       <EdField
                         label="Tomos"
@@ -291,6 +364,16 @@ export default async function SeriePage({
                         value={e.status ? e.status.toLowerCase() : "en catálogo"}
                       />
                     </dl>
+                    {edIntl && e.url && (
+                      <a
+                        href={e.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 inline-flex w-fit items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs transition hover:border-accent"
+                      >
+                        Ver en VIZ ↗
+                      </a>
+                    )}
                     {next && (
                       <p className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-300">
                         📅 Próximo tomo{next.volume ? ` #${next.volume}` : ""} ·{" "}
@@ -316,6 +399,25 @@ export default async function SeriePage({
               })}
             </div>
           </div>
+
+          {/* Reediciones próximas (tomos agotados que vuelven). */}
+          {reissues.length > 0 && (
+            <div className="mt-6">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
+                ♻️ Reediciones próximas
+              </h2>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {reissues.map((r) => (
+                  <span
+                    key={`${r.volume}-${r.date.toISOString()}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-300"
+                  >
+                    Tomo{r.volume ? ` #${r.volume}` : ""} · {formatProximaDate(r.date)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {admin && (
             <AdminWorkEdit

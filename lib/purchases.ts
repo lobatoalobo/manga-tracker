@@ -121,9 +121,21 @@ export async function updatePurchase(
 ) {
   const existing = await prisma.purchase.findFirst({
     where: { id, userId },
-    select: { id: true },
+    select: {
+      id: true,
+      items: {
+        select: {
+          id: true,
+          anilistId: true,
+          edition: true,
+          volume: true,
+          status: true,
+        },
+      },
+    },
   });
   if (!existing) return null;
+  const before = new Map(existing.items.map((b) => [b.id, b]));
 
   const items = input.items.filter(
     (i) => i.title.trim() && Number.isFinite(i.price),
@@ -173,7 +185,48 @@ export async function updatePurchase(
     },
   });
 
-  return { created };
+  // Diff para sincronizar la colección: tomos quitados de la compra y tomos
+  // cuya serie/edición/número cambió (su contribución vieja hay que quitarla).
+  const keepIdSet = new Set(keepIds);
+  const removed: SyncItem[] = existing.items
+    .filter((b) => !keepIdSet.has(b.id))
+    .map((b) => ({
+      anilistId: b.anilistId,
+      edition: b.edition,
+      volume: b.volume,
+      status: b.status,
+    }));
+  const changed: { before: SyncItem; after: AddItem }[] = [];
+  for (const i of items.filter((i) => i.id)) {
+    const b = before.get(i.id as number);
+    if (!b) continue;
+    const ed = clean(i.edition);
+    if (
+      b.anilistId !== (i.anilistId ?? null) ||
+      (b.edition ?? null) !== (ed ?? null) ||
+      (b.volume ?? null) !== (i.volume ?? null)
+    ) {
+      changed.push({
+        before: {
+          anilistId: b.anilistId,
+          edition: b.edition,
+          volume: b.volume,
+          status: b.status,
+        },
+        // El status del ítem existente no cambia al editar (se maneja aparte).
+        after: {
+          anilistId: i.anilistId ?? null,
+          title: i.title.trim(),
+          coverImage: clean(i.coverImage),
+          volume: i.volume ?? null,
+          edition: ed,
+          status: b.status,
+        },
+      });
+    }
+  }
+
+  return { created, removed, changed };
 }
 
 /** Cambia el estado de un tomo (verifica que la compra sea del usuario). */
@@ -193,8 +246,40 @@ export async function setPurchaseItemStatus(
   });
 }
 
-export async function deletePurchase(userId: string, id: number) {
+/** Tomo de una compra, para sincronizar la colección al borrar/editar. */
+export interface SyncItem {
+  anilistId: number | null;
+  edition: string | null;
+  volume: number | null;
+  status: string;
+}
+
+/** Dato suficiente para (re)agregar un tomo a la colección. */
+export interface AddItem {
+  anilistId: number | null;
+  title: string;
+  coverImage: string | null;
+  volume: number | null;
+  edition: string | null;
+  status: string;
+}
+
+/** Borra una compra y devuelve sus tomos (para quitarlos de la colección). */
+export async function deletePurchase(
+  userId: string,
+  id: number,
+): Promise<SyncItem[]> {
+  const purchase = await prisma.purchase.findFirst({
+    where: { id, userId },
+    select: {
+      items: {
+        select: { anilistId: true, edition: true, volume: true, status: true },
+      },
+    },
+  });
+  if (!purchase) return [];
   await prisma.purchase.deleteMany({ where: { id, userId } });
+  return purchase.items;
 }
 
 export interface PurchaseStats {
