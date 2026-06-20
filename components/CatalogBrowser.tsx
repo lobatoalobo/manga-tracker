@@ -102,6 +102,7 @@ export default function CatalogBrowser({
   basePath = "/catalogo",
   showTabs = true,
   emptyPublisher = "Ivrea Argentina",
+  showGenreFilters = true,
 }: {
   cards: BrowseCard[];
   collected?: number[];
@@ -115,6 +116,8 @@ export default function CatalogBrowser({
   showTabs?: boolean;
   /** Editorial a mostrar cuando una card no trae publishers. */
   emptyPublisher?: string;
+  /** Feature flag: mostrar el panel de filtros por género/demografía. */
+  showGenreFilters?: boolean;
 }) {
   const mine = useMemo(() => new Set(collected), [collected]);
   const [wishMap, setWishMap] = useState<Map<number, Set<string>>>(
@@ -214,7 +217,7 @@ export default function CatalogBrowser({
     return cards.filter((c) => {
       if (tab === "series" && !c.upcoming) return false;
       if (tab === "tomos" && !c.next && !c.reissue) return false;
-      if (genres.length) {
+      if (showGenreFilters && genres.length) {
         const ok =
           gmode === "all"
             ? genres.every((g) => c.genres.includes(g))
@@ -222,6 +225,7 @@ export default function CatalogBrowser({
         if (!ok) return false;
       }
       if (
+        showGenreFilters &&
         demographics.length &&
         !(c.demographic && demographics.includes(c.demographic))
       )
@@ -229,7 +233,7 @@ export default function CatalogBrowser({
       if (nq && !norm(c.title).includes(nq)) return false;
       return true;
     });
-  }, [cards, q, tab, genres, gmode, demographics]);
+  }, [cards, q, tab, genres, gmode, demographics, showGenreFilters]);
 
   // Ordenar por fecha de salida (más pronto primero) en las pestañas de
   // próximos; en A-Z se respeta el alfabético que ya viene del server.
@@ -306,7 +310,9 @@ export default function CatalogBrowser({
       </div>
       )}
 
-      {/* Filtros: panel colapsable (demografía + géneros por categoría). */}
+      {/* Filtros: panel colapsable (demografía + géneros por categoría).
+          Detrás de la feature flag `genre-filters`. */}
+      {showGenreFilters && (
       <div className="mb-2 flex items-center gap-2 text-sm">
         <button
           type="button"
@@ -330,8 +336,9 @@ export default function CatalogBrowser({
           </button>
         )}
       </div>
+      )}
 
-      {filtersOpen && (
+      {showGenreFilters && filtersOpen && (
         <div className="mb-3 max-h-[60vh] space-y-4 overflow-y-auto rounded-xl border border-border bg-surface p-4">
           {DEMOGRAPHICS.some((d) => (demoCount.get(d) ?? 0) > 0) && (
             <div>
@@ -426,7 +433,7 @@ export default function CatalogBrowser({
       )}
 
       {/* Chips activos (siempre visibles, aun con el panel cerrado). */}
-      {(genres.length > 0 || demographics.length > 0) && (
+      {showGenreFilters && (genres.length > 0 || demographics.length > 0) && (
         <div className="mb-4 flex flex-wrap gap-2">
           {demographics.map((d) => (
             <button

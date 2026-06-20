@@ -367,6 +367,15 @@ model AppState {
   updatedAt DateTime @updatedAt
 }
 
+// Feature flags: estado (on/off) por flag, editable desde admin sin redeploy.
+// La metadata (label/descripción/default) vive en lib/featureFlags.ts (registro
+// tipado); acá solo guardamos el override.
+model FeatureFlag {
+  key       String   @id
+  enabled   Boolean
+  updatedAt DateTime @updatedAt
+}
+
 // Fuentes (Whakoom/Ivrea) descartadas a mano: entradas duplicadas o
 // problemáticas que ya curaste/borraste. El crawl/import NO las vuelve a traer.
 // `source` = "whakoom" | "ivrea"; `sourceId` = whakoomId, o slug de Ivrea.

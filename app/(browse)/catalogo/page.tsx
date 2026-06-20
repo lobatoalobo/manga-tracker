@@ -10,6 +10,7 @@ import CatalogBrowser, {
   type BrowseCard,
   type BrowseState,
 } from "@/components/CatalogBrowser";
+import { isEnabled } from "@/lib/featureFlags";
 
 export const metadata = { title: "Catálogo · Nakama" };
 
@@ -94,6 +95,7 @@ export default async function CatalogoPage({
         wishedMap={wishedMap}
         canWish={!!session?.user?.id}
         initial={initial}
+        showGenreFilters={await isEnabled("genre-filters")}
       />
     </main>
   );
