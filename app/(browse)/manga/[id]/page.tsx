@@ -212,7 +212,8 @@ export default async function Page({
                 anilistId={mangaId}
                 title={title}
                 coverImage={cover}
-                initialWished={wished}
+                editions={[{ key: "", publisher: null, region: null, label: "" }]}
+                initialWishedKeys={wished ? [""] : []}
               />
             )}
             <Suspense fallback={null}>

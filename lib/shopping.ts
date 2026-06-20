@@ -22,7 +22,13 @@ export interface WishlistBuyItem {
 export async function getWishlistToBuy(userId: string): Promise<WishlistBuyItem[]> {
   const wishes = await prisma.wishlistItem.findMany({
     where: { userId },
-    select: { anilistId: true, title: true, coverImage: true },
+    select: {
+      anilistId: true,
+      title: true,
+      coverImage: true,
+      editionKey: true,
+      publisher: true,
+    },
   });
   if (wishes.length === 0) return [];
 
@@ -51,17 +57,25 @@ export async function getWishlistToBuy(userId: string): Promise<WishlistBuyItem[
   });
 
   type Ed = (typeof eds)[number];
-  const byWork = new Map<number, Ed>();
-  const byAnilist = new Map<number, Ed>();
+  // Todas las ediciones disponibles por obra (ordenadas por tomos desc).
+  const byWork = new Map<number, Ed[]>();
+  const byAnilist = new Map<number, Ed[]>();
   for (const e of eds) {
-    if (e.workId != null && !byWork.has(e.workId)) byWork.set(e.workId, e);
-    if (e.anilistId != null && !byAnilist.has(e.anilistId)) byAnilist.set(e.anilistId, e);
+    if (e.workId != null) (byWork.get(e.workId) ?? byWork.set(e.workId, []).get(e.workId)!).push(e);
+    if (e.anilistId != null)
+      (byAnilist.get(e.anilistId) ?? byAnilist.set(e.anilistId, []).get(e.anilistId)!).push(e);
   }
 
   const out: WishlistBuyItem[] = [];
   for (const w of wishes) {
-    const ed = w.anilistId < 0 ? byWork.get(-w.anilistId) : byAnilist.get(w.anilistId);
-    if (!ed) continue; // todavía no salió en AR
+    const list = w.anilistId < 0 ? byWork.get(-w.anilistId) : byAnilist.get(w.anilistId);
+    if (!list || list.length === 0) continue; // la edición deseada no salió aún
+    // Edición deseada: por editorial si el deseo es puntual; si no, la de más tomos.
+    const ed =
+      (w.editionKey && w.publisher
+        ? list.find((e) => e.publisher === w.publisher)
+        : null) ?? list[0];
+    if (!ed) continue;
     out.push({
       anilistId: w.anilistId,
       title: w.title,

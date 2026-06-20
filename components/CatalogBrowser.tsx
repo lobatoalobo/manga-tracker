@@ -6,6 +6,7 @@ import { formatProximaDate, formatReleaseLabel } from "@/lib/releaseDate";
 import { toggleWishAction } from "@/app/actions";
 import ArgentinaFlag from "@/components/ArgentinaFlag";
 import UsaFlag from "@/components/UsaFlag";
+import type { WishEdition } from "@/components/WishButton";
 import { GENRE_CATEGORIES, DEMOGRAPHICS } from "@/lib/genres";
 
 export interface BrowseCard {
@@ -21,6 +22,7 @@ export interface BrowseCard {
   demographic: string | null;
   next: { volume: number | null; date: string } | null;
   reissue?: { volume: number | null; date: string } | null;
+  editions?: WishEdition[]; // ediciones deseables (para el corazón por edición)
 }
 
 export interface BrowseState {
@@ -94,7 +96,7 @@ function pageWindow(cur: number, count: number, size = 5): number[] {
 export default function CatalogBrowser({
   cards,
   collected = [],
-  wished = [],
+  wishedMap = {},
   canWish = false,
   initial,
   basePath = "/catalogo",
@@ -103,7 +105,8 @@ export default function CatalogBrowser({
 }: {
   cards: BrowseCard[];
   collected?: number[];
-  wished?: number[];
+  /** workId → keys de edición deseadas (para el highlight y el modal). */
+  wishedMap?: Record<number, string[]>;
   canWish?: boolean;
   initial: BrowseState;
   /** Ruta base para sincronizar la URL (p. ej. "/internacional"). */
@@ -114,17 +117,24 @@ export default function CatalogBrowser({
   emptyPublisher?: string;
 }) {
   const mine = useMemo(() => new Set(collected), [collected]);
-  const [wishSet, setWishSet] = useState(() => new Set(wished));
+  const [wishMap, setWishMap] = useState<Map<number, Set<string>>>(
+    () => new Map(Object.entries(wishedMap).map(([k, v]) => [Number(k), new Set(v)])),
+  );
+  const [wishModal, setWishModal] = useState<BrowseCard | null>(null);
   const [, startWish] = useTransition();
 
-  function toggleWish(w: BrowseCard, e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    const isWished = wishSet.has(w.id);
-    setWishSet((s) => {
-      const n = new Set(s);
-      if (isWished) n.delete(w.id);
-      else n.add(w.id);
+  const wishedAny = (id: number) => (wishMap.get(id)?.size ?? 0) > 0;
+  const editionsOf = (w: BrowseCard): WishEdition[] =>
+    w.editions && w.editions.length ? w.editions : [{ key: "", publisher: null, region: null, label: emptyPublisher }];
+
+  function toggleEdition(w: BrowseCard, ed: WishEdition) {
+    const isW = wishMap.get(w.id)?.has(ed.key) ?? false;
+    setWishMap((m) => {
+      const n = new Map(m);
+      const s = new Set(n.get(w.id) ?? []);
+      if (isW) s.delete(ed.key);
+      else s.add(ed.key);
+      n.set(w.id, s);
       return n;
     });
     startWish(() =>
@@ -132,9 +142,20 @@ export default function CatalogBrowser({
         anilistId: -w.id,
         title: w.title,
         coverImage: w.coverImage ?? "",
-        wished: isWished,
+        wished: isW,
+        editionKey: ed.key,
+        publisher: ed.publisher,
+        region: ed.region,
       }),
     );
+  }
+
+  function onHeart(w: BrowseCard, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const eds = editionsOf(w);
+    if (eds.length <= 1) toggleEdition(w, eds[0]);
+    else setWishModal(w); // varias ediciones → elegir en modal
   }
   const [q, setQ] = useState(initial.q);
   const [tab, setTab] = useState<Tab>(initial.tab);
@@ -440,7 +461,7 @@ export default function CatalogBrowser({
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {shown.map((w) => {
             const owned = mine.has(w.id);
-            const isWished = wishSet.has(w.id);
+            const isWished = wishedAny(w.id);
             const wishedFlag = !owned && isWished;
             return (
               <div key={w.id} className="relative">
@@ -504,12 +525,13 @@ export default function CatalogBrowser({
                   </p>
                 </Link>
 
-                {/* Marcar deseado sin entrar a la serie (fuera del Link). */}
+                {/* Marcar deseado sin entrar a la serie (fuera del Link). Con
+                    varias ediciones abre un modal para elegir cuál. */}
                 {canWish && !owned && (
                   <button
                     type="button"
-                    aria-label={isWished ? "Quitar de deseados" : "Agregar a deseados"}
-                    onClick={(e) => toggleWish(w, e)}
+                    aria-label={isWished ? "Editar deseados" : "Agregar a deseados"}
+                    onClick={(e) => onHeart(w, e)}
                     className={`absolute right-2 top-2 z-10 rounded-full px-1.5 py-0.5 text-sm leading-none shadow transition ${
                       isWished ? "bg-rose-500 text-white" : "bg-black/55 text-white hover:bg-rose-500"
                     }`}
@@ -557,6 +579,62 @@ export default function CatalogBrowser({
         </div>
       )}
       <p className="mt-2 text-center text-xs text-muted">{filtered.length} obras</p>
+
+      {/* Modal de selección de edición para deseados (varias ediciones). */}
+      {wishModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
+          onClick={() => setWishModal(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-border bg-surface p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs text-muted">Agregar a deseados</p>
+                <p className="truncate font-medium">{wishModal.title}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWishModal(null)}
+                aria-label="Cerrar"
+                className="shrink-0 rounded-lg px-2 py-1 text-muted hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mb-2 text-xs text-muted">Elegí qué edición querés desear:</p>
+            <div className="space-y-1.5">
+              {editionsOf(wishModal).map((ed) => {
+                const isW = wishMap.get(wishModal.id)?.has(ed.key) ?? false;
+                return (
+                  <button
+                    key={ed.key}
+                    type="button"
+                    onClick={() => toggleEdition(wishModal, ed)}
+                    className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-sm transition ${
+                      isW ? "border-rose-400/60 bg-rose-500/10" : "border-border hover:border-accent"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      {ed.region === "INT" ? (
+                        <UsaFlag className="h-3 w-4.5 rounded-[1px]" />
+                      ) : (
+                        <ArgentinaFlag className="h-3 w-4.5 rounded-[1px]" />
+                      )}
+                      {ed.label}
+                    </span>
+                    <span className={isW ? "text-rose-400" : "text-muted"}>
+                      {isW ? "❤ Deseada" : "🤍"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

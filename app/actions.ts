@@ -1014,10 +1014,14 @@ export async function toggleWishAction(item: {
   title: string;
   coverImage: string;
   wished: boolean;
+  editionKey?: string;
+  publisher?: string | null;
+  region?: string | null;
 }) {
   const userId = await requireUserId();
+  const editionKey = item.editionKey ?? "";
   if (item.wished) {
-    await removeWish(userId, item.anilistId);
+    await removeWish(userId, item.anilistId, editionKey);
   } else {
     await addWish(userId, item);
   }
@@ -1025,9 +1029,9 @@ export async function toggleWishAction(item: {
   revalidatePath(seriesHref(item.anilistId));
 }
 
-export async function removeWishAction(anilistId: number) {
+export async function removeWishAction(anilistId: number, editionKey = "") {
   const userId = await requireUserId();
-  await removeWish(userId, anilistId);
+  await removeWish(userId, anilistId, editionKey);
   revalidatePath("/deseados");
   revalidatePath(seriesHref(anilistId));
 }

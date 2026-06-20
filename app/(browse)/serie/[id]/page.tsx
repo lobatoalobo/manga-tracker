@@ -6,7 +6,12 @@ import { prisma } from "@/lib/prisma";
 import { getSeries } from "@/lib/collection";
 import AdminWorkEdit from "@/components/AdminWorkEdit";
 import ExpandableText from "@/components/ExpandableText";
-import { isWished } from "@/lib/wishlist";
+import { getWishedKeys } from "@/lib/wishlist";
+import {
+  publisherKey,
+  publisherRegionOf,
+  publisherShort,
+} from "@/lib/catalog";
 import { crumbSearch } from "@/lib/crumb";
 import { getCrumbQuery } from "@/lib/storeLinks";
 import { formatReleaseLabel, formatProximaDate } from "@/lib/releaseDate";
@@ -162,12 +167,31 @@ export default async function SeriePage({
   const national = genuineDebut || ivreaEditions.length > 0;
   const isIntl = intlEditions.length > 0;
 
+  // Ediciones deseables (una por editorial visible, dedup por key). Debut sin
+  // edición cargada → una nacional implícita.
+  const wishSeen = new Set<string>();
+  const wishEditions = shownEditions
+    .filter((e) => {
+      const k = publisherKey(e.publisher);
+      if (wishSeen.has(k)) return false;
+      wishSeen.add(k);
+      return true;
+    })
+    .map((e) => ({
+      key: publisherKey(e.publisher),
+      publisher: e.publisher,
+      region: publisherRegionOf(e.publisher),
+      label: publisherShort(e.publisher),
+    }));
+  if (wishEditions.length === 0)
+    wishEditions.push({ key: "ivrea", publisher: "Ivrea Argentina", region: "AR", label: "Ivrea" });
+
   // Colección: id sintético negativo por workId (no choca con ids de AniList).
   const pseudoId = -workId;
   const session = await auth();
   const userId = session?.user?.id ?? null;
   const series = userId ? await getSeries(userId, pseudoId) : null;
-  const wished = userId ? await isWished(userId, pseudoId) : false;
+  const wishedKeys = userId ? await getWishedKeys(userId, pseudoId) : [];
   const trackedKeys = series?.editions.map((e) => e.key) ?? [];
   const admin = isAdmin(session?.user?.email);
   // Override admin del término de búsqueda de Crumb (keyeado por el id local).
@@ -258,7 +282,8 @@ export default async function SeriePage({
                 anilistId={pseudoId}
                 title={title}
                 coverImage={coverImage ?? ""}
-                initialWished={wished}
+                editions={wishEditions}
+                initialWishedKeys={wishedKeys}
               />
             ) : (
               <SignIn className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:opacity-90" />

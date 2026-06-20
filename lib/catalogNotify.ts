@@ -196,33 +196,52 @@ export async function detectAndNotifyWishlistAvailable(
 ): Promise<{ scanned: number; notifications: number; samples: string[] }> {
   const pending = await prisma.wishlistItem.findMany({
     where: { notifiedAvailable: false },
-    select: { id: true, userId: true, anilistId: true, title: true },
+    select: {
+      id: true,
+      userId: true,
+      anilistId: true,
+      title: true,
+      editionKey: true,
+      publisher: true,
+    },
   });
   if (pending.length === 0) return { scanned: 0, notifications: 0, samples: [] };
 
-  // ¿Cuáles ya tienen edición AR disponible (volumes>0)? El deseado puede ser una
-  // obra mapeada a AniList (anilistId>0) o LOCAL (anilistId negativo = -workId).
+  // Editoriales ARGENTINAS disponibles (volumes>0) por obra. El aviso es "salió
+  // en Argentina", así que SOLO miramos ediciones AR (una deseada de VIZ no lo
+  // dispara). Mapa: anilistId(±) → set de editoriales AR disponibles.
+  const AR_PUBS = ["Ivrea Argentina", "Panini Argentina", "Ovni Press"];
   const ids = [...new Set(pending.map((p) => p.anilistId))];
-  const availSet = new Set<number>();
+  const availPubs = new Map<number, Set<string>>();
+  const add = (id: number, pub: string) => {
+    const s = availPubs.get(id) ?? new Set<string>();
+    s.add(pub);
+    availPubs.set(id, s);
+  };
   const posIds = ids.filter((i) => i > 0);
   const negWorkIds = ids.filter((i) => i < 0).map((i) => -i);
   if (posIds.length) {
     const a = await prisma.publisherEdition.findMany({
-      where: { anilistId: { in: posIds }, volumes: { gt: 0 } },
-      select: { anilistId: true },
-      distinct: ["anilistId"],
+      where: { anilistId: { in: posIds }, publisher: { in: AR_PUBS }, volumes: { gt: 0 } },
+      select: { anilistId: true, publisher: true },
     });
-    for (const x of a) if (x.anilistId != null) availSet.add(x.anilistId);
+    for (const x of a) if (x.anilistId != null) add(x.anilistId, x.publisher);
   }
   if (negWorkIds.length) {
     const a = await prisma.publisherEdition.findMany({
-      where: { workId: { in: negWorkIds }, volumes: { gt: 0 } },
-      select: { workId: true },
-      distinct: ["workId"],
+      where: { workId: { in: negWorkIds }, publisher: { in: AR_PUBS }, volumes: { gt: 0 } },
+      select: { workId: true, publisher: true },
     });
-    for (const x of a) if (x.workId != null) availSet.add(-x.workId);
+    for (const x of a) if (x.workId != null) add(-x.workId, x.publisher);
   }
-  const ready = pending.filter((p) => availSet.has(p.anilistId));
+  // Lista para la edición deseada: "" (cualquiera) → cualquier AR disponible;
+  // edición puntual → su editorial tiene que estar disponible.
+  const ready = pending.filter((p) => {
+    const pubs = availPubs.get(p.anilistId);
+    if (!pubs || pubs.size === 0) return false;
+    if (!p.editionKey) return true;
+    return p.publisher ? pubs.has(p.publisher) : true;
+  });
   if (ready.length === 0) return { scanned: pending.length, notifications: 0, samples: [] };
 
   // Filtro por preferencia de "deseados".

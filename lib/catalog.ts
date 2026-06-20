@@ -454,6 +454,26 @@ export function publisherShort(p: string): string {
   return PUBLISHER_SHORT[p] ?? p;
 }
 
+/** Key estable de edición por editorial (coherente con colección/compras/ficha). */
+export const PUBLISHER_KEY: Record<string, string> = {
+  "Ivrea Argentina": "ivrea",
+  "Panini Argentina": "panini",
+  "Ovni Press": "ovni",
+  "Kemuri Ediciones": "kemuri",
+  "Utopía Editorial": "utopia",
+  "Larp Editores": "larp",
+  "Distrito Manga": "distrito",
+  "Planeta Cómic": "planeta",
+  "VIZ Media": "viz",
+};
+export function publisherKey(p: string): string {
+  return PUBLISHER_KEY[p] ?? "ar";
+}
+/** Región de la edición por editorial (VIZ = internacional). */
+export function publisherRegionOf(p: string): string {
+  return /viz/i.test(p) ? "INT" : "AR";
+}
+
 export interface PurchaseEditionResult {
   id: number; // -workId
   title: string;
