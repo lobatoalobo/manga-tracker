@@ -73,7 +73,25 @@ for (const step of steps) {
   }
 }
 
+// Paso final: espejar PROD → STAGING (Neon branching). Así staging queda fresco
+// DESPUÉS de actualizar prod (lo que el usuario pidió). Solo si hay credenciales
+// de Neon en .env; si no, se saltea sin romper.
+if (env.NEON_API_KEY && env.NEON_PROJECT_ID) {
+  console.log(`\n----- Sync staging (mirror de prod) · ${ts()} -----`);
+  const res = spawnSync(
+    process.execPath,
+    [join(root, "scripts", "sync-staging.mjs"), "--yes"],
+    { cwd: root, stdio: "inherit", env },
+  );
+  if (res.status !== 0) {
+    failed++;
+    console.error(`✗ Sync staging terminó con código ${res.status}.`);
+  } else {
+    console.log("✓ Staging espejado desde prod.");
+  }
+}
+
 console.log(
-  `\n===== Fin · ${ts()} · ${steps.length - failed}/${steps.length} pasos OK =====`,
+  `\n===== Fin · ${ts()} · ${failed === 0 ? "todo OK" : `${failed} fallo(s)`} =====`,
 );
 process.exit(failed ? 1 : 0);
