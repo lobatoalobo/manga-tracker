@@ -1,30 +1,12 @@
-import { Suspense } from "react";
-import { auth } from "@/auth";
-import { BrowseProvider } from "@/components/browse/BrowseProvider";
-import DiscoveryBar from "@/components/browse/DiscoveryBar";
-import { ANILIST_OFF } from "@/lib/flags";
-
 /**
- * Layout compartido por la home y la ficha de serie. La barra de descubrimiento
- * (buscador + modos de AniList) queda fija arriba. Con AniList apagado NO se
- * muestra: el browse/búsqueda local vive en /catalogo.
+ * Layout del grupo (browse): home y ficha de serie. La barra de descubrimiento
+ * de AniList (DiscoveryBar) se removió con el cutover a catálogo local; el
+ * browse/búsqueda vive en /catalogo. No hace falta envoltorio extra.
  */
-export default async function BrowseLayout({
+export default function BrowseLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth();
-  return (
-    <BrowseProvider>
-      {!ANILIST_OFF && (
-        <div className="mx-auto max-w-6xl px-5 pt-6">
-          <Suspense fallback={null}>
-            <DiscoveryBar loggedIn={!!session?.user} />
-          </Suspense>
-        </div>
-      )}
-      {children}
-    </BrowseProvider>
-  );
+  return <>{children}</>;
 }
