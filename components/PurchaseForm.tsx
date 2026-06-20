@@ -51,6 +51,11 @@ const ars = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 0,
 });
 
+// Tope plausible de tomo para una edición (coherente con el server): permite
+// un margen sobre el conteo conocido por si el catálogo está algo atrasado.
+const volCap = (total: number) =>
+  total > 0 ? total + Math.max(5, Math.round(total * 0.3)) : Infinity;
+
 function rowsFrom(initial?: InitialPurchase): ItemRow[] {
   if (!initial || initial.items.length === 0) return [emptyItem()];
   return initial.items.map((i) => ({
@@ -110,6 +115,19 @@ export default function PurchaseForm({
 
   function submit() {
     setError(null);
+    // Bloqueo anti-typo: no se puede cargar un tomo muy por encima del máximo
+    // conocido de la edición (ej. tomo 500 de una serie de 10).
+    const bad = items.find((it) => {
+      const t = it.series.volumes ?? 0;
+      const v = it.volume ? Number(it.volume) : 0;
+      return it.series.title.trim() && v > volCap(t);
+    });
+    if (bad) {
+      setError(
+        `El tomo #${bad.volume} supera el máximo de "${bad.series.title}" (${bad.series.volumes} tomos). Corregí el número.`,
+      );
+      return;
+    }
     const cleanItems = items
       .filter((it) => it.series.title.trim() && it.price !== "")
       .map((it) => ({
@@ -271,12 +289,18 @@ export default function PurchaseForm({
               {(() => {
                 const total = it.series.volumes ?? 0;
                 const v = Number(it.volume) || 0;
-                return total > 0 && v > total ? (
-                  <p className="text-xs text-amber-400">
-                    ⚠️ La edición tiene {total} tomo{total === 1 ? "" : "s"}. ¿Es
-                    correcto el tomo #{v}?
+                if (total <= 0 || v <= total) return null;
+                return v > volCap(total) ? (
+                  <p className="text-xs text-red-400">
+                    ⚠️ El tomo #{v} supera el máximo de la edición ({total}). No vas
+                    a poder guardar hasta corregirlo.
                   </p>
-                ) : null;
+                ) : (
+                  <p className="text-xs text-amber-400">
+                    La edición figura con {total} tomo{total === 1 ? "" : "s"}.
+                    ¿Es correcto el tomo #{v}?
+                  </p>
+                );
               })()}
             </div>
           </div>
