@@ -1,10 +1,3 @@
-import * as cheerio from "cheerio";
-import { getIvreaDataBySlug } from "../lib/providers/ivrea";
-import {
-  upsertPublisherEdition,
-  findOrCreateWork,
-  normalizeTitle,
-} from "../lib/catalog";
 import { seedMangakaIndex } from "../lib/mangakas";
 import { resolveEditionSeries } from "../lib/resolveSeries";
 import {
@@ -12,7 +5,6 @@ import {
   enumeratePublisherEditions,
 } from "../lib/whakoomImport";
 import { logJobRun, groupSkipReasons } from "../lib/jobs";
-import { getRejected } from "../lib/rejectedSources";
 import {
   importVizSeries,
   VIZ_SEED,
@@ -46,30 +38,7 @@ function publisherFromAllUrl(url: string): string | null {
   return null;
 }
 
-const UA = { "User-Agent": "Mozilla/5.0" };
-
-// --- helpers ---------------------------------------------------------------
-
-async function pool<T>(items: T[], limit: number, fn: (item: T, i: number) => Promise<void>) {
-  let i = 0;
-  async function worker() {
-    while (i < items.length) {
-      const idx = i++;
-      try {
-        await fn(items[idx], idx);
-      } catch {
-        /* seguimos */
-      }
-    }
-  }
-  await Promise.all(Array.from({ length: limit }, worker));
-}
-
-function humanize(slug: string): string {
-  return slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-// --- Ivrea: /catalogo/ (500 títulos) -> ficha de cada uno -------------------
+// --- Ivrea: /catalogo/ (lib/ivreaCatalog) ----------------------------------
 
 async function crawlIvrea() {
   console.log("\n=== Ivrea ===");

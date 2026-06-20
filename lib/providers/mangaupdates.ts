@@ -273,7 +273,7 @@ async function getSeries(id: number): Promise<MangaUpdatesData | null> {
  *   "72 Volumes (Complete)\n24 Combini-ban Volumes (Complete)"
  *   "22 Volumes (2000 - Complete)\n11 Kanzenban (2016 - Complete)"
  */
-function parseStatus(status: string): MUFormat[] {
+export function parseStatus(status: string): MUFormat[] {
   return status
     .split("\n")
     .map((l) => l.trim())

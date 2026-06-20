@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getMangaById, searchMangaList } from "@/lib/anilist";
 import { nationalCoversByAnilist, upcomingForIds } from "@/lib/catalog";
+import { isPlausibleVolume } from "@/lib/volumes";
 import type { TrackedEdition, OwnedVolume } from "@prisma/client";
 
 type EditionRow = TrackedEdition & { ownedVolumes: OwnedVolume[] };
@@ -611,8 +612,7 @@ export async function addPurchaseItemToCollection(
   // de 10) y NO debe inflar la colección.
   const vol = item.volume ?? 0;
   const known = row?.volumes ?? 0;
-  const cap = known > 0 ? known + Math.max(5, Math.round(known * 0.3)) : Infinity;
-  const plausible = vol > 0 && vol <= cap; // dentro del margen → se acepta/expande
+  const plausible = isPlausibleVolume(known, vol); // typo (ej. #500 de 10) → no expande
   const total = plausible ? Math.max(known, vol) : known;
   const edition = row
     ? {

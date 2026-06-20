@@ -9,6 +9,7 @@ import {
   PURCHASE_STATUS_META,
   PURCHASE_STATUS_ORDER,
 } from "@/lib/purchaseStatus";
+import { volumeCap } from "@/lib/volumes";
 
 const input =
   "w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent";
@@ -50,11 +51,6 @@ const ars = new Intl.NumberFormat("es-AR", {
   currency: "ARS",
   maximumFractionDigits: 0,
 });
-
-// Tope plausible de tomo para una edición (coherente con el server): permite
-// un margen sobre el conteo conocido por si el catálogo está algo atrasado.
-const volCap = (total: number) =>
-  total > 0 ? total + Math.max(5, Math.round(total * 0.3)) : Infinity;
 
 function rowsFrom(initial?: InitialPurchase): ItemRow[] {
   if (!initial || initial.items.length === 0) return [emptyItem()];
@@ -120,7 +116,7 @@ export default function PurchaseForm({
     const bad = items.find((it) => {
       const t = it.series.volumes ?? 0;
       const v = it.volume ? Number(it.volume) : 0;
-      return it.series.title.trim() && v > volCap(t);
+      return it.series.title.trim() && v > volumeCap(t);
     });
     if (bad) {
       setError(
@@ -290,7 +286,7 @@ export default function PurchaseForm({
                 const total = it.series.volumes ?? 0;
                 const v = Number(it.volume) || 0;
                 if (total <= 0 || v <= total) return null;
-                return v > volCap(total) ? (
+                return v > volumeCap(total) ? (
                   <p className="text-xs text-red-400">
                     ⚠️ El tomo #{v} supera el máximo de la edición ({total}). No vas
                     a poder guardar hasta corregirlo.
