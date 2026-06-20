@@ -12,7 +12,6 @@ import {
   backfillMangadexCovers,
   fillMissingVizCovers,
 } from "../lib/vizImport";
-import { backfillCoversToBlob } from "../lib/coverStore";
 import { crawlIvreaCatalog } from "../lib/ivreaCatalog";
 import {
   detectAndNotifyNewVolumes,
@@ -266,15 +265,6 @@ async function main() {
     const r = await fillMissingVizCovers(limit);
     console.log(
       `\nPortadas VIZ: ${r.filled} rellenadas · ${r.failed} sin fuente · de ${r.scanned}`,
-    );
-    return;
-  }
-  if (which === "covers-blob") {
-    // covers-blob [limit]  → migra portadas externas a Vercel Blob (storage propio)
-    const limit = Number(process.argv[3]) || undefined;
-    const r = await backfillCoversToBlob(limit);
-    console.log(
-      `\nPortadas a Blob: ${r.migrated} migradas · ${r.failed} fallidas · ${r.remaining} restantes`,
     );
     return;
   }

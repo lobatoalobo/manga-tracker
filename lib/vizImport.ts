@@ -1,7 +1,6 @@
 import { getMuLicensed } from "@/lib/providers/mangaupdates";
 import { getMangaDex } from "@/lib/providers/mangadex";
 import { googleBooksVizTitles } from "@/lib/providers/googleBooks";
-import { storeCover } from "@/lib/coverStore";
 import {
   findOrCreateWork,
   upsertPublisherEdition,
@@ -318,11 +317,12 @@ export async function fillMissingVizCovers(
     const titles = [...new Set([w.originalTitle, w.title].filter(Boolean))] as string[];
     let stored: string | null = null;
     try {
+      // Sin storage propio: MU directo (hotlink-OK) o MD por el proxy /api/cover.
       const mu = await getMuLicensed(titles).catch(() => null);
-      if (mu?.coverImage) stored = await storeCover(mu.coverImage);
+      if (mu?.coverImage) stored = proxiedCover(mu.coverImage);
       if (!stored) {
         const md = await getMangaDex(titles).catch(() => null);
-        if (md?.coverImage) stored = await storeCover(md.coverImage);
+        if (md?.coverImage) stored = proxiedCover(md.coverImage);
       }
       if (stored) {
         await prisma.work.update({ where: { id: w.id }, data: { coverImage: stored } });
