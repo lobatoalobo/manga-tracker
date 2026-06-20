@@ -181,8 +181,10 @@ export async function importVizSeries(
   if (mu.genres.some((g) => HENTAI.test(g)))
     return { ok: false, reason: "bloqueado (hentai/doujin)" };
 
-  // MD da mejores portadas pero bloquea hotlinking → la servimos por proxy.
-  const cover = proxiedCover(md?.coverImage ?? mu.coverImage ?? null);
+  // MU primero: su CDN es hotlink-OK y estable; MD bloquea hotlinking y a veces
+  // sirve covers viejas con 400. (Cualquier URL de MD que quede va por proxy y la
+  // migración a Blob la termina de blindar.)
+  const cover = proxiedCover(mu.coverImage ?? md?.coverImage ?? null);
   const rawGenres = [...mu.genres, ...(md?.genres ?? [])];
   const { genres, demographic } = normalizeGenres(rawGenres);
 
