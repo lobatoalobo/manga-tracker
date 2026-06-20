@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { workCardFlags, publisherKey } from "@/lib/catalog";
 import { volumeCap, isPlausibleVolume } from "@/lib/volumes";
 import { parseStatus } from "@/lib/providers/mangaupdates";
+import { chooseIvreaEdition, type EdLite } from "@/lib/ivreaProximas";
 
 // Reglas que se rompieron en producción y NO deben volver a romperse.
 
@@ -67,6 +68,44 @@ describe("volumeCap / isPlausibleVolume (anti-typo de compra)", () => {
   it("escala con series largas", () => {
     expect(isPlausibleVolume(100, 120)).toBe(true); // 100 + 30%
     expect(isPlausibleVolume(100, 200)).toBe(false);
+  });
+});
+
+describe("chooseIvreaEdition (mapeo tarjeta /proximas/ → edición)", () => {
+  const nge: EdLite[] = [
+    { id: 60, slug: "evangelion", title: "Neon Genesis Evangelion" },
+    { id: 964, slug: "neon-genesis-evangelion-edicion-deluxe", title: "Neon Genesis Evangelion - Edición Deluxe" },
+    { id: 963, slug: "neon-genesis-evangelion-collector-s-edition", title: "Neon Genesis Evangelion - Collector's Edition" },
+  ];
+
+  it("reedición 'ED. DELUXE' va a la Deluxe, no a la común (slug genérico)", () => {
+    // El card linkea a /titulo/evangelion/ (común) pero el título dice Deluxe.
+    const ed = chooseIvreaEdition("NEON GENESIS EVANGELION ED. DELUXE", "evangelion", nge);
+    expect(ed?.id).toBe(964);
+  });
+
+  it("card corto matchea el título largo (JoJolion)", () => {
+    const eds: EdLite[] = [
+      { id: 917, slug: "jojo-s-bizarre-adventure-part-viii-jojolion", title: "Jojo's Bizarre Adventure - Part VIII: JoJolion" },
+      { id: 5, slug: "bleach", title: "Bleach" },
+    ];
+    expect(chooseIvreaEdition("JOJOLION", null, eds)?.id).toBe(917);
+  });
+
+  it("Bleach Remix no cae en Bleach (regresión)", () => {
+    const eds: EdLite[] = [
+      { id: 213, slug: "bleach", title: "Bleach" },
+      { id: 1386, slug: "bleach-remix", title: "Bleach Remix" },
+    ];
+    expect(chooseIvreaEdition("BLEACH REMIX", "bleach", eds)?.id).toBe(1386);
+  });
+
+  it("tomo normal de Bleach va a Bleach (no a Remix)", () => {
+    const eds: EdLite[] = [
+      { id: 213, slug: "bleach", title: "Bleach" },
+      { id: 1386, slug: "bleach-remix", title: "Bleach Remix" },
+    ];
+    expect(chooseIvreaEdition("Bleach", "bleach", eds)?.id).toBe(213);
   });
 });
 

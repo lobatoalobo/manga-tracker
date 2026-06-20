@@ -23,6 +23,52 @@ function kindOf(c: IvreaProxima): string {
   return "volume";
 }
 
+export interface EdLite {
+  id: number;
+  slug: string | null;
+  title: string;
+}
+
+/**
+ * Elige la edición de Ivrea para una tarjeta de /proximas/. El slug del link a
+ * veces es genérico (la reedición "NGE ED. DELUXE" linkea a /titulo/evangelion/,
+ * la común), así que preferimos el match por TÍTULO usando el RECALL de los
+ * tokens de la tarjeta: la edición que cubre más palabras del card gana, y a
+ * igualdad, la más precisa (menos tokens de más). Cubre abreviaturas
+ * ("ED. DELUXE" → "Edición Deluxe") y cards cortos ("JOJOLION" → título largo).
+ */
+export function chooseIvreaEdition(
+  cardTitle: string,
+  cardSlug: string | null,
+  editions: EdLite[],
+): EdLite | null {
+  const norm = normalizeTitle(cardTitle);
+  const slugEd = cardSlug
+    ? (editions.find((e) => e.slug === cardSlug) ?? null)
+    : null;
+
+  // 1) Exacto e inequívoco.
+  const exact = editions.filter((e) => normalizeTitle(e.title) === norm);
+  if (exact.length === 1) return exact[0];
+
+  // 2) Recall de tokens del card; desempate por menos tokens de más.
+  const cardTokens = norm.split(" ").filter(Boolean);
+  if (cardTokens.length === 0) return slugEd;
+  const measure = (e: EdLite) => {
+    const et = new Set(normalizeTitle(e.title).split(" ").filter(Boolean));
+    let covered = 0;
+    for (const t of cardTokens) if (et.has(t)) covered++;
+    return { recall: covered / cardTokens.length, extra: et.size - covered };
+  };
+  const ranked = editions
+    .map((e) => ({ e, ...measure(e) }))
+    .sort((a, b) => b.recall - a.recall || a.extra - b.extra);
+  const best = ranked[0];
+  if (!best || best.recall < 0.5) return slugEd; // sin match confiable
+  const slugRecall = slugEd ? measure(slugEd).recall : -1;
+  return best.recall >= slugRecall ? best.e : slugEd;
+}
+
 /**
  * Refresca todo lo que sale de la página de próximas salidas de Ivrea (única
  * fuente del sistema de próximos por ahora):
@@ -40,28 +86,17 @@ export async function reconcileIvreaProximas(
 ): Promise<ProximasResult> {
   const cards = await getIvreaProximas();
 
-  // Mapa de ediciones de Ivrea por slug y por título normalizado. El slug del
-  // link de /proximas/ a veces es genérico (ej. la reedición "BLEACH REMIX"
-  // linkea a /titulo/bleach/ → slug "bleach", la edición equivocada), así que
-  // cuando el TÍTULO de la tarjeta matchea exactamente UNA sola edición, esa gana.
+  // Ediciones de Ivrea; mapeamos cada tarjeta a una con chooseIvreaEdition
+  // (match por título, robusto a slug genérico y abreviaturas).
   const editions = await prisma.publisherEdition.findMany({
     where: { publisher: "Ivrea Argentina" },
     select: { id: true, slug: true, title: true, anilistId: true, workId: true },
   });
-  const bySlug = new Map(editions.map((e) => [e.slug, e]));
-  const byNormTitle = new Map<string, typeof editions>();
-  for (const e of editions) {
-    const k = normalizeTitle(e.title);
-    const arr = byNormTitle.get(k) ?? [];
-    arr.push(e);
-    byNormTitle.set(k, arr);
-  }
+  const byId = new Map(editions.map((e) => [e.id, e]));
 
   const rows = cards.map((c) => {
-    const slugEd = c.slug ? bySlug.get(c.slug) : undefined;
-    const titleMatch = byNormTitle.get(normalizeTitle(c.title)) ?? [];
-    // Título inequívoco (1 sola edición) tiene prioridad sobre el slug del link.
-    const ed = titleMatch.length === 1 ? titleMatch[0] : slugEd;
+    const picked = chooseIvreaEdition(c.title, c.slug, editions);
+    const ed = picked ? byId.get(picked.id) : undefined;
     return {
       slug: c.slug,
       title: c.title,
