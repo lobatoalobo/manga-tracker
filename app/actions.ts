@@ -513,6 +513,18 @@ export async function runCrawlAction(job: string) {
   return dispatchCrawl(job);
 }
 
+/** Admin: prende/apaga una feature flag (sin redeploy). */
+export async function setFlagAction(key: string, enabled: boolean) {
+  await assertAdmin();
+  await prisma.featureFlag.upsert({
+    where: { key },
+    update: { enabled },
+    create: { key, enabled },
+  });
+  revalidatePath("/catalogo");
+  revalidatePath("/admin/flags");
+}
+
 /** Admin: importa una edición puntual desde una URL de Whakoom. */
 export async function importWhakoomUrlAction(url: string) {
   await assertAdmin();
