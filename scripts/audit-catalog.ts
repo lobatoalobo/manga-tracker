@@ -29,12 +29,12 @@ const titles = (ws: { title: string }[]) => ws.slice(0, 8).map((w) => w.title);
 
 const checks: Check[] = [
   {
-    name: "empty-visible",
-    detail: "obras que el catálogo MUESTRA (pasan el gate) pero sin tomos ni 'próximo' — el gate falló",
-    critical: true,
+    name: "no-tomos",
+    detail: "obras visibles sin tomos publicados y sin 'próximo' (necesitan conteo o Work.type)",
+    critical: false,
     run: async () => {
-      // Verifica el INVARIANTE del gate: si una obra pasa inCatalogWhere, debe
-      // tener tomos publicados o ser preventa. Si aparece acá, el gate se rompió.
+      // Se MUESTRAN (no se ocultan), pero conviene saber cuáles tienen 0 tomos
+      // para conseguirles el conteo (crawl/enrich) o tiparlas (novela/artbook).
       const ws = await prisma.work.findMany({
         where: {
           AND: [

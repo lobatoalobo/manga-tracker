@@ -50,17 +50,13 @@ export const VISIBLE_PUBLISHERS = [
 export function inCatalogWhere(): import("@prisma/client").Prisma.WorkWhereInput {
   return {
     OR: [
-      // Tiene una edición visible (Ivrea/VIZ) con tomos PUBLICADOS. El requisito
-      // volumes>0 evita mostrar obras vacías importadas sin conteo (ej. novelas/
-      // artbooks de Whakoom mapeados a Ivrea con 0 tomos) → "no tiene tomos".
-      {
-        editions: {
-          some: { publisher: { in: [...VISIBLE_PUBLISHERS] }, volumes: { gt: 0 } },
-        },
-      },
-      // O es una PREVENTA: anunciado (upcoming) y todavía sin ningún tomo
-      // publicado (se muestra con el chip "próximo a salir").
-      { upcoming: true, editions: { none: { volumes: { gt: 0 } } } },
+      // Tiene una edición visible (Ivrea/VIZ). NO exigimos volumes>0: una serie
+      // real puede tener 0 tomos por un gap de conteo (Whakoom) o por ser
+      // reciente — mejor mostrarla que hacerla desaparecer. (El conteo lo arregla
+      // el crawl; el caso novela/artbook se resuelve con Work.type, no ocultando.)
+      { editions: { some: { publisher: { in: [...VISIBLE_PUBLISHERS] } } } },
+      // O es un debut GENUINO: próximo a salir y sin NINGUNA edición todavía.
+      { upcoming: true, editions: { none: {} } },
     ],
   };
 }
