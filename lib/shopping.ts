@@ -109,7 +109,11 @@ export async function getShoppingCount(
   userId: string,
 ): Promise<{ series: number; tomos: number }> {
   const eds = await prisma.trackedEdition.findMany({
-    where: { region: "AR", totalVolumes: { gt: 0 }, manga: { userId } },
+    where: {
+      region: { in: ["AR", "INT"] }, // AR (Ivrea) + INT (VIZ)
+      totalVolumes: { gt: 0 },
+      manga: { userId },
+    },
     select: { totalVolumes: true, _count: { select: { ownedVolumes: true } } },
   });
   let series = 0;
@@ -132,7 +136,7 @@ export async function getShoppingList(userId: string): Promise<ShoppingItem[]> {
   const items = await getCollectionItems(userId);
   const incomplete = items.filter(
     (i) =>
-      i.edition.region === "AR" &&
+      (i.edition.region === "AR" || i.edition.region === "INT") &&
       i.edition.totalVolumes > 0 &&
       i.edition.ownedVolumes.length < i.edition.totalVolumes,
   );
