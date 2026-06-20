@@ -33,6 +33,21 @@ export function isStoredCover(url: string | null | undefined): boolean {
   }
 }
 
+/**
+ * ¿La fuente está DEFINITIVAMENTE rota (4xx)? Solo entonces conviene nullear la
+ * portada (un error de red / 5xx es transitorio y se reintenta). MD a veces
+ * sirve covers viejas con 400.
+ */
+async function isDeadSource(url: string): Promise<boolean> {
+  const src = realSource(url);
+  try {
+    const r = await fetch(src, { headers: { "User-Agent": "Mozilla/5.0" } });
+    return r.status >= 400 && r.status < 500;
+  } catch {
+    return false; // red/timeout → transitorio, no nullear
+  }
+}
+
 /** Desenvuelve el proxy `/api/cover?u=<real>` para bajar la imagen original. */
 function realSource(url: string): string {
   try {
@@ -131,6 +146,11 @@ export async function backfillCoversToBlob(
         migrated++;
       } else if (!url) {
         failed++;
+        // Fuente rota definitiva (4xx) → nulleamos (degrada a placeholder) para
+        // no reintentarla en cada corrida. Transitorios se reintentan.
+        if (w.coverImage && (await isDeadSource(w.coverImage))) {
+          await prisma.work.update({ where: { id: w.id }, data: { coverImage: null } });
+        }
       }
     } catch {
       failed++;
