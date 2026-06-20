@@ -1,6 +1,29 @@
 import { prisma } from "@/lib/prisma";
 import { looksLikeComic } from "@/lib/comicTerms";
 import { rejectEditions } from "@/lib/rejectedSources";
+/**
+ * ¿El nombre de autor `target` está en el string de autores `field` por NOMBRE
+ * (todos sus tokens presentes), no por substring? Evita que "ONE" matchee
+ * "BONES"/"Kurone". Maneja el orden y el formato "Apellido, Nombre".
+ */
+export function authorNameMatches(
+  target: string,
+  field: string | null | undefined,
+): boolean {
+  if (!field) return false;
+  const tok = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9 ]/g, " ")
+      .split(/\s+/)
+      .filter((t) => t.length >= 2);
+  const t = tok(target);
+  if (t.length === 0) return false;
+  const all = new Set(tok(field));
+  return t.every((x) => all.has(x));
+}
 
 export const PUBLISHERS = [
   "Ivrea Argentina",
@@ -414,7 +437,7 @@ export interface AuthorWork {
 }
 
 export async function getWorksByAuthor(name: string): Promise<AuthorWork[]> {
-  const works = await prisma.work.findMany({
+  const candidates = await prisma.work.findMany({
     where: { author: { contains: name, mode: "insensitive" }, ...inCatalogWhere() },
     orderBy: { normTitle: "asc" },
     select: {
@@ -422,9 +445,13 @@ export async function getWorksByAuthor(name: string): Promise<AuthorWork[]> {
       title: true,
       coverImage: true,
       upcoming: true,
+      author: true,
       editions: { select: { publisher: true, volumes: true } },
     },
   });
+  // `contains` matchea substrings (ej. "ONE" cae en "BONES"/"Kurone"). Filtramos
+  // por NOMBRE de autor (tokens exactos), no substring, para evitar falsos positivos.
+  const works = candidates.filter((w) => authorNameMatches(name, w.author));
   // Mismas banderas que el catálogo (helper único, no hardcodear Ivrea).
   return works.map((w) => {
     const { national, intl, publishers } = workCardFlags(w.editions, w.upcoming);
