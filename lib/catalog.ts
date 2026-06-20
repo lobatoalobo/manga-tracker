@@ -403,15 +403,46 @@ export async function getLocalAuthors(): Promise<{ name: string; count: number }
 }
 
 /** Obras de un autor (match por substring en `Work.author`). */
-export async function getWorksByAuthor(
-  name: string,
-): Promise<{ id: number; title: string; coverImage: string | null }[]> {
+export interface AuthorWork {
+  id: number;
+  title: string;
+  coverImage: string | null;
+  national: boolean;
+  intl: boolean;
+  publishers: string[];
+}
+
+export async function getWorksByAuthor(name: string): Promise<AuthorWork[]> {
   const works = await prisma.work.findMany({
     where: { author: { contains: name, mode: "insensitive" }, ...inCatalogWhere() },
     orderBy: { normTitle: "asc" },
-    select: { id: true, title: true, coverImage: true },
+    select: {
+      id: true,
+      title: true,
+      coverImage: true,
+      upcoming: true,
+      editions: { select: { publisher: true, volumes: true } },
+    },
   });
-  return works;
+  // Mismas banderas que el catálogo (no hardcodear Ivrea: una obra puede ser
+  // solo VIZ → debe mostrar US, no AR).
+  return works.map((w) => {
+    const isUpcoming = w.upcoming && !w.editions.some((e) => e.volumes > 0);
+    return {
+      id: w.id,
+      title: w.title,
+      coverImage: w.coverImage,
+      national: isUpcoming || w.editions.some((e) => AR_PUBLISHERS.has(e.publisher)),
+      intl: w.editions.some((e) => INTL_SET.has(e.publisher)),
+      publishers: [
+        ...new Set(
+          w.editions
+            .filter((e) => (VISIBLE_PUBLISHERS as readonly string[]).includes(e.publisher))
+            .map((e) => e.publisher),
+        ),
+      ],
+    };
+  });
 }
 
 /**
