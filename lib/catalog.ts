@@ -481,6 +481,7 @@ export interface PurchaseEditionResult {
   publisher: string | null; // editorial de ESTA entrada (null = obra sin edición)
   label: string; // "Título — Editorial"
   intl: boolean; // edición internacional (VIZ)
+  volumes: number; // tomos conocidos de la edición (para validar el # de tomo)
 }
 
 /**
@@ -513,19 +514,19 @@ export async function searchPurchaseEditions(
       id: true,
       title: true,
       coverImage: true,
-      editions: { select: { publisher: true } },
+      editions: { select: { publisher: true, volumes: true } },
     },
   });
 
   const out: PurchaseEditionResult[] = [];
   for (const w of works) {
-    const pubs = [
-      ...new Set(
-        w.editions
-          .map((e) => e.publisher)
-          .filter((p) => (VISIBLE_PUBLISHERS as readonly string[]).includes(p)),
-      ),
-    ];
+    // Tomos por editorial (la de más tomos si hubiera varias del mismo publisher).
+    const volsByPub = new Map<string, number>();
+    for (const e of w.editions) {
+      if (!(VISIBLE_PUBLISHERS as readonly string[]).includes(e.publisher)) continue;
+      volsByPub.set(e.publisher, Math.max(volsByPub.get(e.publisher) ?? 0, e.volumes));
+    }
+    const pubs = [...volsByPub.keys()];
     if (pubs.length === 0) {
       // Debut sin edición cargada: una sola entrada sin editorial.
       out.push({
@@ -535,6 +536,7 @@ export async function searchPurchaseEditions(
         publisher: null,
         label: w.title,
         intl: false,
+        volumes: 0,
       });
       continue;
     }
@@ -546,6 +548,7 @@ export async function searchPurchaseEditions(
         publisher: p,
         label: `${w.title} — ${publisherShort(p)}`,
         intl: INTL_SET.has(p),
+        volumes: volsByPub.get(p) ?? 0,
       });
     }
   }

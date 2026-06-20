@@ -268,6 +268,16 @@ export default function PurchaseForm({
                   className={input}
                 />
               </div>
+              {(() => {
+                const total = it.series.volumes ?? 0;
+                const v = Number(it.volume) || 0;
+                return total > 0 && v > total ? (
+                  <p className="text-xs text-amber-400">
+                    ⚠️ La edición tiene {total} tomo{total === 1 ? "" : "s"}. ¿Es
+                    correcto el tomo #{v}?
+                  </p>
+                ) : null;
+              })()}
             </div>
           </div>
         ))}

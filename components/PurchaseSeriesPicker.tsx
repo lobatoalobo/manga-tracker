@@ -10,6 +10,7 @@ export interface SeriesValue {
   anilistId: number | null;
   coverImage: string | null;
   publisher?: string | null; // editorial elegida (de la entrada por edición)
+  volumes?: number; // tomos conocidos de la edición (para validar el # de tomo)
 }
 
 type Result = {
@@ -19,6 +20,7 @@ type Result = {
   publisher: string | null;
   label: string;
   intl: boolean;
+  volumes: number;
 };
 
 const input =
@@ -120,6 +122,7 @@ export default function PurchaseSeriesPicker({
                     anilistId: r.id,
                     coverImage: r.coverImage,
                     publisher: r.publisher,
+                    volumes: r.volumes,
                   });
                   setOpen(false);
                 }}

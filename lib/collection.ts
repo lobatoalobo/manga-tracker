@@ -605,9 +605,15 @@ export async function addPurchaseItemToCollection(
   const rows = await purchaseEditionRows(item.anilistId);
   const row = chooseRow(rows, item.edition);
 
-  // El tomo comprado puede superar el conteo cacheado de la edición (catálogo
-  // desactualizado); en ese caso ampliamos el total para que el tomo se vea.
+  // El tomo comprado puede superar el conteo cacheado (catálogo algo
+  // desactualizado) y en ese caso ampliamos el total. PERO con un tope: un tomo
+  // muy por encima del conocido es un error de carga (ej. tomo 500 de una serie
+  // de 10) y NO debe inflar la colección.
   const vol = item.volume ?? 0;
+  const known = row?.volumes ?? 0;
+  const cap = known > 0 ? known + Math.max(5, Math.round(known * 0.3)) : Infinity;
+  const plausible = vol > 0 && vol <= cap; // dentro del margen → se acepta/expande
+  const total = plausible ? Math.max(known, vol) : known;
   const edition = row
     ? {
         key: purchaseKey(row, item.edition),
@@ -615,7 +621,7 @@ export async function addPurchaseItemToCollection(
         publisher: row.publisher,
         slug: row.slug,
         region: publisherRegion(row.publisher),
-        totalVolumes: Math.max(row.volumes, vol),
+        totalVolumes: total,
       }
     : {
         key: purchaseKey(null, item.edition),
@@ -623,7 +629,7 @@ export async function addPurchaseItemToCollection(
         publisher: item.edition || null,
         slug: null,
         region: publisherRegion(item.edition),
-        totalVolumes: vol,
+        totalVolumes: plausible ? vol : 0,
       };
 
   await addEdition(userId, {
@@ -633,7 +639,8 @@ export async function addPurchaseItemToCollection(
     edition,
   });
 
-  if (!item.volume) return;
+  // Tomo implausible (typo) → agregamos la edición pero NO el tomo dueño.
+  if (!item.volume || !plausible) return;
 
   const manga = await prisma.manga.findUnique({
     where: { userId_anilistId: { userId, anilistId: item.anilistId } },

@@ -944,6 +944,7 @@ export async function searchPurchaseSeriesAction(query: string) {
     publisher: null as string | null,
     label: (m.title?.english || m.title?.romaji || m.title?.native) as string,
     intl: false,
+    volumes: (m.volumes ?? 0) as number,
   }));
 }
 
