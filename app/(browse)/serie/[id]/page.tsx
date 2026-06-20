@@ -150,17 +150,15 @@ export default async function SeriePage({
   // Internacional (VIZ): mismas obras, sección aparte. Se muestran junto a las
   // de Ivrea cuando una obra está en ambos catálogos (Work unificado).
   const intlEditions = work.editions.filter((e) => INTL_SET.has(e.publisher));
-  // La obra es visible si tiene edición de Ivrea, edición internacional, o es un
-  // debut GENUINO (próximo + sin ninguna edición). Una obra solo de otra
-  // editorial nacional (ej. Kemuri) NO es visible → 404.
-  const genuineDebut = work.upcoming && work.editions.length === 0;
-  if (
-    ivreaEditions.length === 0 &&
-    intlEditions.length === 0 &&
-    !genuineDebut
-  )
-    notFound();
+  // La obra es visible si tiene una edición visible (Ivrea/VIZ) con tomos
+  // PUBLICADOS, o es una preventa (anunciada, sin ningún tomo todavía). Una obra
+  // vacía (0 tomos y no anunciada — ej. novela/artbook de Whakoom sin conteo) o
+  // solo de otra editorial → 404.
   const shownEditions = [...ivreaEditions, ...intlEditions];
+  const hasPublished = shownEditions.some((e) => e.volumes > 0);
+  const isPreventa = work.upcoming && !work.editions.some((e) => e.volumes > 0);
+  const genuineDebut = work.upcoming && work.editions.length === 0;
+  if (!hasPublished && !isPreventa) notFound();
   // Guard: una obra con edición publicada (volumes>0) NO es "próximo a salir".
   const upcoming = work.upcoming && !work.editions.some((e) => e.volumes > 0);
   // Nacional = edición argentina (Ivrea) o debut genuino de Ivrea.

@@ -50,12 +50,17 @@ export const VISIBLE_PUBLISHERS = [
 export function inCatalogWhere(): import("@prisma/client").Prisma.WorkWhereInput {
   return {
     OR: [
-      // Tiene edición de una editorial visible (Ivrea nacional o VIZ internacional).
-      { editions: { some: { publisher: { in: [...VISIBLE_PUBLISHERS] } } } },
-      // O es un debut GENUINO: próximo a salir y sin NINGUNA edición todavía.
-      // (Una obra con edición de otra editorial —ej. Kemuri— NO entra aunque
-      // tenga el flag upcoming por un match dudoso del reconcile.)
-      { upcoming: true, editions: { none: {} } },
+      // Tiene una edición visible (Ivrea/VIZ) con tomos PUBLICADOS. El requisito
+      // volumes>0 evita mostrar obras vacías importadas sin conteo (ej. novelas/
+      // artbooks de Whakoom mapeados a Ivrea con 0 tomos) → "no tiene tomos".
+      {
+        editions: {
+          some: { publisher: { in: [...VISIBLE_PUBLISHERS] }, volumes: { gt: 0 } },
+        },
+      },
+      // O es una PREVENTA: anunciado (upcoming) y todavía sin ningún tomo
+      // publicado (se muestra con el chip "próximo a salir").
+      { upcoming: true, editions: { none: { volumes: { gt: 0 } } } },
     ],
   };
 }
