@@ -424,24 +424,10 @@ export async function getWorksByAuthor(name: string): Promise<AuthorWork[]> {
       editions: { select: { publisher: true, volumes: true } },
     },
   });
-  // Mismas banderas que el catálogo (no hardcodear Ivrea: una obra puede ser
-  // solo VIZ → debe mostrar US, no AR).
+  // Mismas banderas que el catálogo (helper único, no hardcodear Ivrea).
   return works.map((w) => {
-    const isUpcoming = w.upcoming && !w.editions.some((e) => e.volumes > 0);
-    return {
-      id: w.id,
-      title: w.title,
-      coverImage: w.coverImage,
-      national: isUpcoming || w.editions.some((e) => AR_PUBLISHERS.has(e.publisher)),
-      intl: w.editions.some((e) => INTL_SET.has(e.publisher)),
-      publishers: [
-        ...new Set(
-          w.editions
-            .filter((e) => (VISIBLE_PUBLISHERS as readonly string[]).includes(e.publisher))
-            .map((e) => e.publisher),
-        ),
-      ],
-    };
+    const { national, intl, publishers } = workCardFlags(w.editions, w.upcoming);
+    return { id: w.id, title: w.title, coverImage: w.coverImage, national, intl, publishers };
   });
 }
 
@@ -605,6 +591,35 @@ const AR_PUBLISHERS = new Set<string>(PUBLISHERS);
 const INTL_SET = new Set<string>(INTL_PUBLISHERS);
 
 /**
+ * Banderas y editoriales visibles de una obra. ÚNICA fuente de verdad para las
+ * cards (catálogo, autor, etc.) → no se desincronizan.
+ * - `national` = tiene edición Ivrea (la AR visible) o es un debut GENUINO
+ *   (anunciado y SIN ninguna edición). NO se marca nacional por el flag
+ *   `upcoming` si ya tiene otra edición (ej. una obra solo-VIZ no es AR).
+ * - `intl` = tiene edición VIZ.
+ * - `isUpcoming` = badge "próximo a salir" (anunciado y sin tomos publicados).
+ */
+export function workCardFlags(
+  editions: { publisher: string; volumes: number }[],
+  upcoming: boolean,
+): { national: boolean; intl: boolean; isUpcoming: boolean; publishers: string[] } {
+  const genuineDebut = upcoming && editions.length === 0;
+  const isUpcoming = upcoming && !editions.some((e) => e.volumes > 0);
+  const national =
+    genuineDebut ||
+    editions.some((e) => (CATALOG_PUBLISHERS as readonly string[]).includes(e.publisher));
+  const intl = editions.some((e) => INTL_SET.has(e.publisher));
+  const publishers = [
+    ...new Set(
+      editions
+        .filter((e) => (VISIBLE_PUBLISHERS as readonly string[]).includes(e.publisher))
+        .map((e) => e.publisher),
+    ),
+  ];
+  return { national, intl, isUpcoming, publishers };
+}
+
+/**
  * Browse/búsqueda del catálogo LOCAL (`Work`), sin AniList. `tab`:
  *  - "az" (default): alfabético.
  *  - "series": próximas SERIES (debuts marcados `upcoming`, desde /news/).
@@ -725,27 +740,15 @@ export async function browseWorks(opts: {
     const reissue: { volume: number | null; date: Date } | null = reissueRel
       ? { volume: reissueRel.volume, date: reissueRel.date }
       : null;
-    // Guard: una obra con edición publicada (volumes>0) NO es "próximo a salir",
-    // aunque el flag `upcoming` haya quedado viejo (se setea entre crawls).
-    const isUpcoming = w.upcoming && !w.editions.some((e) => e.volumes > 0);
+    const flags = workCardFlags(w.editions, w.upcoming);
     return {
       id: w.id,
       title: w.title,
       coverImage: w.coverImage,
-      publishers: [
-        ...new Set(
-          w.editions
-            .filter((e) =>
-              (VISIBLE_PUBLISHERS as readonly string[]).includes(e.publisher),
-            )
-            .map((e) => e.publisher),
-        ),
-      ],
-      // Banderas (no excluyentes): una obra puede tener edición nacional Y
-      // internacional. Nacional = edición AR o debut/próxima de Ivrea.
-      national: isUpcoming || w.editions.some((e) => AR_PUBLISHERS.has(e.publisher)),
-      intl: w.editions.some((e) => INTL_SET.has(e.publisher)),
-      upcoming: isUpcoming,
+      publishers: flags.publishers,
+      national: flags.national,
+      intl: flags.intl,
+      upcoming: flags.isUpcoming,
       releaseLabel: w.releaseLabel,
       genres: w.genres,
       demographic: w.demographic,

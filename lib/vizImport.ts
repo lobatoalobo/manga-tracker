@@ -1,6 +1,7 @@
 import { getMuLicensed } from "@/lib/providers/mangaupdates";
 import { getMangaDex } from "@/lib/providers/mangadex";
 import { googleBooksVizTitles } from "@/lib/providers/googleBooks";
+import { storeCover } from "@/lib/coverStore";
 import {
   findOrCreateWork,
   upsertPublisherEdition,
@@ -293,6 +294,46 @@ export async function backfillMangadexCovers(): Promise<number> {
     }
   }
   return n;
+}
+
+/**
+ * Rellena portadas faltantes de obras VIZ (las que perdieron la portada de MD
+ * rota). Re-resuelve contra MU (CDN propio, hotlink-OK) y, si no, MD fresco, y
+ * guarda en Blob propio. Idempotente (solo procesa las que están en null).
+ */
+export async function fillMissingVizCovers(
+  limit?: number,
+): Promise<{ scanned: number; filled: number; failed: number }> {
+  const works = await prisma.work.findMany({
+    where: { coverImage: null, editions: { some: { publisher: VIZ } } },
+    select: { id: true, title: true, originalTitle: true },
+    orderBy: { id: "asc" },
+    ...(limit ? { take: limit } : {}),
+  });
+  let filled = 0;
+  let failed = 0;
+  for (const w of works) {
+    const titles = [...new Set([w.originalTitle, w.title].filter(Boolean))] as string[];
+    let stored: string | null = null;
+    try {
+      const mu = await getMuLicensed(titles).catch(() => null);
+      if (mu?.coverImage) stored = await storeCover(mu.coverImage);
+      if (!stored) {
+        const md = await getMangaDex(titles).catch(() => null);
+        if (md?.coverImage) stored = await storeCover(md.coverImage);
+      }
+      if (stored) {
+        await prisma.work.update({ where: { id: w.id }, data: { coverImage: stored } });
+        filled++;
+      } else {
+        failed++;
+      }
+    } catch {
+      failed++;
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  return { scanned: works.length, filled, failed };
 }
 
 export interface VizDiscoverResult {

@@ -18,6 +18,7 @@ import {
   VIZ_SEED,
   discoverVizFromGoogleBooks,
   backfillMangadexCovers,
+  fillMissingVizCovers,
 } from "../lib/vizImport";
 import { backfillCoversToBlob } from "../lib/coverStore";
 import {
@@ -379,6 +380,15 @@ async function main() {
     // viz-covers  → reescribe al proxy las portadas de MangaDex ya guardadas
     const n = await backfillMangadexCovers();
     console.log(`\nPortadas de MangaDex reescritas al proxy: ${n}`);
+    return;
+  }
+  if (which === "viz-fillcovers") {
+    // viz-fillcovers [limit]  → rellena portadas faltantes de obras VIZ (MU/MD → Blob)
+    const limit = Number(process.argv[3]) || undefined;
+    const r = await fillMissingVizCovers(limit);
+    console.log(
+      `\nPortadas VIZ: ${r.filled} rellenadas · ${r.failed} sin fuente · de ${r.scanned}`,
+    );
     return;
   }
   if (which === "covers-blob") {
