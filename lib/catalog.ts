@@ -666,10 +666,14 @@ export async function browseWorks(opts: {
     // tiene una edición (de Ivrea o de otra editorial), no es un debut próximo.
     conds.push({ upcoming: true, editions: { none: {} } });
   } else if (opts.tab === "tomos") {
-    // Próximos TOMOS: obras con una salida futura (vía edición→work). Incluye
-    // reediciones (tomos agotados que vuelven); en la card se distinguen con chip.
+    // Próximos TOMOS: obras con un tomo nuevo o reedición futura (vía edición→
+    // work). NO incluye debuts/oneshots (esos son "series nuevas", otro tab/chip).
     const rel = await prisma.ivreaRelease.findMany({
-      where: { editionId: { not: null }, releaseDate: { gte: today } },
+      where: {
+        editionId: { not: null },
+        kind: { in: ["volume", "reissue"] },
+        releaseDate: { gte: today },
+      },
       select: { editionId: true },
     });
     const edIds = [...new Set(rel.map((r) => r.editionId as number))];
@@ -711,7 +715,11 @@ export async function browseWorks(opts: {
   const allEdIds = works.flatMap((w) => w.editions.map((e) => e.id));
   const rel = allEdIds.length
     ? await prisma.ivreaRelease.findMany({
-        where: { editionId: { in: allEdIds }, releaseDate: { gte: today } },
+        where: {
+          editionId: { in: allEdIds },
+          kind: { in: ["volume", "reissue"] }, // NO debut/oneshot (son "nueva serie")
+          releaseDate: { gte: today },
+        },
         orderBy: { releaseDate: "asc" },
         select: { editionId: true, volume: true, releaseDate: true, kind: true },
       })
@@ -773,7 +781,7 @@ export async function nextIvreaRelease(
 ): Promise<{ volume: number | null; date: Date } | null> {
   const today = new Date(new Date().toISOString().slice(0, 10));
   const r = await prisma.ivreaRelease.findFirst({
-    where: { anilistId, kind: { not: "reissue" }, releaseDate: { gte: today } },
+    where: { anilistId, kind: "volume", releaseDate: { gte: today } },
     orderBy: { releaseDate: "asc" },
     select: { volume: true, releaseDate: true },
   });

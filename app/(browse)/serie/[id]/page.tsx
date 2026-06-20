@@ -106,7 +106,7 @@ export default async function SeriePage({
     ? await prisma.ivreaRelease.findMany({
         where: {
           editionId: { in: editionIds },
-          kind: { not: "reissue" },
+          kind: "volume", // próximo TOMO (no debut/oneshot/reedición)
           releaseDate: { gte: today },
         },
         orderBy: { releaseDate: "asc" },
