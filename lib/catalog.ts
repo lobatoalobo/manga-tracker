@@ -578,6 +578,7 @@ export interface WorkCard {
   releaseLabel: string | null;
   genres: string[];
   demographic: string | null;
+  maxVolumes: number; // tomos de la edición más larga (para ordenar "más tomos")
   next: { volume: number | null; date: Date } | null; // próximo tomo NUEVO
   reissue: { volume: number | null; date: Date } | null; // próxima reedición
 }
@@ -791,6 +792,7 @@ export async function browseWorks(opts: {
       releaseLabel: w.releaseLabel,
       genres: w.genres,
       demographic: w.demographic,
+      maxVolumes: w.editions.reduce((m, e) => Math.max(m, e.volumes), 0),
       next,
       reissue,
     };

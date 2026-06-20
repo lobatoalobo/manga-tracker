@@ -37,6 +37,7 @@ export default async function AutorPage({
     releaseLabel: w.releaseLabel,
     genres: w.genres,
     demographic: w.demographic,
+    maxVolumes: w.maxVolumes,
     next: w.next ? { volume: w.next.volume, date: w.next.date.toISOString() } : null,
     reissue: w.reissue
       ? { volume: w.reissue.volume, date: w.reissue.date.toISOString() }
@@ -67,7 +68,8 @@ export default async function AutorPage({
     q: "",
     tab: "az",
     region: "all",
-    pub: null,
+    pubs: [],
+    sort: "az",
     genres: [],
     gmode: "any",
     demographics: [],

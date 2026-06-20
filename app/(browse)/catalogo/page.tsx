@@ -21,7 +21,9 @@ export default async function CatalogoPage({
     q?: string;
     tab?: string;
     region?: string;
+    pubs?: string;
     pub?: string;
+    sort?: string;
     genre?: string;
     genres?: string;
     gmode?: string;
@@ -36,7 +38,8 @@ export default async function CatalogoPage({
     q: sp.q ?? "",
     tab: sp.tab === "series" || sp.tab === "tomos" ? sp.tab : "az",
     region: sp.region === "ar" || sp.region === "int" ? sp.region : "all",
-    pub: sp.pub || null,
+    pubs: split(sp.pubs ?? sp.pub),
+    sort: sp.sort === "vols" ? "vols" : "az",
     genres: split(sp.genres ?? sp.genre),
     gmode: sp.gmode === "all" ? "all" : "any",
     demographics: split(sp.demo),
@@ -55,6 +58,7 @@ export default async function CatalogoPage({
     releaseLabel: w.releaseLabel,
     genres: w.genres,
     demographic: w.demographic,
+    maxVolumes: w.maxVolumes,
     next: w.next ? { volume: w.next.volume, date: w.next.date.toISOString() } : null,
     reissue: w.reissue
       ? { volume: w.reissue.volume, date: w.reissue.date.toISOString() }
