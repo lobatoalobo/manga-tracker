@@ -66,6 +66,8 @@ export default async function AutorPage({
   const initial: BrowseState = {
     q: "",
     tab: "az",
+    region: "all",
+    pub: null,
     genres: [],
     gmode: "any",
     demographics: [],

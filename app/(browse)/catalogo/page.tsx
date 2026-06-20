@@ -20,6 +20,8 @@ export default async function CatalogoPage({
   searchParams: Promise<{
     q?: string;
     tab?: string;
+    region?: string;
+    pub?: string;
     genre?: string;
     genres?: string;
     gmode?: string;
@@ -33,6 +35,8 @@ export default async function CatalogoPage({
   const initial: BrowseState = {
     q: sp.q ?? "",
     tab: sp.tab === "series" || sp.tab === "tomos" ? sp.tab : "az",
+    region: sp.region === "ar" || sp.region === "int" ? sp.region : "all",
+    pub: sp.pub || null,
     genres: split(sp.genres ?? sp.genre),
     gmode: sp.gmode === "all" ? "all" : "any",
     demographics: split(sp.demo),
