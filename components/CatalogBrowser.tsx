@@ -101,6 +101,7 @@ export default function CatalogBrowser({
   initial,
   basePath = "/catalogo",
   showTabs = true,
+  showSearch = true,
   emptyPublisher = "Ivrea Argentina",
   showGenreFilters = true,
 }: {
@@ -114,6 +115,8 @@ export default function CatalogBrowser({
   basePath?: string;
   /** Mostrar las pestañas A-Z / Series nuevas / Próximos tomos (catálogo AR). */
   showTabs?: boolean;
+  /** Mostrar el buscador (off en la página de autor, donde hay pocas obras). */
+  showSearch?: boolean;
   /** Editorial a mostrar cuando una card no trae publishers. */
   emptyPublisher?: string;
   /** Feature flag: mostrar el panel de filtros por género/demografía. */
@@ -283,6 +286,7 @@ export default function CatalogBrowser({
 
   return (
     <>
+      {showSearch && (
       <input
         type="search"
         value={q}
@@ -291,6 +295,7 @@ export default function CatalogBrowser({
         autoComplete="off"
         className="mb-3 w-full rounded-lg border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-accent"
       />
+      )}
 
       {/* Tabs (fila propia). Solo catálogo nacional (releases de Ivrea). */}
       {showTabs && (

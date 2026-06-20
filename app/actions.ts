@@ -17,7 +17,7 @@ import {
   type AddEditionInput,
   type ReadingStatus,
 } from "@/lib/collection";
-import { createReport, setReportStatus } from "@/lib/reports";
+import { createReport, setReportStatus, deleteReport } from "@/lib/reports";
 import {
   createStore,
   setStoreStatus,
@@ -248,6 +248,12 @@ export async function resolveReportAction(
 ) {
   await assertAdmin(); // solo el dueño resuelve reportes
   await setReportStatus(id, status);
+  revalidatePath("/admin/reportes");
+}
+
+export async function deleteReportAction(id: number) {
+  await assertAdmin(); // solo el dueño borra reportes
+  await deleteReport(id);
   revalidatePath("/admin/reportes");
 }
 

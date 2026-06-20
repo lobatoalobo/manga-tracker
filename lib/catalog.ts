@@ -426,39 +426,6 @@ export async function getLocalAuthors(): Promise<{ name: string; count: number }
   return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Obras de un autor (match por substring en `Work.author`). */
-export interface AuthorWork {
-  id: number;
-  title: string;
-  coverImage: string | null;
-  national: boolean;
-  intl: boolean;
-  publishers: string[];
-}
-
-export async function getWorksByAuthor(name: string): Promise<AuthorWork[]> {
-  const candidates = await prisma.work.findMany({
-    where: { author: { contains: name, mode: "insensitive" }, ...inCatalogWhere() },
-    orderBy: { normTitle: "asc" },
-    select: {
-      id: true,
-      title: true,
-      coverImage: true,
-      upcoming: true,
-      author: true,
-      editions: { select: { publisher: true, volumes: true } },
-    },
-  });
-  // `contains` matchea substrings (ej. "ONE" cae en "BONES"/"Kurone"). Filtramos
-  // por NOMBRE de autor (tokens exactos), no substring, para evitar falsos positivos.
-  const works = candidates.filter((w) => authorNameMatches(name, w.author));
-  // Mismas banderas que el catálogo (helper único, no hardcodear Ivrea).
-  return works.map((w) => {
-    const { national, intl, publishers } = workCardFlags(w.editions, w.upcoming);
-    return { id: w.id, title: w.title, coverImage: w.coverImage, national, intl, publishers };
-  });
-}
-
 /**
  * Búsqueda liviana de obras locales (para pickers/autocomplete). Devuelve el id
  * como NEGATIVO (-workId) para que el resto del sistema lo trate como obra local
@@ -618,6 +585,31 @@ export interface WorkCard {
 const AR_PUBLISHERS = new Set<string>(PUBLISHERS);
 const INTL_SET = new Set<string>(INTL_PUBLISHERS);
 
+export interface WishEditionLite {
+  key: string;
+  publisher: string | null;
+  region: string | null;
+  label: string;
+}
+
+/** Ediciones deseables de una obra a partir de sus editoriales visibles. */
+export function wishEditionsFor(
+  publishers: string[],
+  national: boolean,
+): WishEditionLite[] {
+  const seen = new Set<string>();
+  const eds: WishEditionLite[] = [];
+  for (const p of publishers) {
+    const key = publisherKey(p);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    eds.push({ key, publisher: p, region: publisherRegionOf(p), label: publisherShort(p) });
+  }
+  if (eds.length === 0 && national)
+    eds.push({ key: "ivrea", publisher: "Ivrea Argentina", region: "AR", label: "Ivrea" });
+  return eds;
+}
+
 /**
  * Banderas y editoriales visibles de una obra. ÚNICA fuente de verdad para las
  * cards (catálogo, autor, etc.) → no se desincronizan.
@@ -659,6 +651,8 @@ export async function browseWorks(opts: {
   tab?: "az" | "series" | "tomos";
   take?: number;
   page?: number;
+  /** Filtra por autor (nombre exacto por tokens, no substring). Para /autores. */
+  author?: string;
 }): Promise<{ items: WorkCard[]; total: number }> {
   const take = opts.take ?? 60;
   const page = Math.max(1, opts.page ?? 1);
@@ -680,6 +674,9 @@ export async function browseWorks(opts: {
   // existen en otras editoriales (Panini/Ovni/españolas) hasta sumarlas bien.
   const conds: WorkWhere[] = [inCatalogWhere()];
   if (qFilter) conds.push(qFilter);
+  // Prefiltro por substring en DB; el match exacto por nombre se hace abajo.
+  if (opts.author)
+    conds.push({ author: { contains: opts.author, mode: "insensitive" } });
 
   // A-Z combina nacional + internacional. Las pestañas series/tomos son del
   // catálogo nacional (debuts y releases de Ivrea): naturalmente solo traen
@@ -712,7 +709,7 @@ export async function browseWorks(opts: {
 
   const where: WorkWhere = conds.length === 1 ? conds[0] : { AND: conds };
 
-  const [works, total] = await Promise.all([
+  const [worksRaw, totalRaw] = await Promise.all([
     prisma.work.findMany({
       where,
       orderBy: { normTitle: "asc" },
@@ -726,11 +723,17 @@ export async function browseWorks(opts: {
         releaseLabel: true,
         genres: true,
         demographic: true,
+        author: true,
         editions: { select: { id: true, publisher: true, volumes: true } },
       },
     }),
     prisma.work.count({ where }),
   ]);
+  // Match exacto por nombre de autor (el `contains` de DB es laxo: "ONE"⊂"BONES").
+  const works = opts.author
+    ? worksRaw.filter((w) => authorNameMatches(opts.author!, w.author))
+    : worksRaw;
+  const total = opts.author ? works.length : totalRaw;
 
   // Próxima salida por work (badge de la card). Incluye reediciones, con su
   // `kind`. Si una serie tiene tomo NUEVO y reedición en camino, prioriza el

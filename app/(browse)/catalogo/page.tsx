@@ -1,11 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import {
-  browseWorks,
-  publisherKey,
-  publisherRegionOf,
-  publisherShort,
-} from "@/lib/catalog";
+import { browseWorks, wishEditionsFor } from "@/lib/catalog";
 import CatalogBrowser, {
   type BrowseCard,
   type BrowseState,
@@ -99,19 +94,4 @@ export default async function CatalogoPage({
       />
     </main>
   );
-}
-
-/** Ediciones deseables de una obra a partir de sus editoriales visibles. */
-function wishEditionsFor(publishers: string[], national: boolean) {
-  const seen = new Set<string>();
-  const eds = [];
-  for (const p of publishers) {
-    const key = publisherKey(p);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    eds.push({ key, publisher: p, region: publisherRegionOf(p), label: publisherShort(p) });
-  }
-  if (eds.length === 0 && national)
-    eds.push({ key: "ivrea", publisher: "Ivrea Argentina", region: "AR", label: "Ivrea" });
-  return eds;
 }
