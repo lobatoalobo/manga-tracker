@@ -3,9 +3,12 @@
 // PC del usuario via Task Scheduler — ver scripts/refresh-catalog.ps1).
 //
 // Corre, en orden y contra PROD (DATABASE_URL de .env):
-//   1) crawl Ivrea (catálogo + tomos + works)         -> notifica tomos nuevos
-//   2) crawl whakoom-all (Panini/Ovni/Kemuri/…)       -> notifica tomos nuevos
-//   3) enrich-works (géneros/portada/sinopsis MU+MD)  -> de a lotes
+//   1) crawl whakoom-all (Panini/Ovni/Kemuri/…)       -> notifica tomos nuevos
+//   2) enrich-works (géneros/portada/sinopsis MU+MD)  -> de a lotes
+//
+// NOTA: Ivrea ya NO corre acá. Se desacopló a un cron de Vercel
+// (/api/cron/ivrea-catalogo), porque Ivrea no bloquea el datacenter. Esta tarea
+// local solo queda para Whakoom (que sí bloquea la nube) + enrich.
 //
 // Cada paso es independiente: si uno falla, se loguea y se sigue con el resto.
 // Sale con código !=0 si algún paso falló, para que el scheduler lo marque.
@@ -46,7 +49,7 @@ if (!/^postgres(ql)?:\/\//.test(env.DATABASE_URL ?? "")) {
 
 const tsx = join(root, "node_modules", "tsx", "dist", "cli.mjs");
 const steps = [
-  { name: "Ivrea", args: ["scripts/crawl.ts", "ivrea"] },
+  // Ivrea desacoplado a Vercel (/api/cron/ivrea-catalogo). Acá solo Whakoom + enrich.
   { name: "Whakoom (todas)", args: ["scripts/crawl.ts", "whakoom-all"] },
   { name: "Enrich works", args: ["scripts/enrich-works.ts", "--limit", "300"] },
 ];

@@ -21,6 +21,7 @@ import {
   fillMissingVizCovers,
 } from "../lib/vizImport";
 import { backfillCoversToBlob } from "../lib/coverStore";
+import { crawlIvreaCatalog } from "../lib/ivreaCatalog";
 import {
   detectAndNotifyNewVolumes,
   detectAndNotifyWishlistAvailable,
@@ -72,100 +73,8 @@ function humanize(slug: string): string {
 
 async function crawlIvrea() {
   console.log("\n=== Ivrea ===");
-  // El fetch del catálogo va con retry: desde CI a veces falla la red/IP y un
-  // throw acá tira todo el crawl (exit 1).
-  let html = "";
-  for (let a = 0; a < 3 && !html; a++) {
-    try {
-      const r = await fetch("https://www.ivrea.com.ar/catalogo/", { headers: UA });
-      if (r.ok) html = await r.text();
-    } catch {
-      /* reintenta */
-    }
-    if (!html) await new Promise((res) => setTimeout(res, 2000));
-  }
-  if (!html) {
-    console.error("  No se pudo bajar el catálogo de Ivrea (red). Abortando Ivrea.");
-    return;
-  }
-  const $ = cheerio.load(html);
-
-  const titles = new Map<string, string>(); // slug -> title
-  $("a[href*='/titulo/']").each((_, el) => {
-    const href = $(el).attr("href") || "";
-    const m = href.match(/\/titulo\/([^/]+)\//);
-    if (m) {
-      const text = $(el).text().trim().replace(/\s+/g, " ");
-      if (!titles.has(m[1]) || text) titles.set(m[1], text || humanize(m[1]));
-    }
-  });
-
-  // Slugs descartados a mano: no re-importarlos.
-  const rejected = await getRejected("ivrea");
-  const entries = [...titles.entries()].filter(([slug]) => !rejected.has(slug));
-  console.log(
-    `  ${entries.length} títulos en el catálogo${rejected.size ? ` (${rejected.size} descartados saltados)` : ""}. Trayendo fichas…`,
-  );
-
-  let done = 0;
-  let saved = 0;
-  await pool(entries, 6, async ([slug, title]) => {
-    const d = await getIvreaDataBySlug(slug);
-    done++;
-    if (d && d.argentinaVolumes > 0) {
-      const t = d.title || title;
-      const norm = normalizeTitle(t);
-      // Anti-duplicado: si Ivrea cambió el slug de la URL, ya existe una edición
-      // con el mismo título normalizado pero otro slug → la actualizamos (slug,
-      // url, tomos) en vez de crear una nueva (que dejaría un duplicado huérfano).
-      const dup = await prisma.publisherEdition.findFirst({
-        where: { publisher: "Ivrea Argentina", normTitle: norm, slug: { not: slug } },
-        select: { id: true },
-      });
-      if (dup) {
-        await prisma.publisherEdition
-          .update({
-            where: { id: dup.id },
-            data: {
-              title: t, normTitle: norm, slug, url: d.url,
-              volumes: d.argentinaVolumes, status: d.argentinaStatus,
-            },
-          })
-          .catch(() => {});
-      } else {
-        await upsertPublisherEdition({
-          publisher: "Ivrea Argentina",
-          slug,
-          title: t,
-          volumes: d.argentinaVolumes,
-          status: d.argentinaStatus,
-          url: d.url,
-        });
-      }
-      // Copiamos autor/sinopsis/portada de Ivrea al Work (somos dueños del dato,
-      // sin fetch en vivo). findOrCreateWork completa sin pisar lo editado a mano.
-      const row = await prisma.publisherEdition.findUnique({
-        where: { publisher_slug: { publisher: "Ivrea Argentina", slug } },
-        select: { id: true, workId: true },
-      });
-      if (row) {
-        const workId = await findOrCreateWork({
-          title: d.title || title,
-          coverImage: d.coverImage,
-          author: d.author,
-          synopsis: d.synopsis,
-          originalTitle: d.originalTitle,
-        }).catch(() => null);
-        if (workId && row.workId !== workId)
-          await prisma.publisherEdition
-            .update({ where: { id: row.id }, data: { workId } })
-            .catch(() => {});
-      }
-      saved++;
-    }
-    if (done % 50 === 0) console.log(`  ${done}/${entries.length} (guardados: ${saved})`);
-  });
-  console.log(`  Ivrea: ${saved} ediciones indexadas.`);
+  const r = await crawlIvreaCatalog();
+  console.log(`  Ivrea: ${r.saved}/${r.catalog} ediciones indexadas.`);
 }
 
 /**

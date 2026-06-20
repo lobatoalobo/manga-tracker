@@ -1,4 +1,8 @@
-import { refreshVizCatalog, discoverVizFromGoogleBooks } from "@/lib/vizImport";
+import {
+  refreshVizCatalog,
+  discoverVizFromGoogleBooks,
+  fillMissingVizCovers,
+} from "@/lib/vizImport";
 import { backfillCoversToBlob } from "@/lib/coverStore";
 import { syncTrackedTotals } from "@/lib/syncTracked";
 import { detectAndNotifyNewVolumes } from "@/lib/catalogNotify";
@@ -11,6 +15,7 @@ export const dynamic = "force-dynamic";
 const REFRESH_BATCH = 80;
 const DISCOVER_BATCH = 25;
 const COVER_BATCH = 60; // migra portadas externas a Blob (storage propio)
+const FILL_BATCH = 25; // rellena portadas faltantes (series nuevas) desde MU/MD
 
 /**
  * Cron (Vercel) de mantenimiento del catálogo VIZ (inglés), auto-mantenido:
@@ -28,8 +33,10 @@ export async function GET(request: Request) {
   }
   const discover = await discoverVizFromGoogleBooks({ limit: DISCOVER_BATCH });
   const refresh = await refreshVizCatalog(REFRESH_BATCH);
+  // Rellena portadas faltantes (series nuevas sin tapa) y migra a Blob propio.
+  const filled = await fillMissingVizCovers(FILL_BATCH);
   const covers = await backfillCoversToBlob(COVER_BATCH);
   const synced = await syncTrackedTotals();
   const notify = await detectAndNotifyNewVolumes();
-  return Response.json({ ok: true, discover, refresh, covers, synced, notify });
+  return Response.json({ ok: true, discover, refresh, filled, covers, synced, notify });
 }
