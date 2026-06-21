@@ -1,5 +1,65 @@
 import { prisma } from "@/lib/prisma";
 
+export interface DupWork {
+  id: number;
+  title: string;
+  anilistId: number | null;
+  editions: { publisher: string; slug: string; volumes: number }[];
+}
+export interface DupGroup {
+  anilistId: number;
+  works: DupWork[];
+}
+
+/**
+ * Grupos de Works que comparten el MISMO `anilistId` a través de sus ediciones,
+ * pero son Works distintos. Cola de revisión para fusionar (si es dup real) o
+ * separar (si es un mismapeo, ej. una novela pegada al id del manga). Ver
+ * `scripts/audit-catalog.ts` (check split-anilist) y la memoria anilist-removal.
+ */
+export async function getDuplicateWorkGroups(): Promise<DupGroup[]> {
+  const eds = await prisma.publisherEdition.findMany({
+    where: { anilistId: { not: null }, workId: { not: null } },
+    select: {
+      anilistId: true,
+      publisher: true,
+      slug: true,
+      volumes: true,
+      work: { select: { id: true, title: true, anilistId: true } },
+    },
+  });
+  const byAnilist = new Map<number, Map<number, DupWork>>();
+  for (const e of eds) {
+    if (!e.work) continue;
+    const wmap = byAnilist.get(e.anilistId!) ?? new Map<number, DupWork>();
+    const w =
+      wmap.get(e.work.id) ??
+      { id: e.work.id, title: e.work.title, anilistId: e.work.anilistId, editions: [] };
+    w.editions.push({ publisher: e.publisher, slug: e.slug, volumes: e.volumes });
+    wmap.set(e.work.id, w);
+    byAnilist.set(e.anilistId!, wmap);
+  }
+  return [...byAnilist.entries()]
+    .filter(([, wmap]) => wmap.size > 1)
+    .map(([anilistId, wmap]) => ({ anilistId, works: [...wmap.values()] }))
+    .sort((a, b) => a.anilistId - b.anilistId);
+}
+
+/**
+ * Desvincula un Work de su anilistId (lo pone null en el Work y en sus ediciones).
+ * Para mismapeos: una obra distinta (novela/spin-off) quedó pegada al id de otra,
+ * y así deja de aparecer como duplicado.
+ */
+export async function unlinkWorkAnilist(workId: number): Promise<void> {
+  await prisma.publisherEdition.updateMany({
+    where: { workId },
+    data: { anilistId: null },
+  });
+  await prisma.work
+    .update({ where: { id: workId }, data: { anilistId: null } })
+    .catch(() => {});
+}
+
 export interface MergeReport {
   sourceId: number;
   targetId: number;

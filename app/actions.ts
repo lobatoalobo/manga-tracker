@@ -18,6 +18,7 @@ import {
   type ReadingStatus,
 } from "@/lib/collection";
 import { createReport, setReportStatus, deleteReport } from "@/lib/reports";
+import { mergeWorks, unlinkWorkAnilist } from "@/lib/mergeWorks";
 import {
   createStore,
   setStoreStatus,
@@ -253,6 +254,22 @@ export async function deleteReportAction(id: number) {
   await assertAdmin(); // solo el dueño borra reportes
   await deleteReport(id);
   revalidatePath("/admin/reportes");
+}
+
+/** Fusiona dos Works duplicados (target = el que se conserva). Solo admin. */
+export async function mergeWorksAction(sourceId: number, targetId: number) {
+  await assertAdmin();
+  await mergeWorks(sourceId, targetId);
+  revalidatePath("/admin/duplicados");
+  return { ok: true as const };
+}
+
+/** Desvincula un Work de su anilistId (mismapeo: no es la misma serie). Solo admin. */
+export async function unlinkWorkAnilistAction(workId: number) {
+  await assertAdmin();
+  await unlinkWorkAnilist(workId);
+  revalidatePath("/admin/duplicados");
+  return { ok: true as const };
 }
 
 /**

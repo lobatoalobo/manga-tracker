@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getMappingHealth } from "@/lib/mappingHealth";
 import { getCatalogFlags } from "@/lib/catalog";
 import { getCatalogIntegrity } from "@/lib/adminChecks";
+import { getDuplicateWorkGroups } from "@/lib/mergeWorks";
 import { getJobRuns } from "@/lib/jobs";
 import { countPendingReports } from "@/lib/reports";
 import { countPendingStores } from "@/lib/stores";
@@ -17,7 +18,7 @@ export default async function AdminHome() {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) notFound();
 
-  const [health, integrity, jobs, reports, stores, indie, works, upcoming, flags] =
+  const [health, integrity, jobs, reports, stores, indie, works, upcoming, flags, dups] =
     await Promise.all([
       getMappingHealth(),
       getCatalogIntegrity(),
@@ -28,6 +29,7 @@ export default async function AdminHome() {
       prisma.work.count(),
       prisma.work.count({ where: { upcoming: true } }),
       getCatalogFlags(),
+      getDuplicateWorkGroups(),
     ]);
 
   const total = health.publishers.reduce((s, p) => s + p.total, 0);
@@ -68,9 +70,10 @@ export default async function AdminHome() {
           alert={flags.noCover > 0}
         />
         <Stat
-          href="/admin/mapeos?estado=comic"
-          label="🦸 Cómics (info)"
-          value={flags.comics}
+          href="/admin/duplicados"
+          label="🔀 Series duplicadas"
+          value={dups.length}
+          alert={dups.length > 0}
         />
       </div>
       <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
