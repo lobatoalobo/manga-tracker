@@ -56,11 +56,7 @@ import {
 } from "@/lib/purchases";
 import { setCrumbQuery, setEditionUrl } from "@/lib/storeLinks";
 import { normalizeReleaseLabel } from "@/lib/releaseDate";
-import {
-  invalidateEditionsCache,
-  clearAllEditionsCache,
-} from "@/lib/getMangaDetails";
-import { dispatchCrawl } from "@/lib/github";
+import { invalidateEditionsCache } from "@/lib/getMangaDetails";
 import { importWhakoomUrl } from "@/lib/whakoomImport";
 import { runAdminTask } from "@/lib/adminTasks";
 import { setNotifPref, type NotifCategory } from "@/lib/notificationPrefs";
@@ -528,12 +524,6 @@ async function assertAdmin() {
   if (!isAdmin(session?.user?.email)) throw new Error("No autorizado");
 }
 
-/** Admin: dispara un crawl/job en GitHub Actions. */
-export async function runCrawlAction(job: string) {
-  await assertAdmin();
-  return dispatchCrawl(job);
-}
-
 /** Admin: prende/apaga una feature flag (sin redeploy). */
 export async function setFlagAction(key: string, enabled: boolean) {
   await assertAdmin();
@@ -550,11 +540,7 @@ export async function setFlagAction(key: string, enabled: boolean) {
 export async function importWhakoomUrlAction(url: string) {
   await assertAdmin();
   const res = await importWhakoomUrl(url.trim());
-  if (res.ok) {
-    revalidatePath("/admin/herramientas");
-    revalidatePath("/admin/mapeos");
-    if (res.anilistId) revalidatePath(`/manga/${res.anilistId}`);
-  }
+  if (res.ok) revalidatePath("/admin/herramientas");
   return res;
 }
 
@@ -568,14 +554,6 @@ export async function runAdminTaskAction(id: string, dryRun: boolean) {
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Error" };
   }
-}
-
-/** Admin: vacía toda la caché de ediciones (sin redeploy). */
-export async function flushEditionsCacheAction() {
-  await assertAdmin();
-  const count = await clearAllEditionsCache();
-  revalidatePath("/admin/herramientas");
-  return { ok: true as const, count };
 }
 
 /** Admin: override del término de búsqueda de Crumb para una serie. */

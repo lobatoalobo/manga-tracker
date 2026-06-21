@@ -2,15 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { detectAndNotifyNewVolumes } from "@/lib/catalogNotify";
 import { normalizeGenres } from "@/lib/genres";
 import { logJobRun } from "@/lib/jobs";
-import {
-  consolidateDups,
-  depurateCatalog,
-  splitHomonyms,
-} from "@/lib/curation";
-import {
-  EDITIONS_CACHE_VERSION,
-  clearAllEditionsCache,
-} from "@/lib/getMangaDetails";
 
 export interface TaskResult {
   scanned: number; // universo evaluado
@@ -27,38 +18,12 @@ export interface AdminTaskMeta {
 }
 
 interface AdminTask extends AdminTaskMeta {
-  invalidatesEditions?: boolean;
   run: (dryRun: boolean) => Promise<TaskResult>;
 }
 
 const SAMPLE = 20;
 
 const tasks: AdminTask[] = [
-  {
-    id: "consolidate-dups",
-    title: "Consolidar duplicados",
-    description:
-      "Junta la misma serie cargada por crawl + Whakoom (misma editorial + título + tomos) en UNA edición: anilistId + link real de la editorial. Borra la sobrante.",
-    invalidatesEditions: true,
-    run: (dryRun) => consolidateDups(dryRun),
-  },
-  {
-    id: "depurate-catalog",
-    title: "Depurar: 1 edición regular por serie",
-    description:
-      "Deja la edición más completa por (obra, editorial); borra specials/duplicados seguros + works huérfanos. Los homónimos ambiguos los marca, no los toca.",
-    danger: true,
-    invalidatesEditions: true,
-    run: (dryRun) => depurateCatalog(dryRun),
-  },
-  {
-    id: "split-homonyms",
-    title: "Separar homónimos",
-    description:
-      "Separa en works distintos los homónimos que quedaron fusionados (p. ej. Citrus vs Citrus+).",
-    invalidatesEditions: true,
-    run: (dryRun) => splitHomonyms(dryRun),
-  },
   {
     id: "fix-volumes-out-of-range",
     title: "Arreglar tomos fuera de rango",
@@ -149,33 +114,6 @@ const tasks: AdminTask[] = [
       };
     },
   },
-  {
-    id: "clear-stale-cache",
-    title: "Limpiar caché de ediciones vieja",
-    description: `Borra entradas de EditionsCache con versión distinta de la actual (v${EDITIONS_CACHE_VERSION}). Se reconstruyen solas al visitar cada ficha.`,
-    async run(dryRun) {
-      const rows = await prisma.editionsCache.findMany({
-        select: { anilistId: true, data: true },
-      });
-      const stale = rows.filter(
-        (r) => (r.data as { _v?: number } | null)?._v !== EDITIONS_CACHE_VERSION,
-      );
-      if (!dryRun)
-        await prisma.editionsCache.deleteMany({
-          where: { anilistId: { in: stale.map((s) => s.anilistId) } },
-        });
-      return {
-        scanned: rows.length,
-        changed: stale.length,
-        samples: stale
-          .slice(0, SAMPLE)
-          .map(
-            (s) =>
-              `#${s.anilistId} (v${(s.data as { _v?: number } | null)?._v ?? "?"})`,
-          ),
-      };
-    },
-  },
 ];
 
 export const ADMIN_TASKS: AdminTaskMeta[] = tasks.map(
@@ -193,8 +131,6 @@ export async function runAdminTask(
   const res = await task.run(dryRun);
 
   if (!dryRun) {
-    if (task.invalidatesEditions && res.changed > 0)
-      await clearAllEditionsCache().catch(() => {});
     await logJobRun({
       kind: `task:${id}`,
       label: "apply",

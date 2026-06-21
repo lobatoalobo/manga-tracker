@@ -71,14 +71,13 @@ export default function NavBar({
 
   const adminLinks: MenuLink[] = [
     { href: "/admin", label: "Panel" },
-    { href: "/admin/mapeos", label: "Mapeos editoriales" },
+    { href: "/admin/duplicados", label: "Series duplicadas" },
     { href: "/admin/reportes", label: "Reportes", badge: badges.reports },
     { href: "/admin/tiendas", label: "Tiendas", badge: badges.stores },
     { href: "/admin/independientes", label: "Indie", badge: badges.indie },
     { href: "/admin/logins", label: "Logins" },
     { href: "/admin/herramientas", label: "Herramientas" },
     { href: "/admin/flags", label: "Feature flags" },
-    { href: "/admin/inspeccionar", label: "Inspeccionar serie" },
   ];
 
   return (

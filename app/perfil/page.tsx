@@ -56,13 +56,12 @@ export default async function PerfilPage() {
     groups.push({
       title: "Admin",
       rows: [
-        { href: "/admin/mapeos", label: "Mapeos editoriales" },
+        { href: "/admin/duplicados", label: "Series duplicadas" },
         { href: "/admin/reportes", label: "Reportes" },
         { href: "/admin/tiendas", label: "Tiendas" },
         { href: "/admin/independientes", label: "Indie" },
         { href: "/admin/logins", label: "Logins" },
         { href: "/admin/herramientas", label: "Herramientas" },
-        { href: "/admin/inspeccionar", label: "Inspeccionar serie" },
       ],
     });
 

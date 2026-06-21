@@ -1,14 +1,9 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { getCatalogIntegrity } from "@/lib/adminChecks";
-import { getMappingHealth } from "@/lib/mappingHealth";
 import { getJobRuns } from "@/lib/jobs";
-import { ACTIONS_URL } from "@/lib/github";
 import { ADMIN_TASKS } from "@/lib/adminTasks";
-import FlushCacheButton from "@/components/FlushCacheButton";
-import RunJobsPanel from "@/components/RunJobsPanel";
 import TaskRunner from "@/components/TaskRunner";
 import WhakoomImportForm from "@/components/WhakoomImportForm";
 
@@ -18,89 +13,17 @@ export default async function AdminToolsPage() {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) notFound();
 
-  const [checks, health, jobs] = await Promise.all([
-    getCatalogIntegrity(),
-    getMappingHealth(),
-    getJobRuns(15),
-  ]);
+  const [checks, jobs] = await Promise.all([getCatalogIntegrity(), getJobRuns(15)]);
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-8">
       <h1 className="mb-1 text-2xl font-bold">Herramientas</h1>
       <p className="mb-6 text-sm text-muted">
-        Caché y chequeos de integridad del catálogo.
+        Mantenimiento del catálogo: import, tareas y chequeos de integridad.
       </p>
-
-      <section className="mb-8 rounded-xl border border-border bg-surface p-4">
-        <h2 className="text-sm font-semibold">Caché de ediciones</h2>
-        <p className="mb-3 mt-1 text-sm text-muted">
-          Vaciá la caché cuando edites datos de ediciones y no se reflejen
-          (links de tienda, tomos, mapeos). Se reconstruye sola al visitar cada
-          ficha.
-        </p>
-        <FlushCacheButton />
-      </section>
-
-      <section className="mb-8">
-        <h2 className="mb-3 text-sm font-semibold">Salud de mapeos</h2>
-        <div className="mb-4 grid grid-cols-3 gap-3">
-          {health.publishers.map((p) => (
-            <div
-              key={p.publisher}
-              className="rounded-xl border border-border bg-surface p-4"
-            >
-              <p className="text-sm font-medium">{p.label}</p>
-              <p className="mt-1 text-lg font-semibold text-emerald-300">
-                {p.mapped}
-                <span className="text-sm font-normal text-muted">
-                  {" "}
-                  / {p.total}
-                </span>
-              </p>
-              <div className="mt-0.5 flex flex-col">
-                {p.unmapped > 0 && (
-                  <Link
-                    href={`/admin/mapeos?estado=unmapped&ed=${
-                      p.label.toLowerCase().split(" ")[0]
-                    }`}
-                    className="text-xs text-amber-400 hover:underline"
-                  >
-                    {p.unmapped} sin mapear
-                  </Link>
-                )}
-                {p.national > 0 && (
-                  <Link
-                    href={`/admin/mapeos?estado=national&ed=${
-                      p.label.toLowerCase().split(" ")[0]
-                    }`}
-                    className="text-xs text-sky-300 hover:underline"
-                  >
-                    {p.national} nacional-only
-                  </Link>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <Suspicious
-          title="Mismo título → distintas series (homónimos)"
-          hint="Revisá que cada uno apunte a la serie correcta."
-          groups={health.homonyms}
-        />
-        <Suspicious
-          title="Una editorial con varias entradas → misma serie"
-          hint="Posible spin-off mal mapeado (ej. AoT: Before the Fall → AoT)."
-          groups={health.overmerges}
-        />
-      </section>
 
       <section className="mb-8">
         <WhakoomImportForm />
-      </section>
-
-      <section className="mb-8">
-        <RunJobsPanel actionsUrl={ACTIONS_URL} />
       </section>
 
       <section className="mb-8">
@@ -197,12 +120,12 @@ export default async function AdminToolsPage() {
                   {c.samples.map((s, i) => (
                     <li key={i} className="text-sm">
                       {s.href ? (
-                        <Link
+                        <a
                           href={s.href}
                           className="text-accent hover:underline"
                         >
                           {s.label}
-                        </Link>
+                        </a>
                       ) : (
                         s.label
                       )}
@@ -223,54 +146,5 @@ export default async function AdminToolsPage() {
         </div>
       </section>
     </main>
-  );
-}
-
-function Suspicious({
-  title,
-  hint,
-  groups,
-}: {
-  title: string;
-  hint: string;
-  groups: { key: string; detail: string; items: { label: string; href: string }[] }[];
-}) {
-  return (
-    <div className="mt-3 rounded-xl border border-border bg-surface p-4">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-medium">{title}</h3>
-        <span
-          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-            groups.length === 0
-              ? "bg-emerald-500/15 text-emerald-300"
-              : "bg-amber-500/15 text-amber-300"
-          }`}
-        >
-          {groups.length}
-        </span>
-      </div>
-      <p className="mt-0.5 text-xs text-muted">{hint}</p>
-      {groups.length > 0 && (
-        <ul className="mt-3 space-y-2 border-t border-border pt-3">
-          {groups.map((g) => (
-            <li key={g.key} className="text-sm">
-              <span className="font-medium">{g.key}</span>{" "}
-              <span className="text-xs text-muted">· {g.detail}</span>
-              <span className="ml-2 inline-flex flex-wrap gap-2">
-                {g.items.map((it, i) => (
-                  <Link
-                    key={i}
-                    href={it.href}
-                    className="text-xs text-accent hover:underline"
-                  >
-                    {it.label}
-                  </Link>
-                ))}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
   );
 }

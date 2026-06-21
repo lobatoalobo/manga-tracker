@@ -95,7 +95,7 @@ export async function getCatalogIntegrity(): Promise<IntegrityCheck[]> {
       samples: zeroVol.slice(0, SAMPLE).map((r) => ({
         label: `${r.title} · ${r.publisher}`,
         detail: r.anilistId ? `serie #${r.anilistId}` : "sin mapear",
-        href: r.anilistId ? `/manga/${r.anilistId}` : "/admin/mapeos",
+        href: r.anilistId ? `/manga/${r.anilistId}` : undefined,
       })),
     },
     {
@@ -117,7 +117,7 @@ export async function getCatalogIntegrity(): Promise<IntegrityCheck[]> {
       samples: ovniBad.slice(0, SAMPLE).map((r) => ({
         label: r.title,
         detail: r.url,
-        href: r.anilistId ? `/manga/${r.anilistId}` : "/admin/mapeos",
+        href: r.anilistId ? `/manga/${r.anilistId}` : undefined,
       })),
     },
     {
@@ -128,7 +128,6 @@ export async function getCatalogIntegrity(): Promise<IntegrityCheck[]> {
       samples: dupes.slice(0, SAMPLE).map((g) => ({
         label: `${g[0].title} · ${g[0].publisher}`,
         detail: `${g.length} entradas`,
-        href: `/admin/mapeos?q=${encodeURIComponent(g[0].title)}`,
       })),
     },
   ];
