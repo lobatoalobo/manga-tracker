@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { mergeWorksAction, unlinkWorkAnilistAction } from "@/app/actions";
 import type { DupGroup } from "@/lib/mergeWorks";
@@ -33,7 +34,7 @@ function Group({ group }: { group: DupGroup }) {
   const def = group.works.find((w) => w.anilistId != null) ?? group.works[0];
   const [keep, setKeep] = useState<number>(def.id);
   const [pending, start] = useTransition();
-  const [msg, setMsg] = useState<string | null>(null);
+  const router = useRouter();
 
   function merge() {
     if (!confirm(`Fusionar las otras obras en #${keep}? No se puede deshacer.`)) return;
@@ -42,7 +43,7 @@ function Group({ group }: { group: DupGroup }) {
         if (w.id === keep) continue;
         await mergeWorksAction(w.id, keep);
       }
-      setMsg("Fusionado ✓");
+      router.refresh();
     });
   }
 
@@ -50,18 +51,17 @@ function Group({ group }: { group: DupGroup }) {
     if (!confirm(`Desvincular #${workId} de este anilistId (no es la misma serie)?`)) return;
     start(async () => {
       await unlinkWorkAnilistAction(workId);
-      setMsg("Separado ✓");
+      router.refresh();
     });
   }
 
   return (
     <div className="rounded-xl border border-border bg-surface p-4">
-      <div className="mb-2 flex items-center justify-between gap-3">
+      <div className="mb-2">
         <p className="text-xs text-muted">
           AniList <span className="font-mono">{group.anilistId}</span> ·{" "}
           {group.works.length} obras
         </p>
-        {msg && <span className="text-xs text-emerald-300">{msg}</span>}
       </div>
 
       <div className="space-y-2">
