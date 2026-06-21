@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { browseWorks, wishEditionsFor } from "@/lib/catalog";
+import { browseWorks, wishEditionsFor, INTL_PUBLISHERS } from "@/lib/catalog";
 import CatalogBrowser, {
   type BrowseCard,
   type BrowseState,
@@ -24,6 +24,7 @@ export default async function CatalogoPage({
     pubs?: string;
     pub?: string;
     sort?: string;
+    completed?: string;
     genre?: string;
     genres?: string;
     gmode?: string;
@@ -40,6 +41,7 @@ export default async function CatalogoPage({
     region: sp.region === "ar" || sp.region === "int" ? sp.region : "all",
     pubs: split(sp.pubs ?? sp.pub),
     sort: sp.sort === "vols" ? "vols" : "az",
+    completed: sp.completed === "1",
     genres: split(sp.genres ?? sp.genre),
     gmode: sp.gmode === "all" ? "all" : "any",
     demographics: split(sp.demo),
@@ -59,6 +61,7 @@ export default async function CatalogoPage({
     genres: w.genres,
     demographic: w.demographic,
     maxVolumes: w.maxVolumes,
+    finished: w.finished,
     next: w.next ? { volume: w.next.volume, date: w.next.date.toISOString() } : null,
     reissue: w.reissue
       ? { volume: w.reissue.volume, date: w.reissue.date.toISOString() }
@@ -99,6 +102,7 @@ export default async function CatalogoPage({
         canWish={!!session?.user?.id}
         initial={initial}
         showGenreFilters={await isEnabled("genre-filters")}
+        intlPublishers={[...INTL_PUBLISHERS]}
       />
     </main>
   );

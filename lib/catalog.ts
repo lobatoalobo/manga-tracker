@@ -475,6 +475,7 @@ export interface WorkCard {
   genres: string[];
   demographic: string | null;
   maxVolumes: number; // tomos de la edición más larga (para ordenar "más tomos")
+  finished: boolean; // alguna edición marcada COMPLETA (señal de Ivrea; ver enrich)
   next: { volume: number | null; date: Date } | null; // próximo tomo NUEVO
   reissue: { volume: number | null; date: Date } | null; // próxima reedición
 }
@@ -621,7 +622,7 @@ export async function browseWorks(opts: {
         genres: true,
         demographic: true,
         author: true,
-        editions: { select: { id: true, publisher: true, volumes: true } },
+        editions: { select: { id: true, publisher: true, volumes: true, status: true } },
       },
     }),
     prisma.work.count({ where }),
@@ -689,6 +690,7 @@ export async function browseWorks(opts: {
       genres: w.genres,
       demographic: w.demographic,
       maxVolumes: w.editions.reduce((m, e) => Math.max(m, e.volumes), 0),
+      finished: w.editions.some((e) => e.status != null && /complet/i.test(e.status)),
       next,
       reissue,
     };

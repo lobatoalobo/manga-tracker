@@ -21,6 +21,7 @@ export interface BrowseCard {
   genres: string[];
   demographic: string | null;
   maxVolumes?: number; // tomos de la edición más larga (orden "más tomos")
+  finished?: boolean; // serie completa (alguna edición COMPLETA)
   next: { volume: number | null; date: string } | null;
   reissue?: { volume: number | null; date: string } | null;
   editions?: WishEdition[]; // ediciones deseables (para el corazón por edición)
@@ -32,6 +33,7 @@ export interface BrowseState {
   region: Region;
   pubs: string[]; // editoriales seleccionadas (nombre completo); [] = todas
   sort: Sort;
+  completed: boolean; // solo series completas
   genres: string[];
   gmode: GMode;
   demographics: string[];
@@ -40,7 +42,7 @@ export interface BrowseState {
 
 const PER_PAGE = 60;
 const TABS = [
-  { t: "az", label: "A-Z" },
+  { t: "az", label: "Todo" },
   { t: "series", label: "🔜 Series nuevas" },
   { t: "tomos", label: "📅 Próximos tomos" },
 ] as const;
@@ -86,6 +88,7 @@ function readUrl(): BrowseState {
     region: "all",
     pubs: [],
     sort: "az",
+    completed: false,
     genres: [],
     gmode: "any",
     demographics: [],
@@ -104,6 +107,7 @@ function readUrl(): BrowseState {
     region: region === "ar" || region === "int" ? region : "all",
     pubs: split(p.get("pubs") ?? p.get("pub")),
     sort: sort === "vols" ? "vols" : "az",
+    completed: p.get("completed") === "1",
     genres: split(p.get("genres") ?? p.get("genre")),
     gmode: p.get("gmode") === "all" ? "all" : "any",
     demographics: split(p.get("demo")),
@@ -136,6 +140,7 @@ export default function CatalogBrowser({
   showSearch = true,
   emptyPublisher = "Ivrea Argentina",
   showGenreFilters = true,
+  intlPublishers = [],
 }: {
   cards: BrowseCard[];
   collected?: number[];
@@ -153,7 +158,10 @@ export default function CatalogBrowser({
   emptyPublisher?: string;
   /** Feature flag: mostrar el panel de filtros por género/demografía. */
   showGenreFilters?: boolean;
+  /** Editoriales internacionales (para mostrar solo las de la región activa). */
+  intlPublishers?: string[];
 }) {
+  const intlSet = useMemo(() => new Set(intlPublishers), [intlPublishers]);
   const mine = useMemo(() => new Set(collected), [collected]);
   const [wishMap, setWishMap] = useState<Map<number, Set<string>>>(
     () => new Map(Object.entries(wishedMap).map(([k, v]) => [Number(k), new Set(v)])),
@@ -200,6 +208,7 @@ export default function CatalogBrowser({
   const [region, setRegion] = useState<Region>(initial.region);
   const [pubs, setPubs] = useState<string[]>(initial.pubs);
   const [sort, setSort] = useState<Sort>(initial.sort);
+  const [completed, setCompleted] = useState<boolean>(initial.completed);
   const [genres, setGenres] = useState<string[]>(initial.genres);
   const [gmode, setGMode] = useState<GMode>(initial.gmode);
   const [demographics, setDemographics] = useState<string[]>(
@@ -228,6 +237,7 @@ export default function CatalogBrowser({
     if (next.region !== "all") params.set("region", next.region);
     if (next.pubs.length) params.set("pubs", next.pubs.join(","));
     if (next.sort !== "az") params.set("sort", next.sort);
+    if (next.completed) params.set("completed", "1");
     if (next.q.trim()) params.set("q", next.q.trim());
     if (next.genres.length) params.set("genres", next.genres.join(","));
     if (next.genres.length > 1 && next.gmode === "all") params.set("gmode", "all");
@@ -247,6 +257,7 @@ export default function CatalogBrowser({
       setRegion(u.region);
       setPubs(u.pubs);
       setSort(u.sort);
+      setCompleted(u.completed);
       setGenres(u.genres);
       setGMode(u.gmode);
       setDemographics(u.demographics);
@@ -264,22 +275,26 @@ export default function CatalogBrowser({
       ),
     [cards, region],
   );
-  // Editoriales presentes en la región actual (para los chips), con su conteo.
+  // Editoriales de la región actual (para los chips), con su conteo. Mostramos
+  // SOLO las que corresponden a la región: nacionales en AR, internacionales en
+  // INT (así no aparece VIZ bajo Nacional en obras de doble mercado).
   const pubChips = useMemo(() => {
     const m = new Map<string, number>();
     for (const c of regionCards)
-      for (const p of c.publishers) m.set(p, (m.get(p) ?? 0) + 1);
+      for (const p of c.publishers) {
+        if (region === "ar" && intlSet.has(p)) continue;
+        if (region === "int" && !intlSet.has(p)) continue;
+        m.set(p, (m.get(p) ?? 0) + 1);
+      }
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
-  }, [regionCards]);
-  // Solo Nacional/Todo tienen lentes de próximos (datos de Ivrea). En Internacional
-  // el lente efectivo es siempre A-Z (aunque la URL traiga tab=tomos).
-  const visibleTabs = region === "int" ? TABS.filter((t) => t.t === "az") : TABS;
-  const activeTab: Tab = region === "int" ? "az" : tab;
+  }, [regionCards, region, intlSet]);
+  const activeTab: Tab = tab;
 
   const filtered = useMemo(() => {
     const nq = norm(q.trim());
     return regionCards.filter((c) => {
       if (pubs.length && !c.publishers.some((p) => pubs.includes(p))) return false;
+      if (completed && !c.finished) return false;
       if (activeTab === "series" && !c.upcoming) return false;
       if (activeTab === "tomos" && !c.next && !c.reissue) return false;
       if (showGenreFilters && genres.length) {
@@ -298,25 +313,16 @@ export default function CatalogBrowser({
       if (nq && !norm(c.title).includes(nq)) return false;
       return true;
     });
-  }, [regionCards, q, activeTab, pubs, genres, gmode, demographics, showGenreFilters]);
+  }, [regionCards, q, activeTab, pubs, completed, genres, gmode, demographics, showGenreFilters]);
 
-  // Ordenar por fecha de salida (más pronto primero) en las pestañas de
-  // próximos; en A-Z se respeta el alfabético que ya viene del server.
-  const soonest = (c: BrowseCard) => {
-    const ds = [c.next?.date, c.reissue?.date]
-      .filter(Boolean)
-      .map((d) => +new Date(d as string));
-    return ds.length ? Math.min(...ds) : Infinity;
-  };
   const ordered = useMemo(() => {
-    // Las lentes de próximos ordenan por fecha/etiqueta (el orden manual no aplica).
-    if (activeTab === "tomos")
-      return [...filtered].sort((a, b) => soonest(a) - soonest(b));
+    // Series nuevas son debuts (0 tomos): orden por fecha estimada, sin orden manual.
     if (activeTab === "series")
       return [...filtered].sort((a, b) =>
         (a.releaseLabel ?? "9999").localeCompare(b.releaseLabel ?? "9999"),
       );
-    // A-Z: orden elegido. "az" = el alfabético que ya viene del server.
+    // Todo y Próximos tomos respetan el Orden elegido ("az" = alfabético del
+    // server; "vols" = más tomos). Próximos tiene series con tomos, así que sirve.
     if (sort === "vols")
       return [...filtered].sort(
         (a, b) => (b.maxVolumes ?? 0) - (a.maxVolumes ?? 0),
@@ -335,6 +341,7 @@ export default function CatalogBrowser({
       region,
       pubs,
       sort,
+      completed,
       genres,
       gmode,
       demographics,
@@ -346,16 +353,18 @@ export default function CatalogBrowser({
     setRegion(next.region);
     setPubs(next.pubs);
     setSort(next.sort);
+    setCompleted(next.completed);
     setGenres(next.genres);
     setGMode(next.gmode);
     setDemographics(next.demographics);
     setPage(next.page);
     syncUrl(next, replace);
   }
-  // Cambiar de región: resetea las editoriales (pueden no existir en la otra) y,
-  // en Internacional, vuelve a A-Z (no hay lentes de próximos).
+  // Cambiar de región: resetea las editoriales (pueden no existir en la otra). Las
+  // lentes (Todo/Series/Próximos) se mantienen en todas las regiones (en INT por
+  // ahora dan vacío, pero a futuro VIZ tendrá próximos/debuts).
   function setRegionTo(r: Region) {
-    update({ region: r, pubs: [], tab: r === "int" ? "az" : tab });
+    update({ region: r, pubs: [] });
   }
   function togglePub(p: string) {
     update({ pubs: pubs.includes(p) ? pubs.filter((x) => x !== p) : [...pubs, p] });
@@ -363,7 +372,7 @@ export default function CatalogBrowser({
   function goPage(p: number) {
     setPage(p);
     syncUrl(
-      { q, tab, region, pubs, sort, genres, gmode, demographics, page: p },
+      { q, tab, region, pubs, sort, completed, genres, gmode, demographics, page: p },
       false,
     );
     window.scrollTo({ top: 0 });
@@ -375,7 +384,9 @@ export default function CatalogBrowser({
   const showEditorial = showTabs && pubChips.length > 1;
   const showFilters = showEditorial || showTabs || showGenreFilters;
   const activeFilterCount =
-    pubs.length + (showGenreFilters ? genres.length + demographics.length : 0);
+    pubs.length +
+    (completed ? 1 : 0) +
+    (showGenreFilters ? genres.length + demographics.length : 0);
 
   return (
     <>
@@ -408,15 +419,15 @@ export default function CatalogBrowser({
             ))}
           </div>
 
-          {/* Lentes (solo Nacional/Todo tienen Series nuevas / Próximos). */}
-          <div className="mb-2 flex flex-wrap gap-2 text-sm">
-            {visibleTabs.map(({ t, label }) => (
+          {/* Lentes: misma barra segmentada que Región (Todo / Series / Próximos). */}
+          <div className="mb-2 inline-flex rounded-xl border border-border bg-surface-2 p-1 text-sm">
+            {TABS.map(({ t, label }) => (
               <button
                 key={t}
                 type="button"
                 onClick={() => update({ tab: t })}
-                className={`rounded-full px-3 py-1 transition ${
-                  activeTab === t ? "bg-accent text-white" : "bg-surface-2 text-muted hover:text-foreground"
+                className={`rounded-lg px-3 py-1 font-medium transition ${
+                  activeTab === t ? "bg-accent text-white" : "text-muted hover:text-foreground"
                 }`}
               >
                 {label}
@@ -443,7 +454,9 @@ export default function CatalogBrowser({
         {activeFilterCount > 0 && (
           <button
             type="button"
-            onClick={() => update({ pubs: [], genres: [], demographics: [] })}
+            onClick={() =>
+              update({ pubs: [], completed: false, genres: [], demographics: [] })
+            }
             className="text-xs text-muted hover:text-foreground"
           >
             limpiar
@@ -474,7 +487,7 @@ export default function CatalogBrowser({
             </div>
           )}
 
-          {showTabs && (
+          {showTabs && activeTab !== "series" && (
             <div>
               <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
                 Orden
@@ -490,6 +503,23 @@ export default function CatalogBrowser({
                     {label}
                   </button>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {showTabs && (
+            <div>
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+                Estado
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => update({ completed: !completed })}
+                  className={chipCls(completed)}
+                >
+                  Completas
+                </button>
               </div>
             </div>
           )}
@@ -592,6 +622,7 @@ export default function CatalogBrowser({
 
       {/* Chips activos (siempre visibles, aun con el panel cerrado). */}
       {(pubs.length > 0 ||
+        completed ||
         (showGenreFilters && (genres.length > 0 || demographics.length > 0))) && (
         <div className="mb-4 flex flex-wrap gap-2">
           {pubs.map((p) => (
@@ -604,6 +635,15 @@ export default function CatalogBrowser({
               {pubLabel(p)} ✕
             </button>
           ))}
+          {completed && (
+            <button
+              type="button"
+              onClick={() => update({ completed: false })}
+              className="rounded-full bg-teal-500/15 px-3 py-1 text-xs font-medium text-teal-300 transition hover:bg-teal-500/25"
+            >
+              Completas ✕
+            </button>
+          )}
           {demographics.map((d) => (
             <button
               key={`d-${d}`}
