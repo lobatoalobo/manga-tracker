@@ -483,6 +483,14 @@ export async function deleteEditionAction(id: number) {
   revalidatePath("/admin/herramientas");
 }
 
+/** Marca un Work como "próxima a salir" (debut válido sin tomos). Solo admin. */
+export async function markWorkUpcomingAction(workId: number) {
+  await assertAdmin();
+  await prisma.work.update({ where: { id: workId }, data: { upcoming: true } });
+  revalidatePath("/admin/herramientas");
+  return { ok: true as const };
+}
+
 /** Marca/desmarca una edición como solo-nacional (sin equivalente en AniList). */
 export async function setEditionNationalOnlyAction(id: number, value: boolean) {
   await assertAdmin();

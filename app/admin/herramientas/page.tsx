@@ -5,7 +5,7 @@ import { getCatalogIntegrity } from "@/lib/adminChecks";
 import { ADMIN_TASKS } from "@/lib/adminTasks";
 import TaskRunner from "@/components/TaskRunner";
 import WhakoomImportForm from "@/components/WhakoomImportForm";
-import EditionDeleteButton from "@/components/EditionDeleteButton";
+import CleanupActions from "@/components/CleanupActions";
 
 export const metadata = { title: "Herramientas (admin) · Nakama" };
 
@@ -65,7 +65,20 @@ export default async function AdminToolsPage() {
                       className="flex items-center justify-between gap-3 text-sm"
                     >
                       <span className="min-w-0">
-                        <span className="truncate">{s.label}</span>
+                        <span className="block truncate">
+                          {s.url ? (
+                            <a
+                              href={s.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-accent hover:underline"
+                            >
+                              {s.label} ↗
+                            </a>
+                          ) : (
+                            s.label
+                          )}
+                        </span>
                         {s.detail && (
                           <span className="block truncate text-xs text-muted">
                             {s.detail}
@@ -73,7 +86,11 @@ export default async function AdminToolsPage() {
                         )}
                       </span>
                       {s.editionId != null && (
-                        <EditionDeleteButton id={s.editionId} label={s.label} />
+                        <CleanupActions
+                          editionId={s.editionId}
+                          workId={s.workId}
+                          label={s.label}
+                        />
                       )}
                     </li>
                   ))}
