@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { looksLikeComic } from "@/lib/comicTerms";
 import { rejectEditions } from "@/lib/rejectedSources";
+import { storeCover } from "@/lib/coverStore";
 /**
  * ¿El nombre de autor `target` está en el string de autores `field` por NOMBRE
  * (todos sus tokens presentes), no por substring? Evita que "ONE" matchee
@@ -772,7 +773,8 @@ export async function findOrCreateWork(opts: {
 
   if (existing) {
     const patch: { coverImage?: string; author?: string; synopsis?: string; originalTitle?: string } = {};
-    if (!existing.coverImage && opts.coverImage) patch.coverImage = opts.coverImage;
+    if (!existing.coverImage && opts.coverImage)
+      patch.coverImage = (await storeCover(opts.coverImage)) ?? opts.coverImage;
     if (!existing.author && opts.author) patch.author = opts.author;
     if (!existing.synopsis && opts.synopsis) patch.synopsis = opts.synopsis;
     if (!existing.originalTitle && opts.originalTitle) patch.originalTitle = opts.originalTitle;
@@ -781,12 +783,15 @@ export async function findOrCreateWork(opts: {
     return existing.id;
   }
 
+  const cover = opts.coverImage
+    ? ((await storeCover(opts.coverImage)) ?? opts.coverImage)
+    : null;
   const created = await prisma.work.create({
     data: {
       title: opts.title,
       normTitle,
       anilistId: opts.anilistId ?? null,
-      coverImage: opts.coverImage ?? null,
+      coverImage: cover,
       author: opts.author ?? null,
       synopsis: opts.synopsis ?? null,
       originalTitle: opts.originalTitle ?? null,

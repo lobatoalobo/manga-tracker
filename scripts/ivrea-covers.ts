@@ -8,6 +8,7 @@
  */
 import { prisma } from "../lib/prisma";
 import { getIvreaDataBySlug } from "../lib/providers/ivrea";
+import { storeCover } from "../lib/coverStore";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -38,7 +39,9 @@ async function main() {
   let noCover = 0;
   for (const e of eds) {
     const ficha = await getIvreaDataBySlug(e.slug).catch(() => null);
-    const cover = ficha?.coverImage ?? null;
+    const raw = ficha?.coverImage ?? null;
+    // La guardamos en R2 (propia); si R2 no está/falla, queda el hotlink de Ivrea.
+    const cover = raw ? ((await storeCover(raw)) ?? raw) : null;
     if (!cover) {
       noCover++;
     } else {

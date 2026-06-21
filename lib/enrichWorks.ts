@@ -4,6 +4,7 @@ import { getMangaDex } from "@/lib/providers/mangadex";
 import { getIvreaDataBySlug } from "@/lib/providers/ivrea";
 import { normalizeGenres } from "@/lib/genres";
 import { proxiedCover } from "@/lib/coverProxy";
+import { storeCover } from "@/lib/coverStore";
 
 export interface EnrichResult {
   scanned: number;
@@ -130,9 +131,11 @@ export async function enrichWorks(opts: {
     if (raw.length && w.rawGenres.length === 0) patch.rawGenres = raw;
     if (genres.length && w.genres.length === 0) patch.genres = genres;
     if (demographic && !w.demographic) patch.demographic = demographic;
-    // Portada: Ivrea manda; respaldo MD (por el proxy, bloquea hotlink) y MU.
+    // Portada: Ivrea manda; respaldo MD/MU. La guardamos en R2 (propia); si R2 no
+    // está o falla, caemos al proxy (MD bloquea hotlink) / hotlink (MU).
     if (!w.coverImage && (md?.coverImage || mu?.coverImage)) {
-      const c = proxiedCover(md?.coverImage || mu?.coverImage);
+      const src = (md?.coverImage || mu?.coverImage) as string;
+      const c = (await storeCover(src)) ?? proxiedCover(src);
       if (c) patch.coverImage = c;
     }
     // Sinopsis: la de la editorial (español) manda; respaldo MU/MD (inglés).
