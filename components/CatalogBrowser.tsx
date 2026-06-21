@@ -719,20 +719,32 @@ export default function CatalogBrowser({
                     )}
                     {nationalCtx && (w.next || w.reissue || (!owned && w.upcoming)) && (
                       <div className="absolute bottom-1 left-1 right-1 flex flex-col gap-0.5">
+                        {/* En "Todo" (mixto) marcamos la región del evento. Hoy todos
+                            los próximos son nacionales (Ivrea) → 🇦🇷; cuando exista
+                            data de próximos de VIZ, será data-driven (ver viz-proximos). */}
                         {w.next && (
-                          <span className="rounded bg-emerald-600/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+                          <span className="inline-flex items-center justify-center gap-1 rounded bg-emerald-600/90 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                            {region === "all" && (
+                              <ArgentinaFlag className="h-2.5 w-3.5 shrink-0 rounded-[1px]" />
+                            )}
                             📅 {w.next.volume ? `#${w.next.volume} · ` : ""}
                             {formatProximaDate(w.next.date)}
                           </span>
                         )}
                         {w.reissue && (
-                          <span className="rounded bg-violet-600/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+                          <span className="inline-flex items-center justify-center gap-1 rounded bg-violet-600/90 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                            {region === "all" && (
+                              <ArgentinaFlag className="h-2.5 w-3.5 shrink-0 rounded-[1px]" />
+                            )}
                             ♻️ {w.reissue.volume ? `#${w.reissue.volume} · ` : ""}
                             {formatProximaDate(w.reissue.date)}
                           </span>
                         )}
                         {!w.next && !w.reissue && !owned && w.upcoming && (
-                          <span className="rounded bg-amber-500/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
+                          <span className="inline-flex items-center justify-center gap-1 rounded bg-amber-500/90 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                            {region === "all" && (
+                              <ArgentinaFlag className="h-2.5 w-3.5 shrink-0 rounded-[1px]" />
+                            )}
                             🔜 {formatReleaseLabel(w.releaseLabel) ?? "Próximo a salir"}
                           </span>
                         )}
