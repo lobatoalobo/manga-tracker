@@ -1,6 +1,29 @@
 import { prisma } from "@/lib/prisma";
 import { looksLikeComic } from "@/lib/comicTerms";
 import { rejectEditions } from "@/lib/rejectedSources";
+/**
+ * ¿El nombre de autor `target` está en el string de autores `field` por NOMBRE
+ * (todos sus tokens presentes), no por substring? Evita que "ONE" matchee
+ * "BONES"/"Kurone". Maneja el orden y el formato "Apellido, Nombre".
+ */
+export function authorNameMatches(
+  target: string,
+  field: string | null | undefined,
+): boolean {
+  if (!field) return false;
+  const tok = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9 ]/g, " ")
+      .split(/\s+/)
+      .filter((t) => t.length >= 2);
+  const t = tok(target);
+  if (t.length === 0) return false;
+  const all = new Set(tok(field));
+  return t.every((x) => all.has(x));
+}
 
 export const PUBLISHERS = [
   "Ivrea Argentina",
@@ -126,67 +149,6 @@ export function searchableTitle(value: string): string {
     .trim();
 }
 
-export interface LocalCatalogHit {
-  id: number;
-  publisher: string;
-  title: string;
-  anilistId: number | null;
-  workId: number | null;
-  coverImage: string | null;
-}
-
-/**
- * Busca en el catálogo local (PublisherEdition) por título — incluso en español
- * y aunque no esté mapeado a AniList. Para encontrar ediciones argentinas por su
- * nombre real (lo que AniList no conoce). Una entrada por (serie/edición).
- */
-export async function searchPublisherEditions(
-  q: string,
-  limit = 16,
-): Promise<LocalCatalogHit[]> {
-  const norm = normalizeTitle(q);
-  if (norm.length < 2) return [];
-  // Cada palabra (≥2) debe estar en el título normalizado → tolera orden/huecos
-  // ("aroma cafe" matchea "historias con aroma a cafe").
-  const tokens = norm.split(" ").filter((t) => t.length >= 2);
-  if (tokens.length === 0) return [];
-  const rows = await prisma.publisherEdition.findMany({
-    where: { AND: tokens.map((t) => ({ normTitle: { contains: t } })) },
-    select: {
-      id: true,
-      publisher: true,
-      title: true,
-      anilistId: true,
-      workId: true,
-      work: { select: { coverImage: true } },
-    },
-    orderBy: { volumes: "desc" },
-    take: 60,
-  });
-  // Dedupe: una fila por obra (workId), o por serie mapeada / edición si falta.
-  const seen = new Set<string>();
-  const out: LocalCatalogHit[] = [];
-  for (const r of rows) {
-    const key = r.workId
-      ? `w:${r.workId}`
-      : r.anilistId
-        ? `a:${r.anilistId}`
-        : `e:${r.id}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({
-      id: r.id,
-      publisher: r.publisher,
-      title: r.title,
-      anilistId: r.anilistId,
-      workId: r.workId,
-      coverImage: r.work?.coverImage ?? null,
-    });
-    if (out.length >= limit) break;
-  }
-  return out;
-}
-
 /**
  * Busca en el índice las mejores ediciones (una por editorial) que matcheen
  * cualquiera de los títulos dados. Match exacto por slug o título normalizado.
@@ -219,37 +181,6 @@ export async function lookupEditions(
     }
   }
   return [...best.values()];
-}
-
-interface TitledMedia {
-  id: number;
-}
-
-/**
- * De una lista de series, cuáles tienen edición nacional, usando el **mapeo
- * verificado** (PublisherEdition.anilistId, resuelto por autor). Devuelve, por
- * id de serie, las editoriales que la publican. Sin matching por título → sin
- * falsos positivos en homónimos.
- */
-export async function nationalEditionsByManga(
-  mangas: TitledMedia[],
-): Promise<Map<number, string[]>> {
-  const ids = mangas.map((m) => m.id);
-  const result = new Map<number, string[]>();
-  if (ids.length === 0) return result;
-
-  const rows = await prisma.publisherEdition.findMany({
-    where: { anilistId: { in: ids } },
-    select: { anilistId: true, publisher: true },
-  });
-
-  for (const r of rows) {
-    if (r.anilistId == null) continue;
-    const pubs = result.get(r.anilistId) ?? [];
-    if (!pubs.includes(r.publisher)) pubs.push(r.publisher);
-    result.set(r.anilistId, pubs);
-  }
-  return result;
 }
 
 export async function upsertPublisherEdition(e: {
@@ -302,18 +233,6 @@ export async function workCoverByAnilist(
     select: { coverImage: true },
   });
   return w?.coverImage ?? null;
-}
-
-/** Set de anilistId marcados "próximo a salir" (flag manual del Work), vía edición. */
-export async function upcomingByAnilist(ids: number[]): Promise<Set<number>> {
-  const out = new Set<number>();
-  if (ids.length === 0) return out;
-  const rows = await prisma.publisherEdition.findMany({
-    where: { anilistId: { in: ids }, work: { upcoming: true } },
-    select: { anilistId: true },
-  });
-  for (const r of rows) if (r.anilistId != null) out.add(r.anilistId);
-  return out;
 }
 
 /**
@@ -401,35 +320,6 @@ export async function getLocalAuthors(): Promise<{ name: string; count: number }
     }
   }
   return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/** Obras de un autor (match por substring en `Work.author`). */
-export interface AuthorWork {
-  id: number;
-  title: string;
-  coverImage: string | null;
-  national: boolean;
-  intl: boolean;
-  publishers: string[];
-}
-
-export async function getWorksByAuthor(name: string): Promise<AuthorWork[]> {
-  const works = await prisma.work.findMany({
-    where: { author: { contains: name, mode: "insensitive" }, ...inCatalogWhere() },
-    orderBy: { normTitle: "asc" },
-    select: {
-      id: true,
-      title: true,
-      coverImage: true,
-      upcoming: true,
-      editions: { select: { publisher: true, volumes: true } },
-    },
-  });
-  // Mismas banderas que el catálogo (helper único, no hardcodear Ivrea).
-  return works.map((w) => {
-    const { national, intl, publishers } = workCardFlags(w.editions, w.upcoming);
-    return { id: w.id, title: w.title, coverImage: w.coverImage, national, intl, publishers };
-  });
 }
 
 /**
@@ -584,12 +474,39 @@ export interface WorkCard {
   releaseLabel: string | null;
   genres: string[];
   demographic: string | null;
+  maxVolumes: number; // tomos de la edición más larga (para ordenar "más tomos")
+  finished: boolean; // alguna edición marcada COMPLETA (señal de Ivrea; ver enrich)
   next: { volume: number | null; date: Date } | null; // próximo tomo NUEVO
   reissue: { volume: number | null; date: Date } | null; // próxima reedición
 }
 
 const AR_PUBLISHERS = new Set<string>(PUBLISHERS);
 const INTL_SET = new Set<string>(INTL_PUBLISHERS);
+
+export interface WishEditionLite {
+  key: string;
+  publisher: string | null;
+  region: string | null;
+  label: string;
+}
+
+/** Ediciones deseables de una obra a partir de sus editoriales visibles. */
+export function wishEditionsFor(
+  publishers: string[],
+  national: boolean,
+): WishEditionLite[] {
+  const seen = new Set<string>();
+  const eds: WishEditionLite[] = [];
+  for (const p of publishers) {
+    const key = publisherKey(p);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    eds.push({ key, publisher: p, region: publisherRegionOf(p), label: publisherShort(p) });
+  }
+  if (eds.length === 0 && national)
+    eds.push({ key: "ivrea", publisher: "Ivrea Argentina", region: "AR", label: "Ivrea" });
+  return eds;
+}
 
 /**
  * Banderas y editoriales visibles de una obra. ÚNICA fuente de verdad para las
@@ -632,6 +549,8 @@ export async function browseWorks(opts: {
   tab?: "az" | "series" | "tomos";
   take?: number;
   page?: number;
+  /** Filtra por autor (nombre exacto por tokens, no substring). Para /autores. */
+  author?: string;
 }): Promise<{ items: WorkCard[]; total: number }> {
   const take = opts.take ?? 60;
   const page = Math.max(1, opts.page ?? 1);
@@ -653,6 +572,9 @@ export async function browseWorks(opts: {
   // existen en otras editoriales (Panini/Ovni/españolas) hasta sumarlas bien.
   const conds: WorkWhere[] = [inCatalogWhere()];
   if (qFilter) conds.push(qFilter);
+  // Prefiltro por substring en DB; el match exacto por nombre se hace abajo.
+  if (opts.author)
+    conds.push({ author: { contains: opts.author, mode: "insensitive" } });
 
   // A-Z combina nacional + internacional. Las pestañas series/tomos son del
   // catálogo nacional (debuts y releases de Ivrea): naturalmente solo traen
@@ -685,7 +607,7 @@ export async function browseWorks(opts: {
 
   const where: WorkWhere = conds.length === 1 ? conds[0] : { AND: conds };
 
-  const [works, total] = await Promise.all([
+  const [worksRaw, totalRaw] = await Promise.all([
     prisma.work.findMany({
       where,
       orderBy: { normTitle: "asc" },
@@ -699,11 +621,17 @@ export async function browseWorks(opts: {
         releaseLabel: true,
         genres: true,
         demographic: true,
-        editions: { select: { id: true, publisher: true, volumes: true } },
+        author: true,
+        editions: { select: { id: true, publisher: true, volumes: true, status: true } },
       },
     }),
     prisma.work.count({ where }),
   ]);
+  // Match exacto por nombre de autor (el `contains` de DB es laxo: "ONE"⊂"BONES").
+  const works = opts.author
+    ? worksRaw.filter((w) => authorNameMatches(opts.author!, w.author))
+    : worksRaw;
+  const total = opts.author ? works.length : totalRaw;
 
   // Próxima salida por work (badge de la card). Incluye reediciones, con su
   // `kind`. Si una serie tiene tomo NUEVO y reedición en camino, prioriza el
@@ -761,6 +689,8 @@ export async function browseWorks(opts: {
       releaseLabel: w.releaseLabel,
       genres: w.genres,
       demographic: w.demographic,
+      maxVolumes: w.editions.reduce((m, e) => Math.max(m, e.volumes), 0),
+      finished: w.editions.some((e) => e.status != null && /complet/i.test(e.status)),
       next,
       reissue,
     };
@@ -886,138 +816,6 @@ export async function linkPublisherEditions(
         .catch(() => {}),
     ),
   );
-}
-
-export interface EditorialWork {
-  id: number;
-  title: string;
-  anilistId: number | null;
-  volumes: number;
-  url: string;
-  coverImage: string | null;
-  upcoming: boolean;
-  releaseLabel: string | null;
-}
-
-const editorialSelect = {
-  id: true,
-  title: true,
-  anilistId: true,
-  volumes: true,
-  url: true,
-  work: { select: { coverImage: true, upcoming: true, releaseLabel: true } },
-} as const;
-
-type EditorialRow = {
-  id: number;
-  title: string;
-  anilistId: number | null;
-  volumes: number;
-  url: string;
-  work: {
-    coverImage: string | null;
-    upcoming: boolean;
-    releaseLabel: string | null;
-  } | null;
-};
-
-const toEditorialWork = (r: EditorialRow): EditorialWork => ({
-  id: r.id,
-  title: r.title,
-  anilistId: r.anilistId,
-  volumes: r.volumes,
-  url: r.url,
-  coverImage: r.work?.coverImage ?? null,
-  upcoming: r.work?.upcoming ?? false,
-  releaseLabel: r.work?.releaseLabel ?? null,
-});
-
-/** Página del catálogo de una editorial (orden alfabético). */
-export async function getEditorialPage(
-  publisher: string,
-  page: number,
-  perPage = 24,
-): Promise<{ works: EditorialWork[]; lastPage: number }> {
-  const safePage = Math.max(1, page);
-  const [total, rows] = await Promise.all([
-    prisma.publisherEdition.count({ where: { publisher } }),
-    prisma.publisherEdition.findMany({
-      where: { publisher },
-      orderBy: { normTitle: "asc" },
-      skip: (safePage - 1) * perPage,
-      take: perPage,
-      select: editorialSelect,
-    }),
-  ]);
-  return {
-    works: rows.map(toEditorialWork),
-    lastPage: Math.max(1, Math.ceil(total / perPage)),
-  };
-}
-
-/** Todo el catálogo de una editorial (para filtrar/paginar client-side). */
-export async function getEditorialAll(
-  publisher: string,
-): Promise<EditorialWork[]> {
-  const rows = await prisma.publisherEdition.findMany({
-    where: { publisher },
-    orderBy: { normTitle: "asc" },
-    select: editorialSelect,
-  });
-  return rows.map(toEditorialWork);
-}
-
-/**
- * Dedupe de ediciones a "una card por obra" (por anilistId, o título si no).
- * Si dos editoriales tienen la misma serie (ej. One Piece Ivrea vs Larp), nos
- * quedamos con la de MÁS tomos (la más completa). El Map preserva el orden
- * alfabético de entrada (rows vienen ordenadas por normTitle).
- */
-function dedupeWorks(rows: EditorialWork[]): EditorialWork[] {
-  const best = new Map<string, EditorialWork>();
-  for (const w of rows) {
-    const key = w.anilistId ? `a${w.anilistId}` : `t${normalizeTitle(w.title)}`;
-    const cur = best.get(key);
-    if (!cur || w.volumes > cur.volumes) best.set(key, w);
-  }
-  return [...best.values()];
-}
-
-/**
- * Catálogo local (todas las editoriales) cuyas obras empiezan con una letra, para
- * el modo "Nacional A-Z" con índice alfabético. "#" agrupa las que empiezan con
- * número. Una card por obra.
- */
-export async function getCatalogByLetter(letter: string): Promise<EditorialWork[]> {
-  const l = letter.toLowerCase();
-  const where = /^[a-z]$/.test(l)
-    ? { normTitle: { startsWith: l } }
-    : { OR: "0123456789".split("").map((d) => ({ normTitle: { startsWith: d } })) };
-  const rows = await prisma.publisherEdition.findMany({
-    where,
-    orderBy: { normTitle: "asc" },
-    select: editorialSelect,
-  });
-  return dedupeWorks(rows.map(toEditorialWork));
-}
-
-/** Todo el catálogo local (una card por obra) para el modo Nacional A-Z "All". */
-export async function getCatalogAll(): Promise<EditorialWork[]> {
-  const rows = await prisma.publisherEdition.findMany({
-    orderBy: { normTitle: "asc" },
-    select: editorialSelect,
-  });
-  return dedupeWorks(rows.map(toEditorialWork));
-}
-
-/** Obras "próximo a salir" (preventa) para el modo Próximos del browse. */
-export async function getUpcomingWorks(): Promise<EditorialWork[]> {
-  const rows = await prisma.publisherEdition.findMany({
-    where: { work: { upcoming: true } },
-    orderBy: { normTitle: "asc" },
-    select: editorialSelect,
-  });
-  return dedupeWorks(rows.map(toEditorialWork));
 }
 
 // --- Curación admin de mapeos editorial ↔ serie ---
@@ -1175,15 +973,4 @@ export async function setEditionNationalOnly(id: number, value: boolean) {
     where: { id },
     data: { nationalOnly: value },
   });
-}
-
-/** Cantidad de títulos por editorial (para los chips). */
-export async function editorialCounts(): Promise<Record<string, number>> {
-  const rows = await prisma.publisherEdition.groupBy({
-    by: ["publisher"],
-    _count: { _all: true },
-  });
-  const out: Record<string, number> = {};
-  for (const r of rows) out[r.publisher] = r._count._all;
-  return out;
 }

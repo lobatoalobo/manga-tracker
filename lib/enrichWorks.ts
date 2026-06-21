@@ -54,11 +54,16 @@ function mergeGenres(...lists: string[][]): string[] {
 export async function enrichWorks(opts: {
   limit?: number;
   force?: boolean; // re-enriquecer aunque ya tengan enrichedAt
+  onlyMissingCover?: boolean; // solo Works sin portada (recovery de portadas)
   dryRun?: boolean;
 } = {}): Promise<EnrichResult> {
   const limit = opts.limit ?? 50;
   const works = await prisma.work.findMany({
-    where: opts.force ? {} : { enrichedAt: null },
+    where: opts.onlyMissingCover
+      ? { coverImage: null }
+      : opts.force
+        ? {}
+        : { enrichedAt: null },
     take: limit,
     orderBy: { id: "asc" },
     select: {

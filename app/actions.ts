@@ -17,7 +17,8 @@ import {
   type AddEditionInput,
   type ReadingStatus,
 } from "@/lib/collection";
-import { createReport, setReportStatus } from "@/lib/reports";
+import { createReport, setReportStatus, deleteReport } from "@/lib/reports";
+import { mergeWorks, unlinkWorkAnilist } from "@/lib/mergeWorks";
 import {
   createStore,
   setStoreStatus,
@@ -41,7 +42,6 @@ import {
   searchPurchaseEditions,
   EDITORIALS,
 } from "@/lib/catalog";
-import { ANILIST_OFF } from "@/lib/flags";
 import { resolveEditionSeries } from "@/lib/resolveSeries";
 import { isAdmin } from "@/lib/admin";
 import {
@@ -54,14 +54,9 @@ import {
   type PurchaseItemInput,
   type UpdatePurchaseItem,
 } from "@/lib/purchases";
-import { searchMangaList } from "@/lib/anilist";
 import { setCrumbQuery, setEditionUrl } from "@/lib/storeLinks";
 import { normalizeReleaseLabel } from "@/lib/releaseDate";
-import {
-  invalidateEditionsCache,
-  clearAllEditionsCache,
-} from "@/lib/getMangaDetails";
-import { dispatchCrawl } from "@/lib/github";
+import { invalidateEditionsCache } from "@/lib/getMangaDetails";
 import { importWhakoomUrl } from "@/lib/whakoomImport";
 import { runAdminTask } from "@/lib/adminTasks";
 import { setNotifPref, type NotifCategory } from "@/lib/notificationPrefs";
@@ -249,6 +244,28 @@ export async function resolveReportAction(
   await assertAdmin(); // solo el dueño resuelve reportes
   await setReportStatus(id, status);
   revalidatePath("/admin/reportes");
+}
+
+export async function deleteReportAction(id: number) {
+  await assertAdmin(); // solo el dueño borra reportes
+  await deleteReport(id);
+  revalidatePath("/admin/reportes");
+}
+
+/** Fusiona dos Works duplicados (target = el que se conserva). Solo admin. */
+export async function mergeWorksAction(sourceId: number, targetId: number) {
+  await assertAdmin();
+  await mergeWorks(sourceId, targetId);
+  revalidatePath("/admin/duplicados");
+  return { ok: true as const };
+}
+
+/** Desvincula un Work de su anilistId (mismapeo: no es la misma serie). Solo admin. */
+export async function unlinkWorkAnilistAction(workId: number) {
+  await assertAdmin();
+  await unlinkWorkAnilist(workId);
+  revalidatePath("/admin/duplicados");
+  return { ok: true as const };
 }
 
 /**
@@ -455,13 +472,23 @@ export async function updateEditionAction(
   revalidatePath("/admin/mapeos");
 }
 
-/** Borra una entrada del catálogo (p. ej. una entrada fantasma de Panini). */
+/** Borra una entrada del catálogo (edición fantasma / duplicada / sin tomos). */
 export async function deleteEditionAction(id: number) {
   await assertAdmin();
   const old = await editionAnilistId(id);
   await deletePublisherEdition(id);
   await flushEditionCaches(old);
-  revalidatePath("/admin/mapeos");
+  // Si el Work quedó sin ediciones, lo limpiamos (no deja obras huérfanas).
+  await prisma.work.deleteMany({ where: { editions: { none: {} } } });
+  revalidatePath("/admin/herramientas");
+}
+
+/** Marca un Work como "próxima a salir" (debut válido sin tomos). Solo admin. */
+export async function markWorkUpcomingAction(workId: number) {
+  await assertAdmin();
+  await prisma.work.update({ where: { id: workId }, data: { upcoming: true } });
+  revalidatePath("/admin/herramientas");
+  return { ok: true as const };
 }
 
 /** Marca/desmarca una edición como solo-nacional (sin equivalente en AniList). */
@@ -507,12 +534,6 @@ async function assertAdmin() {
   if (!isAdmin(session?.user?.email)) throw new Error("No autorizado");
 }
 
-/** Admin: dispara un crawl/job en GitHub Actions. */
-export async function runCrawlAction(job: string) {
-  await assertAdmin();
-  return dispatchCrawl(job);
-}
-
 /** Admin: prende/apaga una feature flag (sin redeploy). */
 export async function setFlagAction(key: string, enabled: boolean) {
   await assertAdmin();
@@ -529,11 +550,7 @@ export async function setFlagAction(key: string, enabled: boolean) {
 export async function importWhakoomUrlAction(url: string) {
   await assertAdmin();
   const res = await importWhakoomUrl(url.trim());
-  if (res.ok) {
-    revalidatePath("/admin/herramientas");
-    revalidatePath("/admin/mapeos");
-    if (res.anilistId) revalidatePath(`/manga/${res.anilistId}`);
-  }
+  if (res.ok) revalidatePath("/admin/herramientas");
   return res;
 }
 
@@ -547,14 +564,6 @@ export async function runAdminTaskAction(id: string, dryRun: boolean) {
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Error" };
   }
-}
-
-/** Admin: vacía toda la caché de ediciones (sin redeploy). */
-export async function flushEditionsCacheAction() {
-  await assertAdmin();
-  const count = await clearAllEditionsCache();
-  revalidatePath("/admin/herramientas");
-  return { ok: true as const, count };
 }
 
 /** Admin: override del término de búsqueda de Crumb para una serie. */
@@ -947,17 +956,7 @@ export async function searchPurchaseSeriesAction(query: string) {
   if (q.length < 2) return [];
   // Catálogo local: una entrada POR EDICIÓN (Ivrea / VIZ), así al elegir ya
   // sabemos serie + editorial + colección. id negativo (-workId).
-  if (ANILIST_OFF) return searchPurchaseEditions(q, 8);
-  const raw = await searchMangaList(q, true).catch(() => []);
-  return raw.slice(0, 8).map((m: any) => ({
-    id: m.id as number,
-    title: (m.title?.english || m.title?.romaji || m.title?.native) as string,
-    coverImage: (m.coverImage?.large ?? null) as string | null,
-    publisher: null as string | null,
-    label: (m.title?.english || m.title?.romaji || m.title?.native) as string,
-    intl: false,
-    volumes: (m.volumes ?? 0) as number,
-  }));
+  return searchPurchaseEditions(q, 8);
 }
 
 export async function deletePurchaseAction(id: number) {

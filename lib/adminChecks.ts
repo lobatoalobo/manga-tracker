@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { isOvniUrl } from "@/lib/ovni";
 
 export interface IntegrityItem {
   label: string; // qué mostrar
-  detail?: string; // contexto
-  href?: string; // a dónde ir a arreglarlo
+  detail?: string; // contexto para decidir
+  editionId?: number; // si está, se puede Borrar la edición
+  workId?: number; // si está, se puede "Marcar próxima" (debut válido sin tomos)
+  url?: string; // link a la fuente para verificar
 }
 
 export interface IntegrityCheck {
@@ -12,61 +13,53 @@ export interface IntegrityCheck {
   title: string;
   hint: string;
   count: number;
-  samples: IntegrityItem[]; // primeros N
+  samples: IntegrityItem[]; // lista completa (cap alto) para poder accionar
 }
 
-const SAMPLE = 12;
+const CAP = 500;
 
 /**
- * Anomalías queryables del catálogo y las colecciones. Cada chequeo apunta a un
- * incidente que ya tuvimos, para poder corregirlo a mano desde admin.
+ * Anomalías ACCIONABLES del catálogo: ediciones a revisar desde
+ * /admin/herramientas. Cada item trae el contexto y las acciones posibles.
  */
 export async function getCatalogIntegrity(): Promise<IntegrityCheck[]> {
-  const [zeroVol, ovniBadUrl, trackedEds, pubRows] = await Promise.all([
-    // 1) Ediciones con 0 tomos → no se muestran como card (invisibles).
+  const [zeroRaw, pubRows] = await Promise.all([
+    // Ediciones con 0 tomos. Excluimos las de obras ya marcadas "próxima"
+    // (debuts legítimos sin tomos): esas NO molestan, no van a la lista.
     prisma.publisherEdition.findMany({
       where: { volumes: 0 },
-      select: { id: true, title: true, publisher: true, anilistId: true },
-      orderBy: { updatedAt: "desc" },
-      take: 200,
-    }),
-    // 2) Ovni sin link a OvniPress (debería ser 0 tras el backfill).
-    prisma.publisherEdition.findMany({
-      where: { publisher: "Ovni Press" },
-      select: { id: true, title: true, url: true, anilistId: true },
-    }),
-    // 3) Tomo poseído > total de la edición (el bug del tomo 15).
-    prisma.trackedEdition.findMany({
-      where: { ownedVolumes: { some: {} } },
       select: {
         id: true,
-        label: true,
-        totalVolumes: true,
-        manga: { select: { anilistId: true, romajiTitle: true } },
-        ownedVolumes: { select: { volume: true } },
+        title: true,
+        publisher: true,
+        slug: true,
+        url: true,
+        workId: true,
+        work: {
+          select: { upcoming: true, editions: { select: { volumes: true } } },
+        },
       },
+      orderBy: { publisher: "asc" },
     }),
-    // 4) Posibles duplicados: misma editorial + mismo normTitle.
+    // Duplicados: misma editorial + mismo normTitle (edición repetida).
     prisma.publisherEdition.findMany({
       select: {
         id: true,
         publisher: true,
         normTitle: true,
         title: true,
+        slug: true,
+        url: true,
+        volumes: true,
         anilistId: true,
       },
     }),
   ]);
 
-  // 3) filtrar en memoria los que tienen un tomo fuera de rango.
-  const outOfRange = trackedEds
-    .map((e) => ({
-      e,
-      max: Math.max(...e.ownedVolumes.map((v) => v.volume), 0),
-    }))
-    .filter((x) => x.e.totalVolumes > 0 && x.max > x.e.totalVolumes);
+  const zeroVol = zeroRaw.filter((r) => !r.work?.upcoming);
 
-  // 4) agrupar duplicados por (publisher, normTitle).
+  // Duplicados por (publisher, normTitle). Real solo si NO son series distintas
+  // con nombre parecido (ej. "Citrus" vs "Citrus+" → distinto anilistId).
   const byKey = new Map<string, typeof pubRows>();
   for (const r of pubRows) {
     const k = `${r.publisher}::${r.normTitle}`;
@@ -74,62 +67,45 @@ export async function getCatalogIntegrity(): Promise<IntegrityCheck[]> {
     arr.push(r);
     byKey.set(k, arr);
   }
-  // Duplicado real solo si NO son series distintas con nombre parecido (ej.
-  // "Citrus" #97832 vs "Citrus+" #103884 normalizan igual pero son 2 obras).
-  const dupes = [...byKey.values()].filter((g) => {
+  const dupGroups = [...byKey.values()].filter((g) => {
     if (g.length < 2) return false;
-    const series = new Set(
-      g.filter((r) => r.anilistId != null).map((r) => r.anilistId),
-    );
+    const series = new Set(g.filter((r) => r.anilistId != null).map((r) => r.anilistId));
     return series.size < 2;
   });
-
-  const ovniBad = ovniBadUrl.filter((r) => !isOvniUrl(r.url));
 
   return [
     {
       key: "zeroVol",
       title: "Ediciones con 0 tomos",
-      hint: "No se muestran como card en la ficha; revisá o borrá.",
+      hint: "Una serie nueva/anunciada sin tomos: marcala como Próxima (queda como debut). Si es basura del crawl o redundante: borrala. Las que ya son 'próxima' no aparecen.",
       count: zeroVol.length,
-      samples: zeroVol.slice(0, SAMPLE).map((r) => ({
-        label: `${r.title} · ${r.publisher}`,
-        detail: r.anilistId ? `serie #${r.anilistId}` : "sin mapear",
-        href: r.anilistId ? `/manga/${r.anilistId}` : "/admin/mapeos",
-      })),
-    },
-    {
-      key: "outOfRange",
-      title: "Tomos fuera de rango (poseído > total)",
-      hint: "El total cacheado quedó corto; ampliar total o revisar.",
-      count: outOfRange.length,
-      samples: outOfRange.slice(0, SAMPLE).map(({ e, max }) => ({
-        label: `${e.manga.romajiTitle} · ${e.label}`,
-        detail: `tomo ${max} > total ${e.totalVolumes}`,
-        href: `/manga/${e.manga.anilistId}`,
-      })),
-    },
-    {
-      key: "ovniBadUrl",
-      title: "Ovni sin link a OvniPress",
-      hint: "URL todavía apunta a Whakoom u otra fuente.",
-      count: ovniBad.length,
-      samples: ovniBad.slice(0, SAMPLE).map((r) => ({
-        label: r.title,
-        detail: r.url,
-        href: r.anilistId ? `/manga/${r.anilistId}` : "/admin/mapeos",
-      })),
+      samples: zeroVol.slice(0, CAP).map((r) => {
+        const siblingMax = Math.max(0, ...(r.work?.editions.map((e) => e.volumes) ?? [0]));
+        return {
+          label: `${r.title} · ${r.publisher}`,
+          detail:
+            siblingMax > 0
+              ? `${r.slug} · la obra ya tiene otra edición con ${siblingMax} tomos → redundante`
+              : r.slug,
+          editionId: r.id,
+          workId: r.workId ?? undefined,
+          url: r.url,
+        };
+      }),
     },
     {
       key: "dupes",
-      title: "Posibles duplicados (misma editorial + título)",
-      hint: "Pueden ser ediciones repetidas; consolidá o borrá.",
-      count: dupes.length,
-      samples: dupes.slice(0, SAMPLE).map((g) => ({
-        label: `${g[0].title} · ${g[0].publisher}`,
-        detail: `${g.length} entradas`,
-        href: `/admin/mapeos?q=${encodeURIComponent(g[0].title)}`,
-      })),
+      title: "Ediciones duplicadas (misma editorial + título)",
+      hint: "Misma serie cargada dos veces en la misma editorial. Borrá la repetida (a nivel EDICIÓN; los Works duplicados van en Series duplicadas).",
+      count: dupGroups.length,
+      samples: dupGroups.slice(0, CAP).flatMap((g) =>
+        g.map((r) => ({
+          label: `${r.title} · ${r.publisher}`,
+          detail: `${r.slug} · ${r.volumes}t · grupo de ${g.length}`,
+          editionId: r.id,
+          url: r.url,
+        })),
+      ),
     },
   ];
 }

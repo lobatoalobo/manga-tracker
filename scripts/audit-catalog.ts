@@ -50,14 +50,14 @@ const checks: Check[] = [
   },
   {
     name: "broken-cover",
-    detail: "portadas sin migrar a Blob (mangadex/proxy) — pueden estar rotas",
+    detail: "portadas rotas: URL de Vercel Blob viejo (403) o hotlink directo de MangaDex (bloqueado). El proxy /api/cover NO cuenta (es la solución).",
     critical: true,
     run: async () => {
       const ws = await prisma.work.findMany({
         where: {
           OR: [
+            { coverImage: { contains: "blob.vercel-storage" } },
             { coverImage: { contains: "uploads.mangadex.org" } },
-            { coverImage: { contains: "/api/cover" } },
           ],
         },
         select: { title: true },
@@ -121,6 +121,34 @@ const checks: Check[] = [
       }
       const dups = [...by.values()].filter((v) => v.length > 1);
       return { count: dups.length, samples: dups.slice(0, 8).map((v) => v.join(" = ")) };
+    },
+  },
+  {
+    name: "split-anilist",
+    detail: "ediciones con el MISMO anilistId en Works distintos (dup no unificado, ej. Devilman G/Grimoire) → fusionar con scripts/merge-works.ts",
+    critical: false,
+    run: async () => {
+      // El anilistId de la edición se resuelve a veces DESPUÉS de crear el Work
+      // (por título), y no reconcilia. Si dos ediciones comparten anilistId pero
+      // cuelgan de Works distintos, son la misma serie partida. El de título no lo
+      // agarra (títulos distintos: "Devilman G" vs "Devilman Grimoire").
+      const eds = await prisma.publisherEdition.findMany({
+        where: { anilistId: { not: null }, workId: { not: null } },
+        select: { anilistId: true, workId: true, work: { select: { title: true } } },
+      });
+      const byAnilist = new Map<number, Map<number, string>>();
+      for (const e of eds) {
+        const m = byAnilist.get(e.anilistId!) ?? new Map<number, string>();
+        m.set(e.workId!, e.work?.title ?? `#${e.workId}`);
+        byAnilist.set(e.anilistId!, m);
+      }
+      const split = [...byAnilist.entries()].filter(([, works]) => works.size > 1);
+      return {
+        count: split.length,
+        samples: split.slice(0, 8).map(([aid, works]) =>
+          `anilist ${aid}: ${[...works.entries()].map(([id, t]) => `#${id} ${t}`).join(" = ")}`,
+        ),
+      };
     },
   },
   {

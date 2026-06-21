@@ -3,10 +3,9 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
-import { getMappingHealth } from "@/lib/mappingHealth";
 import { getCatalogFlags } from "@/lib/catalog";
 import { getCatalogIntegrity } from "@/lib/adminChecks";
-import { getJobRuns } from "@/lib/jobs";
+import { getDuplicateWorkGroups } from "@/lib/mergeWorks";
 import { countPendingReports } from "@/lib/reports";
 import { countPendingStores } from "@/lib/stores";
 import { countPendingIndieWorks } from "@/lib/indie";
@@ -17,23 +16,23 @@ export default async function AdminHome() {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) notFound();
 
-  const [health, integrity, jobs, reports, stores, indie, works, upcoming, flags] =
+  const [edCounts, integrity, reports, stores, indie, works, upcoming, flags, dups] =
     await Promise.all([
-      getMappingHealth(),
+      prisma.publisherEdition.groupBy({ by: ["publisher"], _count: { _all: true } }),
       getCatalogIntegrity(),
-      getJobRuns(6),
       countPendingReports(),
       countPendingStores(),
       countPendingIndieWorks(),
       prisma.work.count(),
       prisma.work.count({ where: { upcoming: true } }),
       getCatalogFlags(),
+      getDuplicateWorkGroups(),
     ]);
 
-  const total = health.publishers.reduce((s, p) => s + p.total, 0);
-  const mapped = health.publishers.reduce((s, p) => s + p.mapped, 0);
-  const national = health.publishers.reduce((s, p) => s + p.national, 0);
-  const unmapped = total - mapped - national;
+  const editorials = edCounts
+    .map((r) => ({ publisher: r.publisher, total: r._count._all }))
+    .sort((a, b) => b.total - a.total);
+  const total = editorials.reduce((s, e) => s + e.total, 0);
 
   return (
     <main className="mx-auto max-w-4xl px-5 py-8">
@@ -53,45 +52,34 @@ export default async function AdminHome() {
       <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-accent">
         Catálogo
       </h2>
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Ediciones" value={total} />
-        <Stat label="Mapeadas" value={mapped} />
-        <Stat label="Nacionales" value={national + unmapped} />
         <Stat label="Obras" value={works} />
         <Stat label="🔜 Preventas" value={upcoming} />
+        <Stat
+          href="/admin/duplicados"
+          label="🔀 Duplicadas"
+          value={dups.length}
+          alert={dups.length > 0}
+        />
       </div>
-      <div className="mb-4 grid grid-cols-2 gap-3">
-        <Stat
-          href="/admin/mapeos?estado=nocover"
-          label="🖼 Sin portada"
-          value={flags.noCover}
-          alert={flags.noCover > 0}
-        />
-        <Stat
-          href="/admin/mapeos?estado=comic"
-          label="🦸 Cómics (info)"
-          value={flags.comics}
-        />
+      <div className="mb-4">
+        <Stat label="🖼 Sin portada" value={flags.noCover} alert={flags.noCover > 0} />
       </div>
       <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {health.publishers
-          .filter((p) => p.total > 0)
-          .map((p) => (
-            <Link
-              key={p.publisher}
-              href={`/admin/mapeos?ed=${slugFor(p.label)}`}
-              className="rounded-xl border border-border bg-surface p-3 transition hover:border-accent"
-            >
-              <p className="text-sm font-medium">{p.label}</p>
-              <p className="mt-1 text-sm">
-                <span className="font-semibold">{p.total}</span>{" "}
-                <span className="text-muted">en catálogo</span>
-              </p>
-              <p className="mt-0.5 text-xs text-muted">
-                {p.mapped} con AniList (extras)
-              </p>
-            </Link>
-          ))}
+        {editorials.map((e) => (
+          <Link
+            key={e.publisher}
+            href={`/catalogo?pub=${encodeURIComponent(e.publisher)}`}
+            className="rounded-xl border border-border bg-surface p-3 transition hover:border-accent"
+          >
+            <p className="text-sm font-medium">{e.publisher}</p>
+            <p className="mt-1 text-sm">
+              <span className="font-semibold">{e.total}</span>{" "}
+              <span className="text-muted">en catálogo</span>
+            </p>
+          </Link>
+        ))}
       </div>
 
       {/* Integridad */}
@@ -119,42 +107,16 @@ export default async function AdminHome() {
               ))}
           </div>
           <p className="mb-8 text-xs text-muted">
-            Muchos se resuelven solos desde{" "}
+            Revisá y borrá desde{" "}
             <Link href="/admin/herramientas" className="text-accent hover:underline">
-              Herramientas → tareas
-            </Link>{" "}
-            (Simular / Aplicar).
+              Herramientas → Limpieza del catálogo
+            </Link>
+            .
           </p>
         </>
       )}
-
-      {/* Últimos jobs */}
-      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-accent">
-        Últimos jobs
-      </h2>
-      <ul className="space-y-1 text-sm">
-        {jobs.length === 0 ? (
-          <li className="text-muted">Sin corridas registradas.</li>
-        ) : (
-          jobs.map((j) => (
-            <li key={j.id} className="flex justify-between rounded-lg bg-surface px-3 py-2">
-              <span className="truncate">
-                {j.status === "ERROR" ? "❌" : "✓"} {j.kind}
-                {j.label ? ` · ${j.label}` : ""}
-              </span>
-              <span className="shrink-0 text-xs text-muted">
-                {j.imported}↑ · {j.finishedAt.toLocaleDateString("es-AR")}
-              </span>
-            </li>
-          ))
-        )}
-      </ul>
     </main>
   );
-}
-
-function slugFor(label: string): string {
-  return label.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
 function Stat({

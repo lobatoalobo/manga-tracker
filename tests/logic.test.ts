@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { workCardFlags, publisherKey } from "@/lib/catalog";
+import { workCardFlags, publisherKey, authorNameMatches } from "@/lib/catalog";
 import { volumeCap, isPlausibleVolume } from "@/lib/volumes";
 import { parseStatus } from "@/lib/providers/mangaupdates";
 import { chooseIvreaEdition, type EdLite } from "@/lib/ivreaProximas";
@@ -40,6 +40,21 @@ describe("workCardFlags (banderas de la card)", () => {
 
   it("obra con edición publicada NO es isUpcoming aunque tenga el flag", () => {
     expect(workCardFlags([ivrea], true).isUpcoming).toBe(false);
+  });
+});
+
+describe("authorNameMatches (autor por nombre, no substring)", () => {
+  it("'ONE' NO matchea 'BONES' ni 'Kurone' (bug Carole/Konosuba)", () => {
+    expect(authorNameMatches("ONE", "BONES, Shinichiro Watanabe")).toBe(false);
+    expect(authorNameMatches("ONE", "Natsume Akatsuki, Kurone Mishima")).toBe(false);
+  });
+  it("'ONE' matchea al autor ONE", () => {
+    expect(authorNameMatches("ONE", "ONE")).toBe(true);
+    expect(authorNameMatches("ONE", "ONE, Yusuke Murata")).toBe(true);
+  });
+  it("matchea nombre completo sin importar orden / formato", () => {
+    expect(authorNameMatches("Naoki Urasawa", "NAOKI URASAWA")).toBe(true);
+    expect(authorNameMatches("Tsubasa Yamaguchi", "Yamaguchi, Tsubasa")).toBe(true);
   });
 });
 

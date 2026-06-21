@@ -33,3 +33,7 @@ export async function setReportStatus(
 ): Promise<void> {
   await prisma.report.update({ where: { id }, data: { status } });
 }
+
+export async function deleteReport(id: number): Promise<void> {
+  await prisma.report.delete({ where: { id } });
+}

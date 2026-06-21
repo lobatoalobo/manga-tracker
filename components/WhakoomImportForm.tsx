@@ -50,24 +50,7 @@ export default function WhakoomImportForm() {
           {res.ok ? (
             <p className="text-emerald-400">
               ✓ Importado: <b>{res.title}</b> ({res.publisher}) —{" "}
-              {res.anilistId ? (
-                <Link
-                  href={`/manga/${res.anilistId}`}
-                  className="text-accent hover:underline"
-                >
-                  mapeado a #{res.anilistId} ↗
-                </Link>
-              ) : (
-                <>
-                  sin mapear ·{" "}
-                  <Link
-                    href="/admin/mapeos?estado=unmapped"
-                    className="text-accent hover:underline"
-                  >
-                    mapealo acá
-                  </Link>
-                </>
-              )}
+              {res.anilistId ? `mapeado a #${res.anilistId}` : "sin mapear"}
             </p>
           ) : (
             <p className="text-red-400">✗ {res.error}</p>

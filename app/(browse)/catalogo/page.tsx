@@ -1,11 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import {
-  browseWorks,
-  publisherKey,
-  publisherRegionOf,
-  publisherShort,
-} from "@/lib/catalog";
+import { browseWorks, wishEditionsFor, INTL_PUBLISHERS } from "@/lib/catalog";
 import CatalogBrowser, {
   type BrowseCard,
   type BrowseState,
@@ -25,6 +20,11 @@ export default async function CatalogoPage({
   searchParams: Promise<{
     q?: string;
     tab?: string;
+    region?: string;
+    pubs?: string;
+    pub?: string;
+    sort?: string;
+    completed?: string;
     genre?: string;
     genres?: string;
     gmode?: string;
@@ -38,6 +38,10 @@ export default async function CatalogoPage({
   const initial: BrowseState = {
     q: sp.q ?? "",
     tab: sp.tab === "series" || sp.tab === "tomos" ? sp.tab : "az",
+    region: sp.region === "ar" || sp.region === "int" ? sp.region : "all",
+    pubs: split(sp.pubs ?? sp.pub),
+    sort: sp.sort === "vols" ? "vols" : "az",
+    completed: sp.completed === "1",
     genres: split(sp.genres ?? sp.genre),
     gmode: sp.gmode === "all" ? "all" : "any",
     demographics: split(sp.demo),
@@ -56,6 +60,8 @@ export default async function CatalogoPage({
     releaseLabel: w.releaseLabel,
     genres: w.genres,
     demographic: w.demographic,
+    maxVolumes: w.maxVolumes,
+    finished: w.finished,
     next: w.next ? { volume: w.next.volume, date: w.next.date.toISOString() } : null,
     reissue: w.reissue
       ? { volume: w.reissue.volume, date: w.reissue.date.toISOString() }
@@ -96,22 +102,8 @@ export default async function CatalogoPage({
         canWish={!!session?.user?.id}
         initial={initial}
         showGenreFilters={await isEnabled("genre-filters")}
+        intlPublishers={[...INTL_PUBLISHERS]}
       />
     </main>
   );
-}
-
-/** Ediciones deseables de una obra a partir de sus editoriales visibles. */
-function wishEditionsFor(publishers: string[], national: boolean) {
-  const seen = new Set<string>();
-  const eds = [];
-  for (const p of publishers) {
-    const key = publisherKey(p);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    eds.push({ key, publisher: p, region: publisherRegionOf(p), label: publisherShort(p) });
-  }
-  if (eds.length === 0 && national)
-    eds.push({ key: "ivrea", publisher: "Ivrea Argentina", region: "AR", label: "Ivrea" });
-  return eds;
 }

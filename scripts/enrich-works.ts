@@ -4,6 +4,9 @@
  * resumable: corré varias veces (procesa los `enrichedAt = null`).
  *
  *   node scripts/with-staging.mjs npx tsx scripts/enrich-works.ts [--limit N] [--dry] [--force]
+ *
+ * Recovery de portadas (solo Works sin portada, re-busca en MU/MD vía proxy):
+ *   node scripts/with-prod.mjs npx tsx scripts/enrich-works.ts --missing-cover --limit 200
  */
 import { enrichWorks } from "../lib/enrichWorks";
 import { prisma } from "../lib/prisma";
@@ -16,11 +19,16 @@ async function main() {
   const limit = Number(arg("--limit")) || 50;
   const dryRun = process.argv.includes("--dry");
   const force = process.argv.includes("--force");
+  const onlyMissingCover = process.argv.includes("--missing-cover");
 
-  const pending = await prisma.work.count({ where: { enrichedAt: null } });
-  console.log(`Works sin enriquecer: ${pending}. Procesando hasta ${limit}…\n`);
+  const pending = onlyMissingCover
+    ? await prisma.work.count({ where: { coverImage: null } })
+    : await prisma.work.count({ where: { enrichedAt: null } });
+  console.log(
+    `${onlyMissingCover ? "Works sin portada" : "Works sin enriquecer"}: ${pending}. Procesando hasta ${limit}…\n`,
+  );
 
-  const r = await enrichWorks({ limit, dryRun, force });
+  const r = await enrichWorks({ limit, dryRun, force, onlyMissingCover });
   console.log(r.samples.join("\n"));
   console.log(
     `\n${dryRun ? "[DRY] " : ""}scanned ${r.scanned} · con datos ${r.enriched} · match MU ${r.matchedMU} · match MD ${r.matchedMD}`,

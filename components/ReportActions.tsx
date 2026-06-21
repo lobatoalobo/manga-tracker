@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import Link from "next/link";
-import { resolveReportAction } from "@/app/actions";
+import { resolveReportAction, deleteReportAction } from "@/app/actions";
 
 export default function ReportActions({
   id,
@@ -38,6 +38,17 @@ export default function ReportActions({
         className="rounded-lg border border-border px-3 py-1.5 text-sm transition hover:border-accent disabled:opacity-50"
       >
         {resolved ? "Reabrir" : "Marcar resuelto"}
+      </button>
+      <button
+        onClick={() => {
+          if (!confirm("¿Borrar este reporte? No se puede deshacer.")) return;
+          startTransition(() => deleteReportAction(id).then(() => {}));
+        }}
+        disabled={isPending}
+        aria-label="Borrar reporte"
+        className="rounded-lg border border-border px-3 py-1.5 text-sm text-rose-400 transition hover:border-rose-400 disabled:opacity-50"
+      >
+        Borrar
       </button>
     </div>
   );
