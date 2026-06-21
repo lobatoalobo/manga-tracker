@@ -9,6 +9,7 @@
 import { prisma } from "../lib/prisma";
 import { getIvreaDataBySlug } from "../lib/providers/ivrea";
 import { storeCover } from "../lib/coverStore";
+import { dbRetry } from "../lib/dbRetry";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -22,15 +23,17 @@ async function main() {
   const force = process.argv.includes("--force");
 
   // Ediciones de Ivrea cuya obra necesita portada (o todas, con --force).
-  const eds = await prisma.publisherEdition.findMany({
-    where: {
-      publisher: "Ivrea Argentina",
-      workId: { not: null },
-      ...(force ? {} : { work: { coverImage: null } }),
-    },
-    select: { slug: true, workId: true, work: { select: { title: true } } },
-    take: limit,
-  });
+  const eds = await dbRetry(() =>
+    prisma.publisherEdition.findMany({
+      where: {
+        publisher: "Ivrea Argentina",
+        workId: { not: null },
+        ...(force ? {} : { work: { coverImage: null } }),
+      },
+      select: { slug: true, workId: true, work: { select: { title: true } } },
+      take: limit,
+    }),
+  );
   console.log(
     `${eds.length} ediciones Ivrea a revisar${force ? " (force: todas)" : " (sin portada)"}…\n`,
   );
@@ -46,9 +49,9 @@ async function main() {
       noCover++;
     } else {
       if (!dryRun)
-        await prisma.work
-          .update({ where: { id: e.workId! }, data: { coverImage: cover } })
-          .catch(() => {});
+        await dbRetry(() =>
+          prisma.work.update({ where: { id: e.workId! }, data: { coverImage: cover } }),
+        ).catch(() => {});
       updated++;
       if (updated <= 25) console.log(`  ✓ ${e.work?.title} → ${cover.slice(0, 70)}`);
     }
