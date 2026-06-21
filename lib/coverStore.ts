@@ -91,14 +91,14 @@ export async function storeCover(
  */
 async function fetchImage(
   src: string,
-): Promise<{ body: Uint8Array; ct: string } | null> {
+): Promise<{ body: ArrayBuffer; ct: string } | null> {
   for (let i = 0; i < 3; i++) {
     try {
       const res = await fetch(src);
       if (!res.ok) return null;
       const ct = res.headers.get("content-type") || "image/jpeg";
       if (!ct.startsWith("image/")) return null;
-      const body = new Uint8Array(await res.arrayBuffer());
+      const body = await res.arrayBuffer();
       return { body, ct };
     } catch {
       if (i === 2) return null;
