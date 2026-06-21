@@ -289,14 +289,18 @@ export default function CatalogBrowser({
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [regionCards, region, intlSet]);
   const activeTab: Tab = tab;
+  // Próximo tomo, reedición y preventa salen de Ivrea → son señales NACIONALES.
+  // En Internacional no aplican (no hay próximos de VIZ todavía): no se muestran
+  // ni cuentan, así no parece que sale un tomo internacional cuando es de Ivrea.
+  const nationalCtx = region !== "int";
 
   const filtered = useMemo(() => {
     const nq = norm(q.trim());
     return regionCards.filter((c) => {
       if (pubs.length && !c.publishers.some((p) => pubs.includes(p))) return false;
       if (completed && !c.finished) return false;
-      if (activeTab === "series" && !c.upcoming) return false;
-      if (activeTab === "tomos" && !c.next && !c.reissue) return false;
+      if (activeTab === "series" && !(nationalCtx && c.upcoming)) return false;
+      if (activeTab === "tomos" && !(nationalCtx && (c.next || c.reissue))) return false;
       if (showGenreFilters && genres.length) {
         const ok =
           gmode === "all"
@@ -313,7 +317,7 @@ export default function CatalogBrowser({
       if (nq && !norm(c.title).includes(nq)) return false;
       return true;
     });
-  }, [regionCards, q, activeTab, pubs, completed, genres, gmode, demographics, showGenreFilters]);
+  }, [regionCards, q, activeTab, nationalCtx, pubs, completed, genres, gmode, demographics, showGenreFilters]);
 
   const ordered = useMemo(() => {
     // Series nuevas son debuts (0 tomos): orden por fecha estimada, sin orden manual.
@@ -713,7 +717,7 @@ export default function CatalogBrowser({
                         ✓
                       </span>
                     )}
-                    {(w.next || w.reissue || (!owned && w.upcoming)) && (
+                    {nationalCtx && (w.next || w.reissue || (!owned && w.upcoming)) && (
                       <div className="absolute bottom-1 left-1 right-1 flex flex-col gap-0.5">
                         {w.next && (
                           <span className="rounded bg-emerald-600/90 px-1.5 py-0.5 text-center text-[10px] font-medium text-white">
