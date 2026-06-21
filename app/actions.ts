@@ -41,7 +41,6 @@ import {
   searchPurchaseEditions,
   EDITORIALS,
 } from "@/lib/catalog";
-import { ANILIST_OFF } from "@/lib/flags";
 import { resolveEditionSeries } from "@/lib/resolveSeries";
 import { isAdmin } from "@/lib/admin";
 import {
@@ -54,7 +53,6 @@ import {
   type PurchaseItemInput,
   type UpdatePurchaseItem,
 } from "@/lib/purchases";
-import { searchMangaList } from "@/lib/anilist";
 import { setCrumbQuery, setEditionUrl } from "@/lib/storeLinks";
 import { normalizeReleaseLabel } from "@/lib/releaseDate";
 import {
@@ -953,17 +951,7 @@ export async function searchPurchaseSeriesAction(query: string) {
   if (q.length < 2) return [];
   // Catálogo local: una entrada POR EDICIÓN (Ivrea / VIZ), así al elegir ya
   // sabemos serie + editorial + colección. id negativo (-workId).
-  if (ANILIST_OFF) return searchPurchaseEditions(q, 8);
-  const raw = await searchMangaList(q, true).catch(() => []);
-  return raw.slice(0, 8).map((m: any) => ({
-    id: m.id as number,
-    title: (m.title?.english || m.title?.romaji || m.title?.native) as string,
-    coverImage: (m.coverImage?.large ?? null) as string | null,
-    publisher: null as string | null,
-    label: (m.title?.english || m.title?.romaji || m.title?.native) as string,
-    intl: false,
-    volumes: (m.volumes ?? 0) as number,
-  }));
+  return searchPurchaseEditions(q, 8);
 }
 
 export async function deletePurchaseAction(id: number) {

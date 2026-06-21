@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
-import { ANILIST_OFF } from "@/lib/flags";
 import { countPendingReports } from "@/lib/reports";
 import { countPendingStores } from "@/lib/stores";
 import { countPendingIndieWorks } from "@/lib/indie";
@@ -117,10 +116,7 @@ export default async function RootLayout({
 
         <footer className="mt-12 border-t border-border py-8 text-center text-sm text-muted">
           <p>
-            Nakama ·{" "}
-            {ANILIST_OFF
-              ? "datos de las editoriales, MangaUpdates y MangaDex."
-              : "datos de AniList, MangaUpdates y editoriales locales."}
+            Nakama · datos de las editoriales, MangaUpdates y MangaDex.
           </p>
           <p className="mt-2 flex items-center justify-center gap-3">
             <Link href="/privacidad" className="transition hover:text-foreground">
