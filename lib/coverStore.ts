@@ -58,27 +58,52 @@ export async function storeCover(
   const src = realSource(url);
   if (!src) return url;
 
-  // OJO: sin User-Agent (el CDN de MangaDex 400ea con UA genérico).
-  const res = await fetch(src).catch(() => null);
-  if (!res || !res.ok) return null;
-  const ct = res.headers.get("content-type") || "image/jpeg";
-  if (!ct.startsWith("image/")) return null;
-  const body = new Uint8Array(await res.arrayBuffer());
+  // NUNCA tira: cualquier error de red (incluido ECONNRESET al leer el body, o el
+  // PUT) devuelve null y el caller sigue. Reintenta los transitorios. Robustez
+  // crítica para los batches (ver memoria maintenance-tooling-robust).
+  const img = await fetchImage(src);
+  if (!img) return null;
 
-  const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
+  const ext = img.ct.includes("png") ? "png" : img.ct.includes("webp") ? "webp" : "jpg";
   const key = `covers/${createHash("sha256").update(src).digest("hex").slice(0, 24)}.${ext}`;
 
-  const put = await getClient()
-    .fetch(`${ENDPOINT}/${BUCKET}/${key}`, {
+  try {
+    const put = await getClient().fetch(`${ENDPOINT}/${BUCKET}/${key}`, {
       method: "PUT",
-      body,
+      body: img.body,
       headers: {
-        "Content-Type": ct,
+        "Content-Type": img.ct,
         "Cache-Control": "public, max-age=31536000, immutable",
       },
-    })
-    .catch(() => null);
-  if (!put || !put.ok) return null;
+    });
+    if (!put.ok) return null;
+  } catch {
+    return null;
+  }
 
   return `${PUBLIC}/${key}`;
+}
+
+/**
+ * Baja los bytes de una imagen. Sin User-Agent (el CDN de MangaDex 400ea con UA
+ * genérico). Reintenta errores transitorios (ECONNRESET / terminated) hasta 3
+ * veces; ante 4xx/5xx o no-imagen devuelve null sin reintentar. Nunca tira.
+ */
+async function fetchImage(
+  src: string,
+): Promise<{ body: Uint8Array; ct: string } | null> {
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = await fetch(src);
+      if (!res.ok) return null;
+      const ct = res.headers.get("content-type") || "image/jpeg";
+      if (!ct.startsWith("image/")) return null;
+      const body = new Uint8Array(await res.arrayBuffer());
+      return { body, ct };
+    } catch {
+      if (i === 2) return null;
+      await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+  return null;
 }
