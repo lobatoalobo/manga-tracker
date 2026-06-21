@@ -19,8 +19,10 @@ export async function GET(request: Request) {
     return new Response("forbidden host", { status: 403 });
   }
 
+  // OJO: el CDN de MangaDex (uploads.mangadex.org) responde 400 a un
+  // User-Agent genérico tipo "Mozilla/5.0". Sin User-Agent sirve la imagen (200).
+  // No setear headers acá.
   const upstream = await fetch(target.toString(), {
-    headers: { "User-Agent": "Mozilla/5.0" },
     next: { revalidate: 60 * 60 * 24 * 30 },
   }).catch(() => null);
   if (!upstream || !upstream.ok) {
