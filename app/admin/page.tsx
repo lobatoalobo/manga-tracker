@@ -6,7 +6,6 @@ import { prisma } from "@/lib/prisma";
 import { getCatalogFlags } from "@/lib/catalog";
 import { getCatalogIntegrity } from "@/lib/adminChecks";
 import { getDuplicateWorkGroups } from "@/lib/mergeWorks";
-import { getJobRuns } from "@/lib/jobs";
 import { countPendingReports } from "@/lib/reports";
 import { countPendingStores } from "@/lib/stores";
 import { countPendingIndieWorks } from "@/lib/indie";
@@ -17,11 +16,10 @@ export default async function AdminHome() {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) notFound();
 
-  const [edCounts, integrity, jobs, reports, stores, indie, works, upcoming, flags, dups] =
+  const [edCounts, integrity, reports, stores, indie, works, upcoming, flags, dups] =
     await Promise.all([
       prisma.publisherEdition.groupBy({ by: ["publisher"], _count: { _all: true } }),
       getCatalogIntegrity(),
-      getJobRuns(6),
       countPendingReports(),
       countPendingStores(),
       countPendingIndieWorks(),
@@ -109,36 +107,14 @@ export default async function AdminHome() {
               ))}
           </div>
           <p className="mb-8 text-xs text-muted">
-            Muchos se resuelven solos desde{" "}
+            Revisá y borrá desde{" "}
             <Link href="/admin/herramientas" className="text-accent hover:underline">
-              Herramientas → tareas
-            </Link>{" "}
-            (Simular / Aplicar).
+              Herramientas → Limpieza del catálogo
+            </Link>
+            .
           </p>
         </>
       )}
-
-      {/* Últimos jobs */}
-      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-accent">
-        Últimos jobs
-      </h2>
-      <ul className="space-y-1 text-sm">
-        {jobs.length === 0 ? (
-          <li className="text-muted">Sin corridas registradas.</li>
-        ) : (
-          jobs.map((j) => (
-            <li key={j.id} className="flex justify-between rounded-lg bg-surface px-3 py-2">
-              <span className="truncate">
-                {j.status === "ERROR" ? "❌" : "✓"} {j.kind}
-                {j.label ? ` · ${j.label}` : ""}
-              </span>
-              <span className="shrink-0 text-xs text-muted">
-                {j.imported}↑ · {j.finishedAt.toLocaleDateString("es-AR")}
-              </span>
-            </li>
-          ))
-        )}
-      </ul>
     </main>
   );
 }

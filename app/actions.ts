@@ -472,13 +472,15 @@ export async function updateEditionAction(
   revalidatePath("/admin/mapeos");
 }
 
-/** Borra una entrada del catálogo (p. ej. una entrada fantasma de Panini). */
+/** Borra una entrada del catálogo (edición fantasma / duplicada / sin tomos). */
 export async function deleteEditionAction(id: number) {
   await assertAdmin();
   const old = await editionAnilistId(id);
   await deletePublisherEdition(id);
   await flushEditionCaches(old);
-  revalidatePath("/admin/mapeos");
+  // Si el Work quedó sin ediciones, lo limpiamos (no deja obras huérfanas).
+  await prisma.work.deleteMany({ where: { editions: { none: {} } } });
+  revalidatePath("/admin/herramientas");
 }
 
 /** Marca/desmarca una edición como solo-nacional (sin equivalente en AniList). */
