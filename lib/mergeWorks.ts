@@ -115,6 +115,11 @@ export async function mergeWorks(
       });
       editionsMoved = moved.count;
 
+      // `Work.anilistId` es @unique: liberamos el del source ANTES de pasarlo al
+      // target (si no, el update del target choca porque el source aún lo tiene).
+      if (src.anilistId)
+        await tx.work.update({ where: { id: sourceId }, data: { anilistId: null } });
+
       // 2) Backfill de campos del target desde el source (sin pisar lo existente).
       const patch: Record<string, unknown> = {};
       if (!tgt.anilistId && src.anilistId) patch.anilistId = src.anilistId;
