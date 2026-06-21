@@ -50,14 +50,14 @@ const checks: Check[] = [
   },
   {
     name: "broken-cover",
-    detail: "portadas sin migrar a Blob (mangadex/proxy) — pueden estar rotas",
+    detail: "portadas rotas: URL de Vercel Blob viejo (403) o hotlink directo de MangaDex (bloqueado). El proxy /api/cover NO cuenta (es la solución).",
     critical: true,
     run: async () => {
       const ws = await prisma.work.findMany({
         where: {
           OR: [
+            { coverImage: { contains: "blob.vercel-storage" } },
             { coverImage: { contains: "uploads.mangadex.org" } },
-            { coverImage: { contains: "/api/cover" } },
           ],
         },
         select: { title: true },
