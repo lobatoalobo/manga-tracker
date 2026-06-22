@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { looksLikeComic } from "@/lib/comicTerms";
 import { rejectEditions } from "@/lib/rejectedSources";
 import { storeCover } from "@/lib/coverStore";
+import { decodeEntities } from "@/lib/decodeEntities";
 /**
  * ¿El nombre de autor `target` está en el string de autores `field` por NOMBRE
  * (todos sus tokens presentes), no por substring? Evita que "ONE" matchee
@@ -198,11 +199,12 @@ export async function upsertPublisherEdition(e: {
     e.language || e.country !== undefined
       ? { language: e.language ?? "es", country: e.country ?? null }
       : {};
+  const title = decodeEntities(e.title);
   await prisma.publisherEdition.upsert({
     where: { publisher_slug: { publisher: e.publisher, slug: e.slug } },
     update: {
-      title: e.title,
-      normTitle: normalizeTitle(e.title),
+      title,
+      normTitle: normalizeTitle(title),
       volumes: e.volumes,
       status: e.status ?? null,
       url: e.url,
@@ -211,8 +213,8 @@ export async function upsertPublisherEdition(e: {
     create: {
       publisher: e.publisher,
       slug: e.slug,
-      title: e.title,
-      normTitle: normalizeTitle(e.title),
+      title,
+      normTitle: normalizeTitle(title),
       volumes: e.volumes,
       status: e.status ?? null,
       url: e.url,
@@ -748,7 +750,14 @@ export async function findOrCreateWork(opts: {
   synopsis?: string | null;
   originalTitle?: string | null;
 }): Promise<number> {
-  const normTitle = normalizeTitle(opts.title);
+  // Decodificamos entidades HTML que algunas fuentes dejan escapadas (I&quot;s).
+  const title = decodeEntities(opts.title);
+  const author = opts.author ? decodeEntities(opts.author) : opts.author ?? null;
+  const synopsis = opts.synopsis ? decodeEntities(opts.synopsis) : opts.synopsis ?? null;
+  const originalTitle = opts.originalTitle
+    ? decodeEntities(opts.originalTitle)
+    : opts.originalTitle ?? null;
+  const normTitle = normalizeTitle(title);
 
   // Buscamos la obra existente: por anilistId (fuerte) o por título. Para el
   // matcheo por título usamos la llave ESTRICTA (distingue Citrus de Citrus+):
@@ -763,7 +772,7 @@ export async function findOrCreateWork(opts: {
       select: { id: true, coverImage: true, author: true, synopsis: true, originalTitle: true },
     });
   } else {
-    const tight = tightTitleKey(opts.title);
+    const tight = tightTitleKey(title);
     const cands = await prisma.work.findMany({
       where: { normTitle },
       select: { id: true, coverImage: true, author: true, synopsis: true, originalTitle: true, title: true },
@@ -775,9 +784,9 @@ export async function findOrCreateWork(opts: {
     const patch: { coverImage?: string; author?: string; synopsis?: string; originalTitle?: string } = {};
     if (!existing.coverImage && opts.coverImage)
       patch.coverImage = (await storeCover(opts.coverImage)) ?? opts.coverImage;
-    if (!existing.author && opts.author) patch.author = opts.author;
-    if (!existing.synopsis && opts.synopsis) patch.synopsis = opts.synopsis;
-    if (!existing.originalTitle && opts.originalTitle) patch.originalTitle = opts.originalTitle;
+    if (!existing.author && author) patch.author = author;
+    if (!existing.synopsis && synopsis) patch.synopsis = synopsis;
+    if (!existing.originalTitle && originalTitle) patch.originalTitle = originalTitle;
     if (Object.keys(patch).length)
       await prisma.work.update({ where: { id: existing.id }, data: patch }).catch(() => {});
     return existing.id;
@@ -788,13 +797,13 @@ export async function findOrCreateWork(opts: {
     : null;
   const created = await prisma.work.create({
     data: {
-      title: opts.title,
+      title,
       normTitle,
       anilistId: opts.anilistId ?? null,
       coverImage: cover,
-      author: opts.author ?? null,
-      synopsis: opts.synopsis ?? null,
-      originalTitle: opts.originalTitle ?? null,
+      author,
+      synopsis,
+      originalTitle,
     },
   });
   return created.id;
