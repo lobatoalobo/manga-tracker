@@ -88,14 +88,18 @@ export async function storeCover(
 
 /**
  * Sube bytes de una imagen (ej. un archivo que subió el admin) a R2 y devuelve la
- * URL pública. Key por hash del contenido (dedup). Nunca tira: null ante error.
+ * URL pública. Key por hash del contenido (dedup). Reporta el motivo de falla
+ * (no configurado / status del PUT / error de red) para poder diagnosticar desde
+ * el admin — antes devolvía null a secas y "No se pudo subir" no decía nada.
  */
 export async function storeImageBytes(
   bytes: ArrayBuffer,
   contentType: string,
-): Promise<string | null> {
-  if (!r2Configured() || !PUBLIC) return null;
-  if (!contentType.startsWith("image/")) return null;
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  if (!r2Configured() || !PUBLIC)
+    return { ok: false, error: "R2 no configurado en este entorno (faltan env vars)." };
+  if (!contentType.startsWith("image/"))
+    return { ok: false, error: "El archivo no es una imagen." };
   const ext = contentType.includes("png")
     ? "png"
     : contentType.includes("webp")
@@ -112,11 +116,14 @@ export async function storeImageBytes(
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });
-    if (!put.ok) return null;
-  } catch {
-    return null;
+    if (!put.ok) {
+      const body = await put.text().catch(() => "");
+      return { ok: false, error: `R2 PUT ${put.status} ${body.slice(0, 120)}`.trim() };
+    }
+  } catch (e) {
+    return { ok: false, error: `R2 PUT error: ${e instanceof Error ? e.message : "red"}` };
   }
-  return `${PUBLIC}/${key}`;
+  return { ok: true, url: `${PUBLIC}/${key}` };
 }
 
 /**

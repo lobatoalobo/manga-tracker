@@ -762,9 +762,9 @@ export async function uploadCoverAction(formData: FormData) {
   const ct = file.type || "image/jpeg";
   if (!ct.startsWith("image/"))
     return { ok: false as const, error: "Tiene que ser una imagen." };
-  const url = await storeImageBytes(await file.arrayBuffer(), ct);
-  if (!url) return { ok: false as const, error: "No se pudo subir a R2." };
-  return { ok: true as const, url };
+  const res = await storeImageBytes(await file.arrayBuffer(), ct);
+  if (!res.ok) return { ok: false as const, error: res.error };
+  return { ok: true as const, url: res.url };
 }
 
 /**
