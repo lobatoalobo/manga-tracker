@@ -60,6 +60,66 @@ export async function unlinkWorkAnilist(workId: number): Promise<void> {
     .catch(() => {});
 }
 
+export interface DeleteWorkReport {
+  workId: number;
+  editionsDeleted: number;
+  collectionRemoved: number; // mangas (colección de usuarios) borrados
+  wishlistRemoved: number; // ítems de deseados borrados
+}
+
+/**
+ * Borra por completo un `Work` del catálogo: sus ediciones y TODA la data de
+ * usuario que cuelga de su clave de dominio (anilistId real, o `-workId` si es
+ * local). Para duplicados que el detector de "Series duplicadas" no agarra
+ * (no comparten anilistId). Devuelve cuánta data de usuario se borró, para que
+ * el admin vea si la entrada tenía colección real (señal de que quizá convenía
+ * fusionar en vez de borrar). El registro de rechazo de las fuentes (para que el
+ * crawl no las re-importe) lo hace el caller con `rejectEditions`.
+ */
+export async function deleteWork(workId: number): Promise<DeleteWorkReport> {
+  const work = await prisma.work.findUnique({
+    where: { id: workId },
+    select: { id: true, anilistId: true },
+  });
+  if (!work) throw new Error(`Work ${workId} no existe`);
+  // Clave de dominio: positiva = anilistId (vía edición), negativa = -workId
+  // (catálogo local). Como el dup NO comparte anilistId con la canónica
+  // (si no, saldría en "Series duplicadas"), esta clave es exclusiva de este Work.
+  const domainKey = work.anilistId ?? -workId;
+
+  let editionsDeleted = 0;
+  let collectionRemoved = 0;
+  let wishlistRemoved = 0;
+
+  await prisma.$transaction(
+    async (tx) => {
+      // Colección (Manga → TrackedEdition → OwnedVolume por cascade DB).
+      const col = await tx.manga.deleteMany({ where: { anilistId: domainKey } });
+      collectionRemoved = col.count;
+      const wl = await tx.wishlistItem.deleteMany({ where: { anilistId: domainKey } });
+      wishlistRemoved = wl.count;
+      await tx.userNote.deleteMany({ where: { anilistId: domainKey } });
+      await tx.seriesNotifMute.deleteMany({ where: { anilistId: domainKey } });
+      await tx.activity.deleteMany({ where: { anilistId: domainKey } });
+      await tx.notification.deleteMany({ where: { anilistId: domainKey } });
+      await tx.purchaseItem.deleteMany({ where: { anilistId: domainKey } });
+      await tx.ivreaRelease.deleteMany({ where: { anilistId: domainKey } });
+      await tx.editionExclusion.deleteMany({ where: { anilistId: domainKey } });
+      await tx.crumbMapping.deleteMany({ where: { anilistId: domainKey } });
+
+      // Ediciones (PublisherEdition.workId es onDelete:SetNull → hay que borrarlas
+      // explícito, si no quedarían huérfanas en vez de irse con el Work).
+      const ed = await tx.publisherEdition.deleteMany({ where: { workId } });
+      editionsDeleted = ed.count;
+
+      await tx.work.delete({ where: { id: workId } });
+    },
+    { timeout: 30000 },
+  );
+
+  return { workId, editionsDeleted, collectionRemoved, wishlistRemoved };
+}
+
 export interface MergeReport {
   sourceId: number;
   targetId: number;

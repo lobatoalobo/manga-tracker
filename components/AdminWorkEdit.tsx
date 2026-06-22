@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateWorkAction, setCrumbQueryAction, uploadCoverAction } from "@/app/actions";
+import {
+  updateWorkAction,
+  setCrumbQueryAction,
+  uploadCoverAction,
+  deleteWorkAction,
+} from "@/app/actions";
 import { crumbSearch } from "@/lib/crumb";
 import ReleaseDatePicker from "@/components/ReleaseDatePicker";
 
@@ -82,6 +87,26 @@ export default function AdminWorkEdit({
         ⚙️ Editar (admin)
       </button>
     );
+
+  const remove = () => {
+    if (
+      !confirm(
+        `¿BORRAR la entrada "${title}" del catálogo? Se eliminan sus ediciones y la colección/deseados que tengan los usuarios sobre esta serie. No se puede deshacer.\n\nUsalo solo para duplicados/basura. Si es una serie real con colección, conviene fusionarla, no borrarla.`,
+      )
+    )
+      return;
+    start(async () => {
+      const r = await deleteWorkAction(workId);
+      if (r.ok) {
+        const extra =
+          r.collectionRemoved || r.wishlistRemoved
+            ? ` (también ${r.collectionRemoved} de colección y ${r.wishlistRemoved} de deseados)`
+            : "";
+        alert(`Entrada borrada: ${r.editionsDeleted} ediciones${extra}.`);
+        router.push("/catalogo");
+      }
+    });
+  };
 
   const save = () =>
     start(async () => {
@@ -208,6 +233,20 @@ export default function AdminWorkEdit({
         </button>
         {msg && <span className="text-xs text-emerald-400">✓ {msg}</span>}
         {errMsg && <span className="text-xs text-rose-400">✗ {errMsg}</span>}
+      </div>
+
+      <div className="mt-4 border-t border-rose-500/20 pt-3">
+        <button
+          onClick={remove}
+          disabled={pending}
+          className="rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs font-medium text-rose-400 transition hover:bg-rose-500/10 disabled:opacity-50"
+        >
+          Borrar entrada
+        </button>
+        <p className="mt-1.5 text-xs text-muted">
+          Elimina esta serie y sus ediciones. Para duplicados que no aparecen en
+          “Series duplicadas”.
+        </p>
       </div>
     </div>
   );
