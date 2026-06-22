@@ -425,6 +425,9 @@ model Work {
   // (mes+año). Whakoom/Ivrea a veces solo dan el año o el mes.
   releaseLabel String?
   anilistId  Int?     @unique // referencia externa opcional (snapshot/enriquecimiento)
+  // Campos editados a mano por el admin (ej. "coverImage", "author"): NINGÚN job
+  // los pisa, ni siquiera los `--force`. Ver updateWorkAction.
+  curated    String[] @default([])
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

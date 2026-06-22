@@ -28,7 +28,10 @@ async function main() {
       where: {
         publisher: "Ivrea Argentina",
         workId: { not: null },
-        ...(force ? {} : { work: { coverImage: null } }),
+        // NUNCA pisamos una portada editada a mano (curada), ni con --force.
+        work: force
+          ? { NOT: { curated: { has: "coverImage" } } }
+          : { coverImage: null, NOT: { curated: { has: "coverImage" } } },
       },
       select: { slug: true, workId: true, work: { select: { title: true } } },
       take: limit,

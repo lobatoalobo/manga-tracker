@@ -690,6 +690,7 @@ export async function updateWorkAction(
     genres?: string[];
     upcoming?: boolean;
     releaseLabel?: string | null;
+    curated?: string[];
   } = {};
   if (data.title !== undefined && data.title.trim()) {
     patch.title = data.title.trim();
@@ -708,6 +709,22 @@ export async function updateWorkAction(
   if (data.upcoming !== undefined) patch.upcoming = data.upcoming;
   if (data.releaseLabel !== undefined)
     patch.releaseLabel = normalizeReleaseLabel(data.releaseLabel);
+
+  // Marca los campos editados a NO-vacío como "curados" (ningún job los pisa);
+  // si se limpian, se desmarcan. Crumb va por su propia tabla (admin-only).
+  const cur = await prisma.work.findUnique({
+    where: { id: workId },
+    select: { curated: true },
+  });
+  const curated = new Set(cur?.curated ?? []);
+  const lock = (f: string, on: boolean) => (on ? curated.add(f) : curated.delete(f));
+  if (data.title !== undefined) lock("title", !!data.title?.trim());
+  if (data.author !== undefined) lock("author", !!patch.author);
+  if (data.synopsis !== undefined) lock("synopsis", !!patch.synopsis);
+  if (data.coverImage !== undefined) lock("coverImage", !!patch.coverImage);
+  if (data.genres !== undefined) lock("genres", (patch.genres?.length ?? 0) > 0);
+  if (data.releaseLabel !== undefined) lock("releaseLabel", !!patch.releaseLabel);
+  patch.curated = [...curated];
 
   const work = await prisma.work.update({
     where: { id: workId },
