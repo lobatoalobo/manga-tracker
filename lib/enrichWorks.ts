@@ -18,16 +18,22 @@ export interface EnrichResult {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Variantes de título para matchear: original (romaji) + título, más el título
- * sin subtítulo ("JIGOKURAKU -HELL'S PARADISE-" → "JIGOKURAKU") y una versión
- * sin espacios ("GACHI AKUTA" → "GACHIAKUTA", que matchea "Gachiakuta").
+ * Variantes de título para matchear contra MU/MD. Además del original (romaji) y
+ * el título, prueba el prefijo antes del subtítulo:
+ *  - guion: "JIGOKURAKU -HELL'S PARADISE-" → "JIGOKURAKU"
+ *  - dos puntos: "Umimachi Diary: Diario de una Ciudad Costera" → "Umimachi Diary"
+ *    (Whakoom guarda los títulos AR como "Romaji: Traducción"; el romaji es lo
+ *    buscable en MU/MD). Exigimos espacio tras los ":" para no cortar "Re:Zero".
+ * Y una versión sin espacios ("GACHI AKUTA" → "GACHIAKUTA").
  */
-function buildTargets(originalTitle: string | null, title: string): string[] {
+export function buildTargets(originalTitle: string | null, title: string): string[] {
   const base = [originalTitle, title].filter(Boolean) as string[];
   const extra: string[] = [];
   for (const t of base) {
-    const stripped = t.split(/\s+[-–—]\s*/)[0].trim();
-    if (stripped && stripped !== t && stripped.length >= 3) extra.push(stripped);
+    for (const re of [/\s+[-–—]\s*/, /:\s+/]) {
+      const prefix = t.split(re)[0].trim();
+      if (prefix && prefix !== t && prefix.length >= 3) extra.push(prefix);
+    }
     const noSpace = t.replace(/\s+/g, "");
     if (noSpace !== t) extra.push(noSpace);
   }
@@ -57,15 +63,18 @@ export async function enrichWorks(opts: {
   limit?: number;
   force?: boolean; // re-enriquecer aunque ya tengan enrichedAt
   onlyMissingCover?: boolean; // solo Works sin portada (recovery de portadas)
+  onlyMissingGenres?: boolean; // solo Works sin géneros (re-match con la mejora)
   dryRun?: boolean;
 } = {}): Promise<EnrichResult> {
   const limit = opts.limit ?? 50;
   const works = await dbRetry(() => prisma.work.findMany({
     where: opts.onlyMissingCover
       ? { coverImage: null }
-      : opts.force
-        ? {}
-        : { enrichedAt: null },
+      : opts.onlyMissingGenres
+        ? { editions: { some: {} }, genres: { isEmpty: true } }
+        : opts.force
+          ? {}
+          : { enrichedAt: null },
     take: limit,
     orderBy: { id: "asc" },
     select: {

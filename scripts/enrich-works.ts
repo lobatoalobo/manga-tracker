@@ -20,15 +20,18 @@ async function main() {
   const dryRun = process.argv.includes("--dry");
   const force = process.argv.includes("--force");
   const onlyMissingCover = process.argv.includes("--missing-cover");
+  const onlyMissingGenres = process.argv.includes("--missing-genres");
 
   const pending = onlyMissingCover
     ? await prisma.work.count({ where: { coverImage: null } })
-    : await prisma.work.count({ where: { enrichedAt: null } });
+    : onlyMissingGenres
+      ? await prisma.work.count({ where: { editions: { some: {} }, genres: { isEmpty: true } } })
+      : await prisma.work.count({ where: { enrichedAt: null } });
   console.log(
-    `${onlyMissingCover ? "Works sin portada" : "Works sin enriquecer"}: ${pending}. Procesando hasta ${limit}…\n`,
+    `${onlyMissingCover ? "Works sin portada" : onlyMissingGenres ? "Works sin géneros" : "Works sin enriquecer"}: ${pending}. Procesando hasta ${limit}…\n`,
   );
 
-  const r = await enrichWorks({ limit, dryRun, force, onlyMissingCover });
+  const r = await enrichWorks({ limit, dryRun, force, onlyMissingCover, onlyMissingGenres });
   console.log(r.samples.join("\n"));
   console.log(
     `\n${dryRun ? "[DRY] " : ""}scanned ${r.scanned} · con datos ${r.enriched} · match MU ${r.matchedMU} · match MD ${r.matchedMD}`,
