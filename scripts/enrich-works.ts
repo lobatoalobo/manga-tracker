@@ -10,6 +10,7 @@
  */
 import { enrichWorks } from "../lib/enrichWorks";
 import { prisma } from "../lib/prisma";
+import { dbRetry } from "../lib/dbRetry";
 
 async function main() {
   const arg = (name: string) => {
@@ -22,11 +23,15 @@ async function main() {
   const onlyMissingCover = process.argv.includes("--missing-cover");
   const onlyMissingGenres = process.argv.includes("--missing-genres");
 
-  const pending = onlyMissingCover
-    ? await prisma.work.count({ where: { coverImage: null } })
-    : onlyMissingGenres
-      ? await prisma.work.count({ where: { editions: { some: {} }, genres: { isEmpty: true } } })
-      : await prisma.work.count({ where: { enrichedAt: null } });
+  // dbRetry: el endpoint directo de Neon tira P1001 en cold-start (este count es
+  // lo primero que toca la base). Ver memoria maintenance-tooling-robust.
+  const pending = await dbRetry(() =>
+    onlyMissingCover
+      ? prisma.work.count({ where: { coverImage: null } })
+      : onlyMissingGenres
+        ? prisma.work.count({ where: { editions: { some: {} }, genres: { isEmpty: true } } })
+        : prisma.work.count({ where: { enrichedAt: null } }),
+  );
   console.log(
     `${onlyMissingCover ? "Works sin portada" : onlyMissingGenres ? "Works sin géneros" : "Works sin enriquecer"}: ${pending}. Procesando hasta ${limit}…\n`,
   );
