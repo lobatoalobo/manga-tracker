@@ -105,7 +105,7 @@ export default async function AdminToolsPage() {
         </div>
       </section>
 
-      <section className="mt-8">
+      <section id="sin-portada" className="mt-8 scroll-mt-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold">Series sin portada</h2>
           <span
