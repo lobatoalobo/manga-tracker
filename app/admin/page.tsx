@@ -59,7 +59,7 @@ export default async function AdminHome() {
         <Stat label="🔜 Preventas" value={upcoming} />
         <Stat
           href="/admin/duplicados"
-          label="🔀 Duplicadas"
+          label="🔀 Series duplicadas"
           value={dups.length}
           alert={dups.length > 0}
         />

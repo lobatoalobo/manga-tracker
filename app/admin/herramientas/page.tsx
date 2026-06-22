@@ -83,11 +83,20 @@ export default async function AdminToolsPage() {
                             s.label
                           )}
                         </span>
-                        {s.detail && (
-                          <span className="block truncate text-xs text-muted">
-                            {s.detail}
-                          </span>
-                        )}
+                        <span className="block truncate text-xs text-muted">
+                          {s.serieHref && (
+                            <a
+                              href={s.serieHref}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-accent hover:underline"
+                            >
+                              ver ficha ↗
+                            </a>
+                          )}
+                          {s.serieHref && s.detail && " · "}
+                          {s.detail}
+                        </span>
                       </span>
                       {s.editionId != null && (
                         <CleanupActions
