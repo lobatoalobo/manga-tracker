@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from "@/lib/httpFetch";
+
 export interface WhakoomVolume {
   number: number;
   comicId: string; // id del tomo en Whakoom (/comics/<id>/…)
@@ -95,7 +97,7 @@ export async function fetchWhakoomHtml(
   url: string,
 ): Promise<{ ok: true; html: string } | { ok: false; reason: string }> {
   for (let attempt = 0; attempt < 2; attempt++) {
-    const r = await fetch(url, { headers: BROWSER_HEADERS }).catch(
+    const r = await fetchWithTimeout(url, { headers: BROWSER_HEADERS }).catch(
       (e) => ({ _err: e instanceof Error ? e.message : "error de red" }) as const,
     );
     if ("_err" in r) {

@@ -1,5 +1,6 @@
 import { AwsClient } from "aws4fetch";
 import { createHash } from "crypto";
+import { fetchWithTimeout } from "./httpFetch";
 
 /**
  * Almacén de portadas en Cloudflare R2 (S3-compatible). Bajamos la imagen de su
@@ -71,6 +72,7 @@ export async function storeCover(
     const put = await getClient().fetch(`${ENDPOINT}/${BUCKET}/${key}`, {
       method: "PUT",
       body: img.body,
+      signal: AbortSignal.timeout(20_000),
       headers: {
         "Content-Type": img.ct,
         "Cache-Control": "public, max-age=31536000, immutable",
@@ -104,6 +106,7 @@ export async function storeImageBytes(
     const put = await getClient().fetch(`${ENDPOINT}/${BUCKET}/${key}`, {
       method: "PUT",
       body: bytes,
+      signal: AbortSignal.timeout(20_000),
       headers: {
         "Content-Type": contentType,
         "Cache-Control": "public, max-age=31536000, immutable",
@@ -126,7 +129,8 @@ async function fetchImage(
 ): Promise<{ body: ArrayBuffer; ct: string } | null> {
   for (let i = 0; i < 3; i++) {
     try {
-      const res = await fetch(src);
+      // Timeout duro: una bajada que se cuelga colgaría el batch entero.
+      const res = await fetchWithTimeout(src, {}, 20_000);
       if (!res.ok) return null;
       const ct = res.headers.get("content-type") || "image/jpeg";
       if (!ct.startsWith("image/")) return null;
