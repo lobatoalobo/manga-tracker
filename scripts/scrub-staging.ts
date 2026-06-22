@@ -31,9 +31,17 @@ async function main() {
     process.exit(1);
   }
 
-  const users = await prisma.user.findMany({ select: { id: true } });
+  // El admin NO se anonimiza: si le cambiamos el email, deja de matchear
+  // ADMIN_EMAIL y pierde el acceso a /admin en staging.
+  const adminEmail = envVal("ADMIN_EMAIL");
+  const users = await prisma.user.findMany({ select: { id: true, email: true } });
   let i = 0;
+  let kept = 0;
   for (const u of users) {
+    if (adminEmail && u.email === adminEmail) {
+      kept++;
+      continue;
+    }
     i++;
     await prisma.user.update({
       where: { id: u.id },
@@ -52,7 +60,7 @@ async function main() {
   ]);
 
   console.log(
-    `Scrub OK · usuarios anonimizados: ${users.length} · sesiones ${sess.count} · push ${push.count} · logins ${logins.count} borrados`,
+    `Scrub OK · usuarios anonimizados: ${i} · admin preservado: ${kept} · sesiones ${sess.count} · push ${push.count} · logins ${logins.count} borrados`,
   );
   await prisma.$disconnect();
 }
