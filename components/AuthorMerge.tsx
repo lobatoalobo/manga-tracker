@@ -49,17 +49,30 @@ function Cluster({ cluster }: { cluster: AuthorVariantCluster }) {
 
   return (
     <div className="rounded-xl border border-border bg-surface p-4">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm">
         {cluster.variants.map((v) => (
-          <button
+          <span
             key={v.name}
-            type="button"
-            onClick={() => setCanonical(v.name)}
-            className="rounded-lg border border-border px-2 py-0.5 text-xs transition hover:border-accent"
-            title="Usar esta grafía como canónica"
+            className="inline-flex items-center overflow-hidden rounded-lg border border-border text-xs"
           >
-            {v.name} <span className="text-muted">×{v.count}</span>
-          </button>
+            <a
+              href={`/admin/autores/${encodeURIComponent(v.name)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="px-2 py-0.5 transition hover:bg-surface-2 hover:text-accent"
+              title="Ver sus series (en una pestaña nueva)"
+            >
+              {v.name} <span className="text-muted">×{v.count}</span> ↗
+            </a>
+            <button
+              type="button"
+              onClick={() => setCanonical(v.name)}
+              className="border-l border-border px-1.5 py-0.5 text-muted transition hover:bg-surface-2 hover:text-accent"
+              title="Usar esta grafía como canónica"
+            >
+              usar
+            </button>
+          </span>
         ))}
       </div>
 

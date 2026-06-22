@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { dbRetry } from "@/lib/dbRetry";
+import { VISIBLE_PUBLISHERS } from "@/lib/catalog";
 
 /**
  * Unificación de autores. El autor es texto libre en `Work.author` (no hay tabla
@@ -102,6 +103,51 @@ export async function getAuthorVariantClusters(): Promise<AuthorVariantCluster[]
     });
   }
   return out.sort((a, b) => b.total - a.total);
+}
+
+export interface AuthorWork {
+  id: number;
+  title: string;
+  coverImage: string | null;
+  publishers: string[];
+  visible: boolean; // si el catálogo público lo muestra (Ivrea/VIZ)
+}
+
+/**
+ * Obras de una grafía EXACTA de autor (case-sensitive, para distinguir
+ * "Frank Miller" de "FRANK MILLER"), TODAS las editoriales — incluso las que el
+ * catálogo público no muestra. Para que el admin verifique qué series hay detrás
+ * de cada variante antes de unificar.
+ */
+export async function getWorksByExactAuthor(name: string): Promise<AuthorWork[]> {
+  const target = name.trim();
+  if (!target) return [];
+  const visibleSet = new Set<string>(VISIBLE_PUBLISHERS);
+  const works = await dbRetry(() =>
+    prisma.work.findMany({
+      where: { author: { contains: target } }, // case-sensitive en Postgres
+      select: {
+        id: true,
+        title: true,
+        coverImage: true,
+        author: true,
+        editions: { select: { publisher: true } },
+      },
+      orderBy: { title: "asc" },
+    }),
+  );
+  return works
+    .filter((w) => splitAuthors(w.author ?? "").includes(target))
+    .map((w) => {
+      const publishers = [...new Set(w.editions.map((e) => e.publisher))];
+      return {
+        id: w.id,
+        title: w.title,
+        coverImage: w.coverImage,
+        publishers,
+        visible: publishers.some((p) => visibleSet.has(p)),
+      };
+    });
 }
 
 export interface RenameAuthorReport {
