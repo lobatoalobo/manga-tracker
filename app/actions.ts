@@ -19,6 +19,7 @@ import {
 } from "@/lib/collection";
 import { createReport, setReportStatus, deleteReport } from "@/lib/reports";
 import { mergeWorks, unlinkWorkAnilist } from "@/lib/mergeWorks";
+import { storeCover, storeImageBytes } from "@/lib/coverStore";
 import {
   createStore,
   setStoreStatus,
@@ -696,8 +697,12 @@ export async function updateWorkAction(
   }
   if (data.author !== undefined) patch.author = data.author?.trim() || null;
   if (data.synopsis !== undefined) patch.synopsis = data.synopsis?.trim() || null;
-  if (data.coverImage !== undefined)
-    patch.coverImage = data.coverImage?.trim() || null;
+  if (data.coverImage !== undefined) {
+    // La URL que pegue el admin se SUBE a R2 (propia, persistente); si falla, queda
+    // la URL cruda. Si ya es de R2, se deja igual.
+    const raw = data.coverImage?.trim() || null;
+    patch.coverImage = raw ? ((await storeCover(raw)) ?? raw) : null;
+  }
   if (data.genres !== undefined)
     patch.genres = data.genres.map((g) => g.trim()).filter(Boolean);
   if (data.upcoming !== undefined) patch.upcoming = data.upcoming;
@@ -711,6 +716,22 @@ export async function updateWorkAction(
   });
   if (work.anilistId) await invalidateEditionsCache(work.anilistId);
   return { ok: true as const };
+}
+
+/** Admin: sube un archivo de imagen a R2 y devuelve su URL (para la portada). */
+export async function uploadCoverAction(formData: FormData) {
+  await assertAdmin();
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0)
+    return { ok: false as const, error: "No hay archivo." };
+  if (file.size > 5_000_000)
+    return { ok: false as const, error: "Máximo 5 MB." };
+  const ct = file.type || "image/jpeg";
+  if (!ct.startsWith("image/"))
+    return { ok: false as const, error: "Tiene que ser una imagen." };
+  const url = await storeImageBytes(await file.arrayBuffer(), ct);
+  if (!url) return { ok: false as const, error: "No se pudo subir a R2." };
+  return { ok: true as const, url };
 }
 
 /**

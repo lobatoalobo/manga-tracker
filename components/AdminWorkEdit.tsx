@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateWorkAction, setCrumbQueryAction } from "@/app/actions";
+import { updateWorkAction, setCrumbQueryAction, uploadCoverAction } from "@/app/actions";
 import { crumbSearch } from "@/lib/crumb";
 import ReleaseDatePicker from "@/components/ReleaseDatePicker";
 
@@ -48,7 +48,26 @@ export default function AdminWorkEdit({
   const [rel, setRel] = useState(releaseLabel);
   const [crumb, setCrumb] = useState(crumbInitial);
   const [msg, setMsg] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [pending, start] = useTransition();
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    const r = await uploadCoverAction(fd);
+    setUploading(false);
+    e.target.value = "";
+    if (r.ok) {
+      setCov(r.url);
+      setMsg("Imagen subida a R2");
+    } else {
+      setMsg(r.error);
+    }
+    setTimeout(() => setMsg(null), 3000);
+  }
 
   if (!open)
     return (
@@ -110,8 +129,26 @@ export default function AdminWorkEdit({
           />
         </label>
         <label className="text-xs text-muted">
-          Portada (URL de imagen)
+          Portada — pegá una URL o subí un archivo (se guarda en R2, propia)
           <input value={cov} onChange={(e) => setCov(e.target.value)} className={`mt-1 ${input}`} />
+          <div className="mt-1 flex items-center gap-2">
+            <label
+              className={`cursor-pointer rounded-lg border border-border px-2 py-1 text-xs transition hover:border-accent ${uploading ? "opacity-50" : ""}`}
+            >
+              {uploading ? "Subiendo…" : "📤 Subir archivo"}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={onFile}
+                disabled={uploading}
+                className="hidden"
+              />
+            </label>
+            {cov && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={cov} alt="" className="h-10 w-7 rounded object-cover" />
+            )}
+          </div>
         </label>
         <label className="text-xs text-muted">
           Géneros (separados por coma)

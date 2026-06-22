@@ -85,6 +85,38 @@ export async function storeCover(
 }
 
 /**
+ * Sube bytes de una imagen (ej. un archivo que subió el admin) a R2 y devuelve la
+ * URL pública. Key por hash del contenido (dedup). Nunca tira: null ante error.
+ */
+export async function storeImageBytes(
+  bytes: ArrayBuffer,
+  contentType: string,
+): Promise<string | null> {
+  if (!r2Configured() || !PUBLIC) return null;
+  if (!contentType.startsWith("image/")) return null;
+  const ext = contentType.includes("png")
+    ? "png"
+    : contentType.includes("webp")
+      ? "webp"
+      : "jpg";
+  const key = `covers/${createHash("sha256").update(new Uint8Array(bytes)).digest("hex").slice(0, 24)}.${ext}`;
+  try {
+    const put = await getClient().fetch(`${ENDPOINT}/${BUCKET}/${key}`, {
+      method: "PUT",
+      body: bytes,
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=31536000, immutable",
+      },
+    });
+    if (!put.ok) return null;
+  } catch {
+    return null;
+  }
+  return `${PUBLIC}/${key}`;
+}
+
+/**
  * Baja los bytes de una imagen. Sin User-Agent (el CDN de MangaDex 400ea con UA
  * genérico). Reintenta errores transitorios (ECONNRESET / terminated) hasta 3
  * veces; ante 4xx/5xx o no-imagen devuelve null sin reintentar. Nunca tira.
