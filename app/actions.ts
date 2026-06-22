@@ -18,7 +18,7 @@ import {
   type ReadingStatus,
 } from "@/lib/collection";
 import { createReport, setReportStatus, deleteReport } from "@/lib/reports";
-import { mergeWorks, unlinkWorkAnilist } from "@/lib/mergeWorks";
+import { mergeWorks, unlinkWorkAnilist, deleteWork } from "@/lib/mergeWorks";
 import { storeCover, storeImageBytes } from "@/lib/coverStore";
 import {
   createStore,
@@ -482,6 +482,27 @@ export async function deleteEditionAction(id: number) {
   // Si el Work quedó sin ediciones, lo limpiamos (no deja obras huérfanas).
   await prisma.work.deleteMany({ where: { editions: { none: {} } } });
   revalidatePath("/admin/herramientas");
+}
+
+/**
+ * Borra una entrada del catálogo (Work) por completo: ediciones + data de
+ * usuario asociada. Solo admin. Para duplicados que "Series duplicadas" no
+ * agarra. Registra las fuentes como rechazadas para que el crawl no las
+ * re-importe. Devuelve cuánta data de usuario se borró (para que el admin lo vea).
+ */
+export async function deleteWorkAction(workId: number) {
+  await assertAdmin();
+  const eds = await prisma.publisherEdition.findMany({
+    where: { workId },
+    select: { id: true, anilistId: true },
+  });
+  await rejectEditions(eds.map((e) => e.id)).catch(() => {});
+  const report = await deleteWork(workId);
+  for (const a of new Set(eds.map((e) => e.anilistId).filter((a): a is number => a != null)))
+    await invalidateEditionsCache(a);
+  revalidatePath("/admin/herramientas");
+  revalidatePath("/catalogo");
+  return { ok: true as const, ...report };
 }
 
 /**
