@@ -10,6 +10,7 @@
  */
 import { prisma } from "../lib/prisma";
 import { storeCover, r2Configured } from "../lib/coverStore";
+import { dbRetry } from "../lib/dbRetry";
 
 const PUBLIC = process.env.R2_PUBLIC_URL?.replace(/\/+$/, "");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -27,14 +28,18 @@ async function main() {
   const dry = process.argv.includes("--dry");
 
   // Portadas que todavía NO están en R2.
-  const works = await prisma.work.findMany({
-    where: { coverImage: { not: null }, NOT: { coverImage: { startsWith: PUBLIC } } },
-    select: { id: true, title: true, coverImage: true },
-    take: limit,
-  });
-  const pending = await prisma.work.count({
-    where: { coverImage: { not: null }, NOT: { coverImage: { startsWith: PUBLIC } } },
-  });
+  const works = await dbRetry(() =>
+    prisma.work.findMany({
+      where: { coverImage: { not: null }, NOT: { coverImage: { startsWith: PUBLIC } } },
+      select: { id: true, title: true, coverImage: true },
+      take: limit,
+    }),
+  );
+  const pending = await dbRetry(() =>
+    prisma.work.count({
+      where: { coverImage: { not: null }, NOT: { coverImage: { startsWith: PUBLIC } } },
+    }),
+  );
   console.log(`Portadas sin migrar: ${pending}. Procesando ${works.length}…\n`);
 
   let ok = 0;
@@ -46,7 +51,7 @@ async function main() {
     }
     const r = await storeCover(w.coverImage);
     if (r && r.startsWith(PUBLIC)) {
-      await prisma.work.update({ where: { id: w.id }, data: { coverImage: r } });
+      await dbRetry(() => prisma.work.update({ where: { id: w.id }, data: { coverImage: r } }));
       ok++;
       if (ok <= 20) console.log(`  ✓ ${w.title}`);
     } else {

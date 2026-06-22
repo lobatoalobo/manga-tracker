@@ -5,6 +5,7 @@ import { getIvreaDataBySlug } from "@/lib/providers/ivrea";
 import { normalizeGenres } from "@/lib/genres";
 import { proxiedCover } from "@/lib/coverProxy";
 import { storeCover } from "@/lib/coverStore";
+import { dbRetry } from "@/lib/dbRetry";
 
 export interface EnrichResult {
   scanned: number;
@@ -59,7 +60,7 @@ export async function enrichWorks(opts: {
   dryRun?: boolean;
 } = {}): Promise<EnrichResult> {
   const limit = opts.limit ?? 50;
-  const works = await prisma.work.findMany({
+  const works = await dbRetry(() => prisma.work.findMany({
     where: opts.onlyMissingCover
       ? { coverImage: null }
       : opts.force
@@ -82,7 +83,7 @@ export async function enrichWorks(opts: {
         take: 1,
       },
     },
-  });
+  }));
 
   let enriched = 0;
   let matchedMU = 0;
@@ -151,7 +152,7 @@ export async function enrichWorks(opts: {
       );
 
     if (!opts.dryRun)
-      await prisma.work.update({ where: { id: w.id }, data: patch }).catch(() => {});
+      await dbRetry(() => prisma.work.update({ where: { id: w.id }, data: patch })).catch(() => {});
     await sleep(350);
   }
 
