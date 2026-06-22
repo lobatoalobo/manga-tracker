@@ -105,6 +105,33 @@ export async function getAuthorVariantClusters(): Promise<AuthorVariantCluster[]
   return out.sort((a, b) => b.total - a.total);
 }
 
+export interface MissingAuthorWork {
+  workId: number;
+  title: string;
+  detail: string; // editoriales, para contexto
+  serieHref: string;
+}
+
+/**
+ * Series VISIBLES sin autor (author null/vacío y con al menos una edición). Para
+ * completarlo a mano desde /admin/autores. Ordenadas por título.
+ */
+export async function getWorksMissingAuthor(): Promise<MissingAuthorWork[]> {
+  const works = await dbRetry(() =>
+    prisma.work.findMany({
+      where: { editions: { some: {} }, OR: [{ author: null }, { author: "" }] },
+      select: { id: true, title: true, editions: { select: { publisher: true } } },
+      orderBy: { title: "asc" },
+    }),
+  );
+  return works.map((w) => ({
+    workId: w.id,
+    title: w.title,
+    detail: [...new Set(w.editions.map((e) => e.publisher))].join(" · "),
+    serieHref: `/serie/${w.id}`,
+  }));
+}
+
 export interface AuthorWork {
   id: number;
   title: string;
