@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
- * Texto largo (sinopsis) colapsado por defecto con "Leer más" / "Leer menos".
- * Mobile-first: clampea a unas líneas y deja expandir. Si el texto es corto, no
- * muestra el botón.
+ * Texto largo (sinopsis) colapsado con "Leer más" / "Leer menos". El botón SOLO
+ * aparece si el texto realmente se trunca (lo medimos en el DOM: scrollHeight >
+ * clientHeight con el clamp puesto), no por una heurística de largo. Así no queda
+ * un "Leer más" que no hace nada cuando la sinopsis entra justo. Re-mide al
+ * cambiar el ancho (ResizeObserver), porque la cantidad de líneas depende del ancho.
  */
 export default function ExpandableText({
   text,
@@ -15,15 +17,33 @@ export default function ExpandableText({
   clampLines?: number;
 }) {
   const [open, setOpen] = useState(false);
-  // Heurística simple para decidir si vale el botón (no medimos el DOM).
-  const longish = text.length > 320;
+  const [overflows, setOverflows] = useState(false);
+  const ref = useRef<HTMLParagraphElement>(null);
+  const openRef = useRef(open);
+  openRef.current = open;
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      // Solo medimos en estado colapsado (con el clamp aplicado). Expandido el
+      // scrollHeight == clientHeight y daría un falso "no trunca".
+      if (openRef.current) return;
+      setOverflows(el.scrollHeight > el.clientHeight + 1);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [text, clampLines]);
 
   return (
     <div className="mt-6">
       <p
+        ref={ref}
         className="whitespace-pre-wrap text-sm leading-relaxed text-muted"
         style={
-          open || !longish
+          open
             ? undefined
             : {
                 display: "-webkit-box",
@@ -35,7 +55,7 @@ export default function ExpandableText({
       >
         {text}
       </p>
-      {longish && (
+      {overflows && (
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
