@@ -1,11 +1,12 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
-import { getCatalogIntegrity } from "@/lib/adminChecks";
+import { getCatalogIntegrity, getWorksMissingCover } from "@/lib/adminChecks";
 import { ADMIN_TASKS } from "@/lib/adminTasks";
 import TaskRunner from "@/components/TaskRunner";
 import WhakoomImportForm from "@/components/WhakoomImportForm";
 import CleanupActions from "@/components/CleanupActions";
+import CoverFix from "@/components/CoverFix";
 
 export const metadata = { title: "Herramientas (admin) · Nakama" };
 
@@ -13,7 +14,10 @@ export default async function AdminToolsPage() {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) notFound();
 
-  const checks = await getCatalogIntegrity();
+  const [checks, missingCover] = await Promise.all([
+    getCatalogIntegrity(),
+    getWorksMissingCover(),
+  ]);
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-8">
@@ -99,6 +103,48 @@ export default async function AdminToolsPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="mt-8">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold">Series sin portada</h2>
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+              missingCover.length === 0
+                ? "bg-emerald-500/15 text-emerald-300"
+                : "bg-amber-500/15 text-amber-300"
+            }`}
+          >
+            {missingCover.length}
+          </span>
+        </div>
+        <p className="mb-3 text-xs text-muted">
+          Subí un archivo (📤) o pegá una URL: se guarda en R2 (propia) y queda
+          bloqueada para que ningún job la pise. Al guardar, la serie sale de la
+          lista.
+        </p>
+        {missingCover.length === 0 ? (
+          <p className="rounded-xl border border-border bg-surface p-4 text-sm text-muted">
+            Todas las series tienen portada. 🎉
+          </p>
+        ) : (
+          <ul className="max-h-160 space-y-1.5 overflow-y-auto rounded-xl border border-border bg-surface p-4">
+            {missingCover.map((m) => (
+              <li
+                key={m.workId}
+                className="flex items-center justify-between gap-3 text-sm"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate">{m.title}</span>
+                  <span className="block truncate text-xs text-muted">
+                    {m.detail}
+                  </span>
+                </span>
+                <CoverFix workId={m.workId} serieHref={m.serieHref} />
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </main>
   );

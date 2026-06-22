@@ -484,10 +484,24 @@ export async function deleteEditionAction(id: number) {
   revalidatePath("/admin/herramientas");
 }
 
-/** Marca un Work como "próxima a salir" (debut válido sin tomos). Solo admin. */
+/**
+ * Marca un Work como "próxima a salir" (debut válido sin tomos). Solo admin.
+ * Bloquea el flag en `curated` para que el sync de /proximas/ de Ivrea NO lo
+ * apague (era la causa de que las marcadas a mano reaparecieran). Ver
+ * refreshIvreaProximas.
+ */
 export async function markWorkUpcomingAction(workId: number) {
   await assertAdmin();
-  await prisma.work.update({ where: { id: workId }, data: { upcoming: true } });
+  const cur = await prisma.work.findUnique({
+    where: { id: workId },
+    select: { curated: true },
+  });
+  const curated = new Set(cur?.curated ?? []);
+  curated.add("upcoming");
+  await prisma.work.update({
+    where: { id: workId },
+    data: { upcoming: true, curated: [...curated] },
+  });
   revalidatePath("/admin/herramientas");
   return { ok: true as const };
 }
@@ -724,6 +738,8 @@ export async function updateWorkAction(
   if (data.coverImage !== undefined) lock("coverImage", !!patch.coverImage);
   if (data.genres !== undefined) lock("genres", (patch.genres?.length ?? 0) > 0);
   if (data.releaseLabel !== undefined) lock("releaseLabel", !!patch.releaseLabel);
+  // "upcoming" curado = el sync de Ivrea no lo apaga; al destildar se libera.
+  if (data.upcoming !== undefined) lock("upcoming", data.upcoming);
   patch.curated = [...curated];
 
   const work = await prisma.work.update({
@@ -746,9 +762,9 @@ export async function uploadCoverAction(formData: FormData) {
   const ct = file.type || "image/jpeg";
   if (!ct.startsWith("image/"))
     return { ok: false as const, error: "Tiene que ser una imagen." };
-  const url = await storeImageBytes(await file.arrayBuffer(), ct);
-  if (!url) return { ok: false as const, error: "No se pudo subir a R2." };
-  return { ok: true as const, url };
+  const res = await storeImageBytes(await file.arrayBuffer(), ct);
+  if (!res.ok) return { ok: false as const, error: res.error };
+  return { ok: true as const, url: res.url };
 }
 
 /**

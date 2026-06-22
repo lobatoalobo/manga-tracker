@@ -1,5 +1,6 @@
 import { AwsClient } from "aws4fetch";
 import { createHash } from "crypto";
+import { fetchWithTimeout } from "./httpFetch";
 
 /**
  * Almacén de portadas en Cloudflare R2 (S3-compatible). Bajamos la imagen de su
@@ -71,6 +72,7 @@ export async function storeCover(
     const put = await getClient().fetch(`${ENDPOINT}/${BUCKET}/${key}`, {
       method: "PUT",
       body: img.body,
+      signal: AbortSignal.timeout(20_000),
       headers: {
         "Content-Type": img.ct,
         "Cache-Control": "public, max-age=31536000, immutable",
@@ -86,14 +88,18 @@ export async function storeCover(
 
 /**
  * Sube bytes de una imagen (ej. un archivo que subió el admin) a R2 y devuelve la
- * URL pública. Key por hash del contenido (dedup). Nunca tira: null ante error.
+ * URL pública. Key por hash del contenido (dedup). Reporta el motivo de falla
+ * (no configurado / status del PUT / error de red) para poder diagnosticar desde
+ * el admin — antes devolvía null a secas y "No se pudo subir" no decía nada.
  */
 export async function storeImageBytes(
   bytes: ArrayBuffer,
   contentType: string,
-): Promise<string | null> {
-  if (!r2Configured() || !PUBLIC) return null;
-  if (!contentType.startsWith("image/")) return null;
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  if (!r2Configured() || !PUBLIC)
+    return { ok: false, error: "R2 no configurado en este entorno (faltan env vars)." };
+  if (!contentType.startsWith("image/"))
+    return { ok: false, error: "El archivo no es una imagen." };
   const ext = contentType.includes("png")
     ? "png"
     : contentType.includes("webp")
@@ -104,16 +110,20 @@ export async function storeImageBytes(
     const put = await getClient().fetch(`${ENDPOINT}/${BUCKET}/${key}`, {
       method: "PUT",
       body: bytes,
+      signal: AbortSignal.timeout(20_000),
       headers: {
         "Content-Type": contentType,
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });
-    if (!put.ok) return null;
-  } catch {
-    return null;
+    if (!put.ok) {
+      const body = await put.text().catch(() => "");
+      return { ok: false, error: `R2 PUT ${put.status} ${body.slice(0, 120)}`.trim() };
+    }
+  } catch (e) {
+    return { ok: false, error: `R2 PUT error: ${e instanceof Error ? e.message : "red"}` };
   }
-  return `${PUBLIC}/${key}`;
+  return { ok: true, url: `${PUBLIC}/${key}` };
 }
 
 /**
@@ -126,7 +136,8 @@ async function fetchImage(
 ): Promise<{ body: ArrayBuffer; ct: string } | null> {
   for (let i = 0; i < 3; i++) {
     try {
-      const res = await fetch(src);
+      // Timeout duro: una bajada que se cuelga colgaría el batch entero.
+      const res = await fetchWithTimeout(src, {}, 20_000);
       if (!res.ok) return null;
       const ct = res.headers.get("content-type") || "image/jpeg";
       if (!ct.startsWith("image/")) return null;

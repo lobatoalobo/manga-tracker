@@ -169,18 +169,23 @@ export async function reconcileIvreaProximas(
     }
   }
 
-  const stale = await prisma.work.count({
-    where: { upcoming: true, id: { notIn: debutWorkIds } },
-  });
+  // Las marcadas "próxima" a mano por el admin (curated) NO las apaga este sync:
+  // su flag lo gobierna el admin, no el feed de Ivrea. Ver markWorkUpcomingAction.
+  const clearWhere = {
+    upcoming: true,
+    id: { notIn: debutWorkIds },
+    NOT: { curated: { has: "upcoming" } },
+  };
+  const stale = await prisma.work.count({ where: clearWhere });
 
   if (!dryRun) {
     await prisma.$transaction([
       prisma.ivreaRelease.deleteMany({}),
       prisma.ivreaRelease.createMany({ data: rows }),
     ]);
-    // Apagar upcoming en todo lo que no sea una próxima serie vigente.
+    // Apagar upcoming en todo lo que no sea una próxima serie vigente (ni curada).
     await prisma.work.updateMany({
-      where: { upcoming: true, id: { notIn: debutWorkIds } },
+      where: clearWhere,
       data: { upcoming: false },
     });
   }

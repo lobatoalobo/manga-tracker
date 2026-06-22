@@ -18,6 +18,36 @@ export interface IntegrityCheck {
 
 const CAP = 500;
 
+export interface MissingCoverItem {
+  workId: number;
+  title: string;
+  detail: string; // editoriales, para dar contexto
+  serieHref: string; // /serie/<id> para ver/verificar
+}
+
+/**
+ * Series VISIBLES sin portada (coverImage null y con al menos una edición, así
+ * no listamos works huérfanos). Para arreglarlas rápido desde /admin/herramientas
+ * subiendo un archivo o pegando una URL (ambos van a R2). Ver covers-r2.
+ */
+export async function getWorksMissingCover(): Promise<MissingCoverItem[]> {
+  const works = await prisma.work.findMany({
+    where: { coverImage: null, editions: { some: {} } },
+    select: {
+      id: true,
+      title: true,
+      editions: { select: { publisher: true } },
+    },
+    orderBy: { title: "asc" },
+  });
+  return works.map((w) => ({
+    workId: w.id,
+    title: w.title,
+    detail: [...new Set(w.editions.map((e) => e.publisher))].join(" · "),
+    serieHref: `/serie/${w.id}`,
+  }));
+}
+
 /**
  * Anomalías ACCIONABLES del catálogo: ediciones a revisar desde
  * /admin/herramientas. Cada item trae el contexto y las acciones posibles.

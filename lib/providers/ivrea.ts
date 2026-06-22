@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { authorMatches } from "@/lib/authorMatch";
+import { fetchWithTimeout } from "@/lib/httpFetch";
 
 export interface IvreaData {
   publisher: string;
@@ -31,7 +32,7 @@ export async function getIvreaDataBySlug(
 ): Promise<IvreaData | null> {
   const url = `${BASE}/titulo/${slug}/`;
 
-  const response = await fetch(url, { next: { revalidate: 60 * 60 * 24 } });
+  const response = await fetchWithTimeout(url, { next: { revalidate: 60 * 60 * 24 } });
 
   if (!response.ok || !isTitlePage(response)) return null;
 
