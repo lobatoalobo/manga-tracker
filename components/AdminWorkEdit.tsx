@@ -48,6 +48,7 @@ export default function AdminWorkEdit({
   const [rel, setRel] = useState(releaseLabel);
   const [crumb, setCrumb] = useState(crumbInitial);
   const [msg, setMsg] = useState<string | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [pending, start] = useTransition();
 
@@ -62,11 +63,14 @@ export default function AdminWorkEdit({
     e.target.value = "";
     if (r.ok) {
       setCov(r.url);
+      setErrMsg(null);
       setMsg("Imagen subida a R2");
+      setTimeout(() => setMsg(null), 3000);
     } else {
-      setMsg(r.error);
+      setMsg(null);
+      setErrMsg(r.error);
+      setTimeout(() => setErrMsg(null), 6000);
     }
-    setTimeout(() => setMsg(null), 3000);
   }
 
   if (!open)
@@ -203,6 +207,7 @@ export default function AdminWorkEdit({
           Guardar
         </button>
         {msg && <span className="text-xs text-emerald-400">✓ {msg}</span>}
+        {errMsg && <span className="text-xs text-rose-400">✗ {errMsg}</span>}
       </div>
     </div>
   );

@@ -75,6 +75,9 @@ export async function storeCover(
       signal: AbortSignal.timeout(20_000),
       headers: {
         "Content-Type": img.ct,
+        // R2 exige Content-Length explícito en el PUT (411 si falta); el runtime
+        // de Vercel no lo autosetea para un body ArrayBuffer como sí hace Node.
+        "Content-Length": String(img.body.byteLength),
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });
@@ -113,6 +116,8 @@ export async function storeImageBytes(
       signal: AbortSignal.timeout(20_000),
       headers: {
         "Content-Type": contentType,
+        // R2 exige Content-Length explícito (411 MissingContentLength si falta).
+        "Content-Length": String(bytes.byteLength),
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });
