@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { getDuplicateWorkGroups } from "@/lib/mergeWorks";
 import DuplicateMerger from "@/components/DuplicateMerger";
+import ManualMerge from "@/components/ManualMerge";
 
 export const metadata = { title: "Series duplicadas (admin) · Nakama" };
 
@@ -29,6 +30,14 @@ export default async function DuplicadosPage() {
         conservar y <b>Fusionar</b>. Si NO lo son (una novela/spin-off quedó pegada
         al id de otra), <b>Separar</b>.
       </p>
+
+      <div className="mb-6">
+        <ManualMerge />
+      </div>
+
+      <h2 className="mb-3 text-sm font-semibold">
+        Detectadas automáticamente (mismo anilistId)
+      </h2>
       <DuplicateMerger groups={groups} />
     </main>
   );

@@ -19,6 +19,7 @@ import {
 } from "@/lib/collection";
 import { createReport, setReportStatus, deleteReport } from "@/lib/reports";
 import { mergeWorks, unlinkWorkAnilist, deleteWork } from "@/lib/mergeWorks";
+import { renameAuthor } from "@/lib/authorMerge";
 import { storeCover, storeImageBytes } from "@/lib/coverStore";
 import {
   createStore,
@@ -258,7 +259,62 @@ export async function mergeWorksAction(sourceId: number, targetId: number) {
   await assertAdmin();
   await mergeWorks(sourceId, targetId);
   revalidatePath("/admin/duplicados");
+  revalidatePath("/catalogo");
   return { ok: true as const };
+}
+
+/**
+ * Admin: unifica grafías de un autor. Reescribe Work.author de todas las obras
+ * cuyas `variants` matcheen, al `canonical`. Ver lib/authorMerge.
+ */
+export async function renameAuthorAction(variants: string[], canonical: string) {
+  await assertAdmin();
+  const report = await renameAuthor(variants, canonical);
+  revalidatePath("/admin/autores");
+  revalidatePath("/autores");
+  revalidatePath("/catalogo");
+  return { ok: true as const, ...report };
+}
+
+/**
+ * Admin: busca una serie por id o URL (/serie/N) para la fusión manual. Devuelve
+ * un preview (título, ediciones, anilistId y cuánta colección/deseados tiene) para
+ * que el admin confirme que son la misma antes de fusionar.
+ */
+export async function lookupWorkAction(input: string) {
+  await assertAdmin();
+  const nums = String(input).match(/\d+/g);
+  const id = nums ? Number(nums[nums.length - 1]) : NaN;
+  if (!Number.isInteger(id) || id <= 0)
+    return { ok: false as const, error: "Pegá un id o una URL /serie/<id>." };
+  const w = await prisma.work.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      title: true,
+      anilistId: true,
+      coverImage: true,
+      editions: { select: { publisher: true, volumes: true } },
+    },
+  });
+  if (!w) return { ok: false as const, error: `No existe la serie #${id}.` };
+  const key = w.anilistId ?? -w.id;
+  const [collection, wishlist] = await Promise.all([
+    prisma.manga.count({ where: { anilistId: key } }),
+    prisma.wishlistItem.count({ where: { anilistId: key } }),
+  ]);
+  return {
+    ok: true as const,
+    work: {
+      id: w.id,
+      title: w.title,
+      anilistId: w.anilistId,
+      coverImage: w.coverImage,
+      editions: w.editions.map((e) => ({ publisher: e.publisher, volumes: e.volumes })),
+      collection,
+      wishlist,
+    },
+  };
 }
 
 /** Desvincula un Work de su anilistId (mismapeo: no es la misma serie). Solo admin. */

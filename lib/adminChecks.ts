@@ -6,6 +6,7 @@ export interface IntegrityItem {
   editionId?: number; // si está, se puede Borrar la edición
   workId?: number; // si está, se puede "Marcar próxima" (debut válido sin tomos)
   url?: string; // link a la fuente para verificar
+  serieHref?: string; // link a la ficha en la app (/serie/<id>) para ver qué es
 }
 
 export interface IntegrityCheck {
@@ -82,6 +83,7 @@ export async function getCatalogIntegrity(): Promise<IntegrityCheck[]> {
         url: true,
         volumes: true,
         anilistId: true,
+        workId: true,
       },
     }),
   ]);
@@ -120,6 +122,7 @@ export async function getCatalogIntegrity(): Promise<IntegrityCheck[]> {
           editionId: r.id,
           workId: r.workId ?? undefined,
           url: r.url,
+          serieHref: r.workId ? `/serie/${r.workId}` : undefined,
         };
       }),
     },
@@ -134,6 +137,7 @@ export async function getCatalogIntegrity(): Promise<IntegrityCheck[]> {
           detail: `${r.slug} · ${r.volumes}t · grupo de ${g.length}`,
           editionId: r.id,
           url: r.url,
+          serieHref: r.workId ? `/serie/${r.workId}` : undefined,
         })),
       ),
     },

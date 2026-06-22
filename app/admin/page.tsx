@@ -3,9 +3,9 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
-import { getCatalogFlags } from "@/lib/catalog";
-import { getCatalogIntegrity } from "@/lib/adminChecks";
+import { getCatalogIntegrity, getWorksMissingCover } from "@/lib/adminChecks";
 import { getDuplicateWorkGroups } from "@/lib/mergeWorks";
+import { getAuthorVariantClusters } from "@/lib/authorMerge";
 import { countPendingReports } from "@/lib/reports";
 import { countPendingStores } from "@/lib/stores";
 import { countPendingIndieWorks } from "@/lib/indie";
@@ -16,7 +16,7 @@ export default async function AdminHome() {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) notFound();
 
-  const [edCounts, integrity, reports, stores, indie, works, upcoming, flags, dups] =
+  const [edCounts, integrity, reports, stores, indie, works, upcoming, missingCover, dups, authorDups] =
     await Promise.all([
       prisma.publisherEdition.groupBy({ by: ["publisher"], _count: { _all: true } }),
       getCatalogIntegrity(),
@@ -25,8 +25,9 @@ export default async function AdminHome() {
       countPendingIndieWorks(),
       prisma.work.count(),
       prisma.work.count({ where: { upcoming: true } }),
-      getCatalogFlags(),
+      getWorksMissingCover(),
       getDuplicateWorkGroups(),
+      getAuthorVariantClusters(),
     ]);
 
   const editorials = edCounts
@@ -58,13 +59,24 @@ export default async function AdminHome() {
         <Stat label="🔜 Preventas" value={upcoming} />
         <Stat
           href="/admin/duplicados"
-          label="🔀 Duplicadas"
+          label="🔀 Series duplicadas"
           value={dups.length}
           alert={dups.length > 0}
         />
       </div>
-      <div className="mb-4">
-        <Stat label="🖼 Sin portada" value={flags.noCover} alert={flags.noCover > 0} />
+      <div className="mb-4 grid grid-cols-2 gap-3">
+        <Stat
+          href="/admin/herramientas#sin-portada"
+          label="🖼 Sin portada"
+          value={missingCover.length}
+          alert={missingCover.length > 0}
+        />
+        <Stat
+          href="/admin/autores"
+          label="✍️ Autores a unificar"
+          value={authorDups.length}
+          alert={authorDups.length > 0}
+        />
       </div>
       <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {editorials.map((e) => (

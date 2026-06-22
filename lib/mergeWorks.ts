@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 export interface DupWork {
   id: number;
@@ -126,6 +127,129 @@ export interface MergeReport {
   editionsMoved: number;
 }
 
+type Tx = Prisma.TransactionClient;
+
+/**
+ * Mueve TODA la data de usuario de una clave de dominio (`from`) a otra (`to`),
+ * donde la clave es el anilistId real de la serie o `-workId` para obras locales.
+ * Resuelve los choques de unicidad por usuario (si el usuario ya tiene la serie
+ * destino, fusiona ediciones y descarta el sobrante). Usado al fusionar Works.
+ */
+async function rekeyDomain(tx: Tx, from: number, to: number): Promise<void> {
+  // Colección (Manga, unique userId+anilistId). Si el usuario ya tiene el
+  // destino, movemos sus ediciones (unique mangaId+key) y borramos el sobrante.
+  const srcMangas = await tx.manga.findMany({
+    where: { anilistId: from },
+    select: { id: true, userId: true },
+  });
+  for (const m of srcMangas) {
+    const existing = await tx.manga.findUnique({
+      where: { userId_anilistId: { userId: m.userId, anilistId: to } },
+      select: { id: true },
+    });
+    if (!existing) {
+      await tx.manga.update({ where: { id: m.id }, data: { anilistId: to } });
+      continue;
+    }
+    const tgtKeys = new Set(
+      (
+        await tx.trackedEdition.findMany({
+          where: { mangaId: existing.id },
+          select: { key: true },
+        })
+      ).map((e) => e.key),
+    );
+    const srcEds = await tx.trackedEdition.findMany({
+      where: { mangaId: m.id },
+      select: { id: true, key: true },
+    });
+    for (const e of srcEds) {
+      if (tgtKeys.has(e.key)) continue; // el destino ya tiene esa edición
+      await tx.trackedEdition.update({ where: { id: e.id }, data: { mangaId: existing.id } });
+    }
+    await tx.manga.delete({ where: { id: m.id } }); // cascade: ediciones/tomos sobrantes
+  }
+
+  // Deseados (unique userId+anilistId+editionKey).
+  const srcWishes = await tx.wishlistItem.findMany({
+    where: { anilistId: from },
+    select: { id: true, userId: true, editionKey: true },
+  });
+  for (const w of srcWishes) {
+    const dup = await tx.wishlistItem.findFirst({
+      where: { userId: w.userId, anilistId: to, editionKey: w.editionKey },
+      select: { id: true },
+    });
+    if (dup) await tx.wishlistItem.delete({ where: { id: w.id } });
+    else await tx.wishlistItem.update({ where: { id: w.id }, data: { anilistId: to } });
+  }
+
+  // Notas (unique userId+anilistId).
+  const srcNotes = await tx.userNote.findMany({
+    where: { anilistId: from },
+    select: { id: true, userId: true },
+  });
+  for (const n of srcNotes) {
+    const dup = await tx.userNote.findUnique({
+      where: { userId_anilistId: { userId: n.userId, anilistId: to } },
+      select: { id: true },
+    });
+    if (dup) await tx.userNote.delete({ where: { id: n.id } });
+    else await tx.userNote.update({ where: { id: n.id }, data: { anilistId: to } });
+  }
+
+  // Muteos de notificación (@id userId+anilistId).
+  const srcMutes = await tx.seriesNotifMute.findMany({
+    where: { anilistId: from },
+    select: { userId: true },
+  });
+  for (const mu of srcMutes) {
+    const dup = await tx.seriesNotifMute.findUnique({
+      where: { userId_anilistId: { userId: mu.userId, anilistId: to } },
+    });
+    if (dup)
+      await tx.seriesNotifMute.delete({
+        where: { userId_anilistId: { userId: mu.userId, anilistId: from } },
+      });
+    else
+      await tx.seriesNotifMute.update({
+        where: { userId_anilistId: { userId: mu.userId, anilistId: from } },
+        data: { anilistId: to },
+      });
+  }
+
+  // Tablas con anilistId no-único: re-clave directa.
+  await tx.activity.updateMany({ where: { anilistId: from }, data: { anilistId: to } });
+  await tx.notification.updateMany({ where: { anilistId: from }, data: { anilistId: to } });
+  await tx.purchaseItem.updateMany({ where: { anilistId: from }, data: { anilistId: to } });
+  await tx.ivreaRelease.updateMany({ where: { anilistId: from }, data: { anilistId: to } });
+
+  // Exclusiones de edición (@id anilistId+publisher).
+  const srcExcl = await tx.editionExclusion.findMany({ where: { anilistId: from } });
+  for (const ex of srcExcl) {
+    const dup = await tx.editionExclusion.findUnique({
+      where: { anilistId_publisher: { anilistId: to, publisher: ex.publisher } },
+    });
+    if (dup)
+      await tx.editionExclusion.delete({
+        where: { anilistId_publisher: { anilistId: from, publisher: ex.publisher } },
+      });
+    else
+      await tx.editionExclusion.update({
+        where: { anilistId_publisher: { anilistId: from, publisher: ex.publisher } },
+        data: { anilistId: to },
+      });
+  }
+
+  // Override de búsqueda Crumb (@id anilistId).
+  const crumb = await tx.crumbMapping.findUnique({ where: { anilistId: from } });
+  if (crumb) {
+    const dup = await tx.crumbMapping.findUnique({ where: { anilistId: to } });
+    if (dup) await tx.crumbMapping.delete({ where: { anilistId: from } });
+    else await tx.crumbMapping.update({ where: { anilistId: from }, data: { anilistId: to } });
+  }
+}
+
 /**
  * Fusiona dos `Work` que son la MISMA serie pero quedaron separados (típico: una
  * edición se importó sin anilistId → Work por título; el anilistId se resolvió
@@ -162,8 +286,13 @@ export async function mergeWorks(
   if (!src) throw new Error(`Work source ${sourceId} no existe`);
   if (!tgt) throw new Error(`Work target ${targetId} no existe`);
 
-  const negSrc = -sourceId;
-  const negTgt = -targetId;
+  // Clave de dominio de cada Work: positiva = anilistId (la colección/deseados se
+  // clavan por el anilistId de la serie), negativa = -id para obras locales. El
+  // target PUEDE adquirir el anilistId del source en el backfill; su clave final
+  // es esa. Consolidamos la data de usuario de ambas claves viejas bajo la final.
+  const finalKey = tgt.anilistId ?? src.anilistId ?? -targetId;
+  const srcOldKey = src.anilistId ?? -sourceId;
+  const tgtOldKey = tgt.anilistId ?? -targetId;
   let editionsMoved = 0;
 
   await prisma.$transaction(
@@ -191,127 +320,13 @@ export async function mergeWorks(
       if (Object.keys(patch).length)
         await tx.work.update({ where: { id: targetId }, data: patch });
 
-      // 3) Colección (Manga, unique userId+anilistId). Si el usuario ya tiene el
-      //    target, movemos sus ediciones (unique mangaId+key) y borramos el source.
-      const srcMangas = await tx.manga.findMany({
-        where: { anilistId: negSrc },
-        select: { id: true, userId: true },
-      });
-      for (const m of srcMangas) {
-        const existing = await tx.manga.findUnique({
-          where: { userId_anilistId: { userId: m.userId, anilistId: negTgt } },
-          select: { id: true },
-        });
-        if (!existing) {
-          await tx.manga.update({ where: { id: m.id }, data: { anilistId: negTgt } });
-          continue;
-        }
-        const tgtKeys = new Set(
-          (
-            await tx.trackedEdition.findMany({
-              where: { mangaId: existing.id },
-              select: { key: true },
-            })
-          ).map((e) => e.key),
-        );
-        const srcEds = await tx.trackedEdition.findMany({
-          where: { mangaId: m.id },
-          select: { id: true, key: true },
-        });
-        for (const e of srcEds) {
-          if (tgtKeys.has(e.key)) continue; // el target ya tiene esa edición
-          await tx.trackedEdition.update({
-            where: { id: e.id },
-            data: { mangaId: existing.id },
-          });
-        }
-        await tx.manga.delete({ where: { id: m.id } }); // cascade: ediciones/tomos sobrantes
-      }
+      // 3) Re-clave de TODA la data de usuario de ambas claves viejas → la final.
+      //    (Para una fusión mixta local+anilistId, las claves difieren; para la
+      //    cola automática suelen coincidir y queda no-op.)
+      if (srcOldKey !== finalKey) await rekeyDomain(tx, srcOldKey, finalKey);
+      if (tgtOldKey !== finalKey) await rekeyDomain(tx, tgtOldKey, finalKey);
 
-      // 4) Deseados (unique userId+anilistId+editionKey).
-      const srcWishes = await tx.wishlistItem.findMany({
-        where: { anilistId: negSrc },
-        select: { id: true, userId: true, editionKey: true },
-      });
-      for (const w of srcWishes) {
-        const dup = await tx.wishlistItem.findFirst({
-          where: { userId: w.userId, anilistId: negTgt, editionKey: w.editionKey },
-          select: { id: true },
-        });
-        if (dup) await tx.wishlistItem.delete({ where: { id: w.id } });
-        else await tx.wishlistItem.update({ where: { id: w.id }, data: { anilistId: negTgt } });
-      }
-
-      // 5) Notas (unique userId+anilistId).
-      const srcNotes = await tx.userNote.findMany({
-        where: { anilistId: negSrc },
-        select: { id: true, userId: true },
-      });
-      for (const n of srcNotes) {
-        const dup = await tx.userNote.findUnique({
-          where: { userId_anilistId: { userId: n.userId, anilistId: negTgt } },
-          select: { id: true },
-        });
-        if (dup) await tx.userNote.delete({ where: { id: n.id } });
-        else await tx.userNote.update({ where: { id: n.id }, data: { anilistId: negTgt } });
-      }
-
-      // 6) Muteos de notificación (@id userId+anilistId).
-      const srcMutes = await tx.seriesNotifMute.findMany({
-        where: { anilistId: negSrc },
-        select: { userId: true },
-      });
-      for (const mu of srcMutes) {
-        const dup = await tx.seriesNotifMute.findUnique({
-          where: { userId_anilistId: { userId: mu.userId, anilistId: negTgt } },
-        });
-        if (dup)
-          await tx.seriesNotifMute.delete({
-            where: { userId_anilistId: { userId: mu.userId, anilistId: negSrc } },
-          });
-        else
-          await tx.seriesNotifMute.update({
-            where: { userId_anilistId: { userId: mu.userId, anilistId: negSrc } },
-            data: { anilistId: negTgt },
-          });
-      }
-
-      // 7) Tablas con anilistId no-único: re-clave directa.
-      await tx.activity.updateMany({ where: { anilistId: negSrc }, data: { anilistId: negTgt } });
-      await tx.notification.updateMany({ where: { anilistId: negSrc }, data: { anilistId: negTgt } });
-      await tx.purchaseItem.updateMany({ where: { anilistId: negSrc }, data: { anilistId: negTgt } });
-      await tx.ivreaRelease.updateMany({ where: { anilistId: negSrc }, data: { anilistId: negTgt } });
-
-      // 8) Exclusiones de edición (@id anilistId+publisher).
-      const srcExcl = await tx.editionExclusion.findMany({ where: { anilistId: negSrc } });
-      for (const ex of srcExcl) {
-        const dup = await tx.editionExclusion.findUnique({
-          where: { anilistId_publisher: { anilistId: negTgt, publisher: ex.publisher } },
-        });
-        if (dup)
-          await tx.editionExclusion.delete({
-            where: { anilistId_publisher: { anilistId: negSrc, publisher: ex.publisher } },
-          });
-        else
-          await tx.editionExclusion.update({
-            where: { anilistId_publisher: { anilistId: negSrc, publisher: ex.publisher } },
-            data: { anilistId: negTgt },
-          });
-      }
-
-      // 9) Override de búsqueda Crumb (@id anilistId).
-      const crumb = await tx.crumbMapping.findUnique({ where: { anilistId: negSrc } });
-      if (crumb) {
-        const dup = await tx.crumbMapping.findUnique({ where: { anilistId: negTgt } });
-        if (dup) await tx.crumbMapping.delete({ where: { anilistId: negSrc } });
-        else
-          await tx.crumbMapping.update({
-            where: { anilistId: negSrc },
-            data: { anilistId: negTgt },
-          });
-      }
-
-      // 10) Borrar el Work source (sus ediciones ya se movieron).
+      // 4) Borrar el Work source (sus ediciones ya se movieron).
       await tx.work.delete({ where: { id: sourceId } });
     },
     { timeout: 30000 },
