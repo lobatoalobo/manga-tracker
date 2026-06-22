@@ -19,6 +19,7 @@ import {
 } from "@/lib/collection";
 import { createReport, setReportStatus, deleteReport } from "@/lib/reports";
 import { mergeWorks, unlinkWorkAnilist, deleteWork } from "@/lib/mergeWorks";
+import { renameAuthor } from "@/lib/authorMerge";
 import { storeCover, storeImageBytes } from "@/lib/coverStore";
 import {
   createStore,
@@ -260,6 +261,19 @@ export async function mergeWorksAction(sourceId: number, targetId: number) {
   revalidatePath("/admin/duplicados");
   revalidatePath("/catalogo");
   return { ok: true as const };
+}
+
+/**
+ * Admin: unifica grafías de un autor. Reescribe Work.author de todas las obras
+ * cuyas `variants` matcheen, al `canonical`. Ver lib/authorMerge.
+ */
+export async function renameAuthorAction(variants: string[], canonical: string) {
+  await assertAdmin();
+  const report = await renameAuthor(variants, canonical);
+  revalidatePath("/admin/autores");
+  revalidatePath("/autores");
+  revalidatePath("/catalogo");
+  return { ok: true as const, ...report };
 }
 
 /**
