@@ -12,6 +12,11 @@ describe("authorKey", () => {
     expect(authorKey("TORIYAMA Akira")).toBe(authorKey("Akira Toriyama"));
   });
 
+  it("colapsa vocal larga del romaji (Itou ≈ Ito)", () => {
+    expect(authorKey("ITOU Junji")).toBe(authorKey("Junji Ito"));
+    expect(authorKey("Yuu Watase")).toBe(authorKey("Yu Watase"));
+  });
+
   it("distingue autores distintos", () => {
     expect(authorKey("Naoki Urasawa")).not.toBe(authorKey("Takehiko Inoue"));
   });

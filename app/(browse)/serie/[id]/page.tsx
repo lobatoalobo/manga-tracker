@@ -368,16 +368,6 @@ export default async function SeriePage({
                         value={e.status ? e.status.toLowerCase() : "en catálogo"}
                       />
                     </dl>
-                    {edIntl && e.url && (
-                      <a
-                        href={e.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-3 inline-flex w-fit items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs transition hover:border-accent"
-                      >
-                        Ver en VIZ ↗
-                      </a>
-                    )}
                     {next && (
                       <p className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-300">
                         📅 Próximo tomo{next.volume ? ` #${next.volume}` : ""} ·{" "}

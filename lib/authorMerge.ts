@@ -26,9 +26,17 @@ const tokens = (s: string): string[] =>
     .split(/\s+/)
     .filter((t) => t.length >= 2);
 
-/** Identidad de un autor: tokens ordenados (insensible a orden y mayúsculas). */
+/**
+ * Colapsa las vocales largas del romaji para que "Itou"≈"Ito", "Yuu"≈"Yu",
+ * "Ryou"≈"Ryo" caigan en la misma clave (Itō, Yū, Ryō). Así la unificación
+ * agrupa "ITOU Junji" con "Junji Ito".
+ */
+const collapseRomaji = (t: string): string =>
+  t.replace(/ou/g, "o").replace(/uu/g, "u").replace(/oo/g, "o");
+
+/** Identidad de un autor: tokens (romaji normalizado) ordenados. */
 export function authorKey(name: string): string {
-  return [...tokens(name)].sort().join(" ");
+  return [...new Set(tokens(name).map(collapseRomaji))].sort().join(" ");
 }
 
 /** Separa un string de autores en nombres individuales. */
