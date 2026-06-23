@@ -840,7 +840,8 @@ export async function updateWorkAction(
     title?: string;
     normTitle?: string;
     author?: string | null;
-    synopsis?: string | null;
+    synopsisEs?: string | null;
+    synopsisEsAuto?: boolean;
     coverImage?: string | null;
     genres?: string[];
     upcoming?: boolean;
@@ -852,7 +853,11 @@ export async function updateWorkAction(
     patch.normTitle = normalizeTitle(data.title);
   }
   if (data.author !== undefined) patch.author = data.author?.trim() || null;
-  if (data.synopsis !== undefined) patch.synopsis = data.synopsis?.trim() || null;
+  // La sinopsis del editor admin es la ES (oficial) → synopsisEs, no-auto.
+  if (data.synopsis !== undefined) {
+    patch.synopsisEs = data.synopsis?.trim() || null;
+    patch.synopsisEsAuto = false;
+  }
   if (data.coverImage !== undefined) {
     // La URL que pegue el admin se SUBE a R2 (propia, persistente); si falla, queda
     // la URL cruda. Si ya es de R2, se deja igual.
@@ -875,7 +880,7 @@ export async function updateWorkAction(
   const lock = (f: string, on: boolean) => (on ? curated.add(f) : curated.delete(f));
   if (data.title !== undefined) lock("title", !!data.title?.trim());
   if (data.author !== undefined) lock("author", !!patch.author);
-  if (data.synopsis !== undefined) lock("synopsis", !!patch.synopsis);
+  if (data.synopsis !== undefined) lock("synopsisEs", !!patch.synopsisEs);
   if (data.coverImage !== undefined) lock("coverImage", !!patch.coverImage);
   if (data.genres !== undefined) lock("genres", (patch.genres?.length ?? 0) > 0);
   if (data.releaseLabel !== undefined) lock("releaseLabel", !!patch.releaseLabel);

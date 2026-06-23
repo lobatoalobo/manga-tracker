@@ -35,12 +35,12 @@ export async function generateMetadata({
   const work = workId
     ? await prisma.work.findUnique({
         where: { id: workId },
-        select: { title: true, author: true, synopsis: true, coverImage: true },
+        select: { title: true, author: true, synopsisEs: true, synopsisEn: true, coverImage: true },
       })
     : null;
   if (!work) return { title: "Serie" };
   const desc =
-    work.synopsis?.replace(/\s+/g, " ").trim().slice(0, 160) ||
+    (work.synopsisEs ?? work.synopsisEn)?.replace(/\s+/g, " ").trim().slice(0, 160) ||
     `${work.title}${work.author ? ` de ${work.author}` : ""} — seguí esta serie y su colección en Nakama.`;
   // La portada (URL absoluta de la editorial/MU/MD) sirve directo como og:image:
   // preview con la tapa real al compartir, sin componer imagen (sin riesgo de fuentes).
@@ -144,7 +144,8 @@ export default async function SeriePage({
     reissues.push({ volume: r.volume, date: r.releaseDate });
   }
 
-  const { title, coverImage, author, synopsis, genres } = work;
+  const { title, coverImage, author, genres } = work;
+  const synopsis = work.synopsisEs; // el editor admin edita la ES (oficial)
   // Los chips de género llevan al catálogo filtrado; si la feature está apagada,
   // ese filtro no aplica → los ocultamos para no dejar links muertos.
   const genresEnabled = await isEnabled("genre-filters");
@@ -430,9 +431,9 @@ export default async function SeriePage({
         </div>
       </div>
 
-      {work.synopsisEs || work.synopsisEn || synopsis ? (
+      {work.synopsisEs || work.synopsisEn ? (
         <SynopsisTabs
-          es={work.synopsisEs ?? (work.synopsisEn ? null : synopsis)}
+          es={work.synopsisEs}
           en={work.synopsisEn}
           esAuto={work.synopsisEsAuto}
           enAuto={work.synopsisEnAuto}

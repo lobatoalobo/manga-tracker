@@ -200,15 +200,16 @@ export async function importVizSeries(
   }).catch(() => null);
   if (!workId) return { ok: false, reason: "no se pudo crear Work" };
 
-  // Completa géneros/demografía/raw si el Work no los tenía (no pisa lo editado).
+  // Completa géneros/demografía/raw/sinopsis-EN si el Work no los tenía (no pisa).
   const w = await prisma.work.findUnique({
     where: { id: workId },
-    select: { genres: true, demographic: true, rawGenres: true },
+    select: { genres: true, demographic: true, rawGenres: true, synopsisEn: true },
   });
-  const patch: { genres?: string[]; demographic?: string; rawGenres?: string[] } = {};
+  const patch: { genres?: string[]; demographic?: string; rawGenres?: string[]; synopsisEn?: string } = {};
   if (w && w.genres.length === 0 && genres.length) patch.genres = genres;
   if (w && !w.demographic && demographic) patch.demographic = demographic;
   if (w && w.rawGenres.length === 0 && rawGenres.length) patch.rawGenres = rawGenres;
+  if (w && !w.synopsisEn && mu.description) patch.synopsisEn = mu.description; // EN de VIZ/MU
   if (Object.keys(patch).length)
     await prisma.work.update({ where: { id: workId }, data: patch }).catch(() => {});
 

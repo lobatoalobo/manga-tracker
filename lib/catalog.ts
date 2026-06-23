@@ -776,29 +776,30 @@ export async function findOrCreateWork(opts: {
   // matcheo por título usamos la llave ESTRICTA (distingue Citrus de Citrus+):
   // traemos los candidatos por normTitle (indexado) y filtramos por tightTitleKey.
   // Si le falta portada/autor/sinopsis y ahora lo tenemos, lo completamos (sin pisar).
+  // La sinopsis de la editorial (Ivrea/Whakoom) es ES → va a synopsisEs.
   let existing:
-    | { id: number; coverImage: string | null; author: string | null; synopsis: string | null; originalTitle: string | null }
+    | { id: number; coverImage: string | null; author: string | null; synopsisEs: string | null; originalTitle: string | null }
     | null;
   if (opts.anilistId) {
     existing = await prisma.work.findUnique({
       where: { anilistId: opts.anilistId },
-      select: { id: true, coverImage: true, author: true, synopsis: true, originalTitle: true },
+      select: { id: true, coverImage: true, author: true, synopsisEs: true, originalTitle: true },
     });
   } else {
     const tight = tightTitleKey(title);
     const cands = await prisma.work.findMany({
       where: { normTitle },
-      select: { id: true, coverImage: true, author: true, synopsis: true, originalTitle: true, title: true },
+      select: { id: true, coverImage: true, author: true, synopsisEs: true, originalTitle: true, title: true },
     });
     existing = cands.find((w) => tightTitleKey(w.title) === tight) ?? null;
   }
 
   if (existing) {
-    const patch: { coverImage?: string; author?: string; synopsis?: string; originalTitle?: string } = {};
+    const patch: { coverImage?: string; author?: string; synopsisEs?: string; originalTitle?: string } = {};
     if (!existing.coverImage && opts.coverImage)
       patch.coverImage = (await storeCover(opts.coverImage)) ?? opts.coverImage;
     if (!existing.author && author) patch.author = author;
-    if (!existing.synopsis && synopsis) patch.synopsis = synopsis;
+    if (!existing.synopsisEs && synopsis) patch.synopsisEs = synopsis;
     if (!existing.originalTitle && originalTitle) patch.originalTitle = originalTitle;
     if (Object.keys(patch).length)
       await prisma.work.update({ where: { id: existing.id }, data: patch }).catch(() => {});
@@ -815,7 +816,7 @@ export async function findOrCreateWork(opts: {
       anilistId: opts.anilistId ?? null,
       coverImage: cover,
       author,
-      synopsis,
+      synopsisEs: synopsis,
       originalTitle,
     },
   });
