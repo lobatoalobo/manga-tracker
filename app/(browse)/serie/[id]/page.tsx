@@ -374,14 +374,6 @@ export default async function SeriePage({
                         {formatProximaDate(next.date)}
                       </p>
                     )}
-                    {/* Sinopsis propia de la edición (ej. la EN de VIZ), solo si
-                        difiere de la del Work (que es la ES preferida) para no duplicar. */}
-                    {e.synopsis && e.synopsis !== synopsis && (
-                      <div className="mt-3 border-t border-border pt-3">
-                        <p className="text-xs text-muted">Sinopsis (edición)</p>
-                        <ExpandableText text={e.synopsis} clampLines={4} className="mt-1" />
-                      </div>
-                    )}
                     {userId && (
                       <div className="mt-auto">
                         <AddEditionButton
