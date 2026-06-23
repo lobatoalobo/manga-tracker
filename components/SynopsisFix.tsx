@@ -72,7 +72,7 @@ export default function SynopsisFix({
           auto={esAuto}
           value={esVal}
           onChange={setEsVal}
-          onSave={() => save("es", esVal)}
+          onBlur={() => esVal.trim() !== (es ?? "").trim() && save("es", esVal)}
           onTranslate={enVal.trim() ? () => translate("en", "es") : undefined}
           disabled={pending}
         />
@@ -81,7 +81,7 @@ export default function SynopsisFix({
           auto={enAuto}
           value={enVal}
           onChange={setEnVal}
-          onSave={() => save("en", enVal)}
+          onBlur={() => enVal.trim() !== (en ?? "").trim() && save("en", enVal)}
           onTranslate={esVal.trim() ? () => translate("es", "en") : undefined}
           disabled={pending}
         />
@@ -96,7 +96,7 @@ function Field({
   auto,
   value,
   onChange,
-  onSave,
+  onBlur,
   onTranslate,
   disabled,
 }: {
@@ -104,7 +104,7 @@ function Field({
   auto: boolean;
   value: string;
   onChange: (v: string) => void;
-  onSave: () => void;
+  onBlur: () => void;
   onTranslate?: () => void;
   disabled: boolean;
 }) {
@@ -117,29 +117,22 @@ function Field({
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
         rows={5}
         className="w-full resize-y rounded-lg border border-border bg-surface-2 px-2 py-1.5 text-xs outline-none focus:border-accent"
       />
-      <div className="mt-1 flex gap-1.5">
+      {/* Sin botón Guardar: se guarda al salir del campo (onBlur). "Traducir"
+          guarda solo. */}
+      {onTranslate && !value.trim() && (
         <button
           type="button"
-          onClick={onSave}
+          onClick={onTranslate}
           disabled={disabled}
-          className="rounded-lg border border-border px-2 py-1 text-xs text-muted transition hover:border-accent hover:text-accent disabled:opacity-40"
+          className="mt-1 rounded-lg border border-accent/40 px-2 py-1 text-xs text-accent transition hover:bg-accent/10 disabled:opacity-40"
         >
-          Guardar
+          {disabled ? "…" : "Traducir desde la otra ↻"}
         </button>
-        {onTranslate && !value.trim() && (
-          <button
-            type="button"
-            onClick={onTranslate}
-            disabled={disabled}
-            className="rounded-lg border border-accent/40 px-2 py-1 text-xs text-accent transition hover:bg-accent/10 disabled:opacity-40"
-          >
-            {disabled ? "…" : "Traducir desde la otra ↻"}
-          </button>
-        )}
-      </div>
+      )}
     </div>
   );
 }
