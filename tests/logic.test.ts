@@ -56,6 +56,12 @@ describe("authorNameMatches (autor por nombre, no substring)", () => {
     expect(authorNameMatches("Naoki Urasawa", "NAOKI URASAWA")).toBe(true);
     expect(authorNameMatches("Tsubasa Yamaguchi", "Yamaguchi, Tsubasa")).toBe(true);
   });
+  it("'Hiro' (1 token) NO matchea autores distintos que contienen Hiro", () => {
+    expect(authorNameMatches("Hiro", "Hiro Kiyohara")).toBe(false); // Another
+    expect(authorNameMatches("Hiro", "HIRO MASHIMA")).toBe(false); // Fairy Tail
+    expect(authorNameMatches("Hiro", "ARIKAWA Hiro")).toBe(false); // Library Wars
+    expect(authorNameMatches("Hiro", "Hiro")).toBe(true); // Akebi's (autor real "Hiro")
+  });
 });
 
 describe("publisherKey (key de edición estable)", () => {
