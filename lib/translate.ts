@@ -62,33 +62,45 @@ async function viaDeepL(text: string, from: "es" | "en", to: "es" | "en"): Promi
   }
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function viaOpenAI(text: string, from: "es" | "en", to: "es" | "en"): Promise<string | null> {
   const key = process.env.OPENAI_API_KEY!;
   const prompt =
     `Traducí esta sinopsis de manga del ${LANG[from]} al ${LANG[to]}. ` +
     `Devolvé SOLO la traducción, sin comillas, sin notas ni prefacios. ` +
     `Mantené los nombres propios.\n\n${text}`;
-  try {
-    const r = await fetchWithTimeout(
-      OPENAI_API,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: OPENAI_MODEL,
-          max_tokens: 1500,
-          messages: [{ role: "user", content: prompt }],
-        }),
-      },
-      30_000,
-    );
-    if (!r.ok) return null;
-    const j = await r.json();
-    const out = j?.choices?.[0]?.message?.content;
-    return typeof out === "string" && out.trim() ? out.trim() : null;
-  } catch {
-    return null;
+  // Reintenta ante rate-limit (429) y 5xx con backoff: en batch grande OpenAI
+  // throttlea y si no reintentamos se pierden cientos de traducciones.
+  for (let i = 0; i < 5; i++) {
+    try {
+      const r = await fetchWithTimeout(
+        OPENAI_API,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: OPENAI_MODEL,
+            max_tokens: 1500,
+            messages: [{ role: "user", content: prompt }],
+          }),
+        },
+        30_000,
+      );
+      if (r.status === 429 || r.status >= 500) {
+        await sleep(2000 * (i + 1));
+        continue;
+      }
+      if (!r.ok) return null;
+      const j = await r.json();
+      const out = j?.choices?.[0]?.message?.content;
+      return typeof out === "string" && out.trim() ? out.trim() : null;
+    } catch {
+      if (i === 4) return null;
+      await sleep(1500 * (i + 1));
+    }
   }
+  return null;
 }
 
 async function viaClaude(text: string, from: "es" | "en", to: "es" | "en"): Promise<string | null> {
