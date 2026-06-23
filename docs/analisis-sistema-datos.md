@@ -92,3 +92,24 @@ Por cada Work, datos **organizados, relacionados y verificables**:
 - **Fase 4 — Reparar lo roto actual:** Rai Rai Rai (Ivrea=1 + VIZ=5 separadas), los 8 conteos contaminados, autores perdidos (300/Frank Miller).
 
 > Principio: el matcheo se ancla en **identidad externa estable + autor**, no en el título. El título pasa a ser un atributo de display multi-idioma, no la llave.
+
+## 7. Track de cómics occidentales (futuro — GCD)
+
+MangaUpdates/MangaDex son bases de **manga**: NO cubren los cómics occidentales
+(DC/Marvel/Image) que vende Ovni/Panini. Ese es el grueso de las obras sin
+matchear (Ovni 619/620 sin romaji) y de los autores perdidos (~91 de Ovni). La
+fuente correcta para ese track es **GCD — Grand Comics Database (comics.org)**.
+
+Evaluación (jun 2026, decisión: usarlo cuando sumemos cómics internacionales a escala):
+- **Qué da**: series y números con **creadores** (guionista/dibujante/entintador) — el dato de autor que falta. Es la base canónica de cómics.
+- **Licencia**: CC BY-SA 4.0 (atribución + share-alike). Mostrar creadores/títulos con atribución a GCD es manejable.
+- **Acceso**: **dump completo de la base** cada 2 semanas (+ import JSON/YAML). **Sin API oficial estable** (recomiendan importar el dump); hay un GraphQL comunitario no oficial (`adamhathcock/gcdb-graphql`). **Bloquea fetch de datacenter (403)** como Whakoom → dump local o GraphQL, no scraping en vivo desde Vercel.
+- **Límite**: **NO indexa editoriales chicas argentinas** (Ovni Press no aparece). Su fuerte son las series **originales**. → no se matchea "Batman: Año Uno (Ovni)" contra una edición Ovni en GCD; hay que matchear la edición española → **serie original en inglés** ("Batman: Year One") por título traducido + ISBN.
+- **Cómo encaja**: como **tercera identidad externa `gcdId`** (junto a anilistId/muId/mdId) — el análogo de MU/MD para el track de cómics. La arquitectura ya lo soporta.
+
+**Plan futuro (no ahora):** bajar el dump de GCD (o GraphQL), matchear los cómics
+del catálogo por título original + ISBN, traer creadores → autor, persistir
+`gcdId`. Mientras tanto, los autores de cómics que falten se cargan a mano con la
+tool "Series sin autor" (son obras conocidas, es más rápido que el pipeline).
+
+Fuentes: comics.org · docs.comics.org/wiki/Data_Distribution · docs.comics.org/wiki/Data_Users · github.com/adamhathcock/gcdb-graphql
