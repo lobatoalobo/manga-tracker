@@ -56,7 +56,7 @@ async function main() {
   });
   console.log(r.samples.join("\n"));
   console.log(
-    `\n${dryRun ? "[DRY] " : ""}scanned ${r.scanned} · con datos ${r.enriched} · match MU ${r.matchedMU} · match MD ${r.matchedMD}`,
+    `\n${dryRun ? "[DRY] " : ""}scanned ${r.scanned} · con datos ${r.enriched} · match MU ${r.matchedMU} · match MD ${r.matchedMD} · fusionados ${r.merged}`,
   );
   await prisma.$disconnect();
 }

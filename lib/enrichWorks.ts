@@ -6,12 +6,14 @@ import { normalizeGenres } from "@/lib/genres";
 import { proxiedCover } from "@/lib/coverProxy";
 import { storeCover } from "@/lib/coverStore";
 import { dbRetry } from "@/lib/dbRetry";
+import { mergeWorks } from "@/lib/mergeWorks";
 
 export interface EnrichResult {
   scanned: number;
   enriched: number; // works con al menos un dato nuevo (géneros/portada/sinopsis)
   matchedMU: number;
   matchedMD: number;
+  merged: number; // works fusionados por colisión de id externo (dedup id-first)
   samples: string[];
 }
 
@@ -102,6 +104,7 @@ export async function enrichWorks(opts: {
   let enriched = 0;
   let matchedMU = 0;
   let matchedMD = 0;
+  let merged = 0; // works fusionados por colisión de id externo (dedup id-first)
   const samples: string[] = [];
 
   for (const w of works) {
@@ -193,6 +196,29 @@ export async function enrichWorks(opts: {
       );
 
     if (!opts.dryRun) {
+      // DEDUP ID-FIRST: si OTRA obra ya tiene este id externo, son la misma serie
+      // (duplicado creado por título) → fusionamos ESTA en aquella y saltamos.
+      let mergedAway = false;
+      for (const [field, val] of [
+        ["mdId", newMdId],
+        ["muId", newMuId],
+      ] as const) {
+        if (!val) continue;
+        const other = await dbRetry(() =>
+          prisma.work.findFirst({ where: { [field]: val, id: { not: w.id } }, select: { id: true } }),
+        ).catch(() => null);
+        if (other) {
+          await mergeWorks(w.id, other.id).catch(() => {});
+          mergedAway = true;
+          merged++;
+          break;
+        }
+      }
+      if (mergedAway) {
+        await sleep(350);
+        continue;
+      }
+
       await dbRetry(() => prisma.work.update({ where: { id: w.id }, data: patch })).catch(() => {});
       // Ids externos, cada uno aislado: un choque @unique o un id raro no se lleva
       // puesto el update principal (era el bug del overflow de muId Int).
@@ -204,5 +230,5 @@ export async function enrichWorks(opts: {
     await sleep(350);
   }
 
-  return { scanned: works.length, enriched, matchedMU, matchedMD, samples };
+  return { scanned: works.length, enriched, matchedMU, matchedMD, merged, samples };
 }

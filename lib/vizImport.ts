@@ -194,6 +194,9 @@ export async function importVizSeries(
     title: displayTitle,
     coverImage: cover,
     author: mu.author,
+    // Identidad externa: dedupea al Work correcto por muId/mdId, no por título.
+    muId: String(mu.seriesId),
+    mdId: md?.id ?? null,
     // La sinopsis inglesa va a la EDICIÓN VIZ, no al Work (el Work prefiere ES;
     // el enrich completa el Work con EN solo si la obra no tiene edición ES).
     originalTitle: mu.title,
