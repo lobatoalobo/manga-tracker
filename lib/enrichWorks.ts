@@ -64,6 +64,7 @@ export async function enrichWorks(opts: {
   force?: boolean; // re-enriquecer aunque ya tengan enrichedAt
   onlyMissingCover?: boolean; // solo Works sin portada (recovery de portadas)
   onlyMissingGenres?: boolean; // solo Works sin géneros (re-match con la mejora)
+  onlyMissingIdentity?: boolean; // solo Works sin mdId (backfill identidad + nombres)
   dryRun?: boolean;
 } = {}): Promise<EnrichResult> {
   const limit = opts.limit ?? 50;
@@ -72,15 +73,20 @@ export async function enrichWorks(opts: {
       ? { coverImage: null }
       : opts.onlyMissingGenres
         ? { editions: { some: {} }, genres: { isEmpty: true } }
-        : opts.force
-          ? {}
-          : { enrichedAt: null },
+        : opts.onlyMissingIdentity
+          ? { editions: { some: {} }, mdId: null }
+          : opts.force
+            ? {}
+            : { enrichedAt: null },
     take: limit,
     orderBy: { id: "asc" },
     select: {
       id: true,
       title: true,
       originalTitle: true,
+      titleEn: true,
+      titleNative: true,
+      mdId: true,
       coverImage: true,
       synopsis: true,
       genres: true,
@@ -128,6 +134,9 @@ export async function enrichWorks(opts: {
     const { genres, demographic } = normalizeGenres(raw);
     const patch: {
       originalTitle?: string;
+      titleEn?: string;
+      titleNative?: string;
+      mdId?: string;
       genres?: string[];
       rawGenres?: string[];
       demographic?: string;
@@ -136,6 +145,13 @@ export async function enrichWorks(opts: {
       enrichedAt: Date;
     } = { enrichedAt: new Date() };
 
+    // Identidad externa (mdId) + nombres multi-idioma desde MD. Rediseño Fase 2:
+    // anclamos la identidad acá y completamos los nombres que falten (no pisa).
+    if (md?.id && !w.mdId) patch.mdId = md.id;
+    if (md?.titleEn && !w.titleEn) patch.titleEn = md.titleEn;
+    if (md?.titleNative && !w.titleNative) patch.titleNative = md.titleNative;
+    // Romaji (originalTitle): ficha de Ivrea primero (ya intentado), luego MD ja-ro.
+    if (!originalTitle && md?.titleRomaji) originalTitle = md.titleRomaji;
     if (originalTitle && originalTitle !== w.originalTitle)
       patch.originalTitle = originalTitle;
     if (raw.length && w.rawGenres.length === 0) patch.rawGenres = raw;
@@ -153,11 +169,16 @@ export async function enrichWorks(opts: {
       patch.synopsis = (mu?.description || md?.description) as string;
 
     const gotData =
-      !!patch.genres || !!patch.coverImage || !!patch.synopsis;
+      !!patch.genres ||
+      !!patch.coverImage ||
+      !!patch.synopsis ||
+      !!patch.mdId ||
+      !!patch.titleEn ||
+      !!patch.titleNative;
     if (gotData) enriched++;
     if (gotData && samples.length < 25)
       samples.push(
-        `${w.title} → ${patch.genres ? `[${patch.genres.slice(0, 4).join(", ")}]` : "sin géneros"}${patch.coverImage ? " +cover" : ""}${patch.synopsis ? " +syn" : ""}`,
+        `${w.title} → ${patch.genres ? `[${patch.genres.slice(0, 4).join(", ")}]` : "sin géneros"}${patch.mdId ? " +mdId" : ""}${patch.titleEn ? " +en" : ""}${patch.titleNative ? " +ja" : ""}${patch.coverImage ? " +cover" : ""}`,
       );
 
     if (!opts.dryRun)

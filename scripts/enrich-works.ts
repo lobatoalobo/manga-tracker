@@ -22,6 +22,7 @@ async function main() {
   const force = process.argv.includes("--force");
   const onlyMissingCover = process.argv.includes("--missing-cover");
   const onlyMissingGenres = process.argv.includes("--missing-genres");
+  const onlyMissingIdentity = process.argv.includes("--missing-identity");
 
   // dbRetry: el endpoint directo de Neon tira P1001 en cold-start (este count es
   // lo primero que toca la base). Ver memoria maintenance-tooling-robust.
@@ -30,13 +31,27 @@ async function main() {
       ? prisma.work.count({ where: { coverImage: null } })
       : onlyMissingGenres
         ? prisma.work.count({ where: { editions: { some: {} }, genres: { isEmpty: true } } })
-        : prisma.work.count({ where: { enrichedAt: null } }),
+        : onlyMissingIdentity
+          ? prisma.work.count({ where: { editions: { some: {} }, mdId: null } })
+          : prisma.work.count({ where: { enrichedAt: null } }),
   );
-  console.log(
-    `${onlyMissingCover ? "Works sin portada" : onlyMissingGenres ? "Works sin géneros" : "Works sin enriquecer"}: ${pending}. Procesando hasta ${limit}…\n`,
-  );
+  const label = onlyMissingCover
+    ? "Works sin portada"
+    : onlyMissingGenres
+      ? "Works sin géneros"
+      : onlyMissingIdentity
+        ? "Works sin identidad (mdId)"
+        : "Works sin enriquecer";
+  console.log(`${label}: ${pending}. Procesando hasta ${limit}…\n`);
 
-  const r = await enrichWorks({ limit, dryRun, force, onlyMissingCover, onlyMissingGenres });
+  const r = await enrichWorks({
+    limit,
+    dryRun,
+    force,
+    onlyMissingCover,
+    onlyMissingGenres,
+    onlyMissingIdentity,
+  });
   console.log(r.samples.join("\n"));
   console.log(
     `\n${dryRun ? "[DRY] " : ""}scanned ${r.scanned} · con datos ${r.enriched} · match MU ${r.matchedMU} · match MD ${r.matchedMD}`,
