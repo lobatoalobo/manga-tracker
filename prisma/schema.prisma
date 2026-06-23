@@ -431,7 +431,7 @@ model Work {
   // Identidad externa estable: el matcheo se ancla acá (no en el título). Se
   // resuelve UNA vez (por romaji + autor) y se reusa → re-match idempotente.
   anilistId  Int?     @unique // referencia externa opcional (snapshot/enriquecimiento)
-  muId       Int?     @unique // id de MangaUpdates (series id)
+  muId       String?  @unique // id de MangaUpdates (series id; los nuevos exceden INT4)
   mdId       String?  @unique // id de MangaDex (uuid)
   // Campos editados a mano por el admin (ej. "coverImage", "author"): NINGÚN job
   // los pisa, ni siquiera los `--force`. Ver updateWorkAction.

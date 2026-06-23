@@ -139,8 +139,6 @@ export async function enrichWorks(opts: {
       originalTitle?: string;
       titleEn?: string;
       titleNative?: string;
-      mdId?: string;
-      muId?: number;
       author?: string;
       genres?: string[];
       rawGenres?: string[];
@@ -150,10 +148,11 @@ export async function enrichWorks(opts: {
       enrichedAt: Date;
     } = { enrichedAt: new Date() };
 
-    // Identidad externa (mdId/muId) + nombres multi-idioma. Rediseño Fase 2:
-    // anclamos la identidad acá y completamos lo que falte (no pisa).
-    if (md?.id && !w.mdId) patch.mdId = md.id;
-    if (mu?.seriesId && !w.muId) patch.muId = mu.seriesId;
+    // Identidad externa (mdId/muId): se escribe APARTE del patch principal, porque
+    // es @unique y un choque (dos works → misma serie) NO debe tumbar el resto del
+    // update (autor/géneros/nombres). Rediseño Fase 2/3.
+    const newMdId = md?.id && !w.mdId ? md.id : null;
+    const newMuId = mu?.seriesId && !w.muId ? String(mu.seriesId) : null;
     // Autor desde MU (fuente confiable). Solo si falta y no está curado a mano.
     if (mu?.author && !w.author?.trim() && !w.curated.includes("author"))
       patch.author = mu.author;
@@ -181,19 +180,26 @@ export async function enrichWorks(opts: {
       !!patch.genres ||
       !!patch.coverImage ||
       !!patch.synopsis ||
-      !!patch.mdId ||
-      !!patch.muId ||
+      !!newMdId ||
+      !!newMuId ||
       !!patch.author ||
       !!patch.titleEn ||
       !!patch.titleNative;
     if (gotData) enriched++;
     if (gotData && samples.length < 25)
       samples.push(
-        `${w.title} → ${patch.genres ? `[${patch.genres.slice(0, 4).join(", ")}]` : "sin géneros"}${patch.mdId ? " +mdId" : ""}${patch.muId ? " +muId" : ""}${patch.author ? ` +autor(${patch.author})` : ""}${patch.titleEn ? " +en" : ""}${patch.titleNative ? " +ja" : ""}`,
+        `${w.title} → ${patch.genres ? `[${patch.genres.slice(0, 4).join(", ")}]` : "sin géneros"}${newMdId ? " +mdId" : ""}${newMuId ? " +muId" : ""}${patch.author ? ` +autor(${patch.author})` : ""}${patch.titleEn ? " +en" : ""}${patch.titleNative ? " +ja" : ""}`,
       );
 
-    if (!opts.dryRun)
+    if (!opts.dryRun) {
       await dbRetry(() => prisma.work.update({ where: { id: w.id }, data: patch })).catch(() => {});
+      // Ids externos, cada uno aislado: un choque @unique o un id raro no se lleva
+      // puesto el update principal (era el bug del overflow de muId Int).
+      if (newMdId)
+        await prisma.work.update({ where: { id: w.id }, data: { mdId: newMdId } }).catch(() => {});
+      if (newMuId)
+        await prisma.work.update({ where: { id: w.id }, data: { muId: newMuId } }).catch(() => {});
+    }
     await sleep(350);
   }
 
