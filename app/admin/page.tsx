@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { getCatalogIntegrity, getWorksMissingCover, countWorksMissingSynopsis } from "@/lib/adminChecks";
-import { getDuplicateWorkGroups } from "@/lib/mergeWorks";
+import { getDuplicateWorkGroups, getEditionDuplicateGroups } from "@/lib/mergeWorks";
 import { getAuthorVariantClusters, getWorksMissingAuthor } from "@/lib/authorMerge";
 import { countPendingReports } from "@/lib/reports";
 import { countPendingStores } from "@/lib/stores";
@@ -16,7 +16,7 @@ export default async function AdminHome() {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) notFound();
 
-  const [edCounts, integrity, reports, stores, indie, works, upcoming, missingCover, dups, authorDups, missingAuthor, missingSynopsis] =
+  const [edCounts, integrity, reports, stores, indie, works, upcoming, missingCover, dups, authorDups, missingAuthor, missingSynopsis, edDupes] =
     await Promise.all([
       prisma.publisherEdition.groupBy({ by: ["publisher"], _count: { _all: true } }),
       getCatalogIntegrity(),
@@ -30,6 +30,7 @@ export default async function AdminHome() {
       getAuthorVariantClusters(),
       getWorksMissingAuthor(),
       countWorksMissingSynopsis(),
+      getEditionDuplicateGroups(),
     ]);
 
   const editorials = edCounts
@@ -61,9 +62,9 @@ export default async function AdminHome() {
         <Stat label="🔜 Preventas" value={upcoming} />
         <Stat
           href="/admin/duplicados"
-          label="🔀 Series duplicadas"
-          value={dups.length}
-          alert={dups.length > 0}
+          label="🔀 Duplicados"
+          value={dups.length + edDupes.length}
+          alert={dups.length + edDupes.length > 0}
         />
       </div>
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">

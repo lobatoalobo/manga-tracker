@@ -18,7 +18,13 @@ import {
   type ReadingStatus,
 } from "@/lib/collection";
 import { createReport, setReportStatus, deleteReport } from "@/lib/reports";
-import { mergeWorks, unlinkWorkAnilist, deleteWork } from "@/lib/mergeWorks";
+import {
+  mergeWorks,
+  unlinkWorkAnilist,
+  deleteWork,
+  cleanRedundantEditions,
+  cleanOrphanWorks,
+} from "@/lib/mergeWorks";
 import { renameAuthor } from "@/lib/authorMerge";
 import { translateSynopsis, translatorConfigured } from "@/lib/translate";
 import { storeCover, storeImageBytes } from "@/lib/coverStore";
@@ -262,6 +268,19 @@ export async function mergeWorksAction(sourceId: number, targetId: number) {
   revalidatePath("/admin/duplicados");
   revalidatePath("/catalogo");
   return { ok: true as const };
+}
+
+/**
+ * Admin: auto-resuelve ediciones duplicadas del mismo Work (mantiene la canónica)
+ * y limpia Works huérfanos. Self-healing del catálogo (caso I"s). Solo admin.
+ */
+export async function cleanCatalogDupesAction() {
+  await assertAdmin();
+  const editions = await cleanRedundantEditions();
+  const orphans = await cleanOrphanWorks();
+  revalidatePath("/admin/duplicados");
+  revalidatePath("/admin/herramientas");
+  return { ok: true as const, editions, orphans };
 }
 
 /**

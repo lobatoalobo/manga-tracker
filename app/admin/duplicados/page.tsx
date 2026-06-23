@@ -2,9 +2,10 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
-import { getDuplicateWorkGroups } from "@/lib/mergeWorks";
+import { getDuplicateWorkGroups, getEditionDuplicateGroups } from "@/lib/mergeWorks";
 import DuplicateMerger from "@/components/DuplicateMerger";
 import ManualMerge from "@/components/ManualMerge";
+import EditionDupes from "@/components/EditionDupes";
 
 export const metadata = { title: "Series duplicadas (admin) · Nakama" };
 
@@ -17,7 +18,10 @@ export default async function DuplicadosPage() {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) notFound();
 
-  const groups = await getDuplicateWorkGroups();
+  const [groups, edDupes] = await Promise.all([
+    getDuplicateWorkGroups(),
+    getEditionDuplicateGroups(),
+  ]);
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-8">
@@ -36,9 +40,18 @@ export default async function DuplicadosPage() {
       </div>
 
       <h2 className="mb-3 text-sm font-semibold">
-        Detectadas automáticamente (mismo anilistId)
+        Works duplicados (mismo anilistId)
       </h2>
       <DuplicateMerger groups={groups} />
+
+      <h2 className="mb-3 mt-8 text-sm font-semibold">
+        Ediciones duplicadas (misma editorial + título)
+      </h2>
+      <p className="mb-3 text-xs text-muted">
+        Redundantes en el mismo work (se limpian solas) o la misma serie partida en
+        works distintos (fusionar). Antes esto estaba en Herramientas.
+      </p>
+      <EditionDupes groups={edDupes} />
     </main>
   );
 }
