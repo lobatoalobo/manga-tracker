@@ -306,7 +306,10 @@ export async function translateSynopsisAction(
 ) {
   await assertAdmin();
   if (!translatorConfigured())
-    return { ok: false as const, error: "Falta ANTHROPIC_API_KEY en el entorno." };
+    return {
+      ok: false as const,
+      error: "Falta una API key de traducción (OPENAI_API_KEY) en el entorno.",
+    };
   const w = await prisma.work.findUnique({
     where: { id: workId },
     select: { synopsisEs: true, synopsisEn: true },
