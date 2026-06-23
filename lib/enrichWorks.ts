@@ -74,7 +74,7 @@ export async function enrichWorks(opts: {
       : opts.onlyMissingGenres
         ? { editions: { some: {} }, genres: { isEmpty: true } }
         : opts.onlyMissingIdentity
-          ? { editions: { some: {} }, mdId: null }
+          ? { editions: { some: {} }, OR: [{ mdId: null }, { muId: null }] }
           : opts.force
             ? {}
             : { enrichedAt: null },
@@ -87,6 +87,9 @@ export async function enrichWorks(opts: {
       titleEn: true,
       titleNative: true,
       mdId: true,
+      muId: true,
+      author: true,
+      curated: true,
       coverImage: true,
       synopsis: true,
       genres: true,
@@ -137,6 +140,8 @@ export async function enrichWorks(opts: {
       titleEn?: string;
       titleNative?: string;
       mdId?: string;
+      muId?: number;
+      author?: string;
       genres?: string[];
       rawGenres?: string[];
       demographic?: string;
@@ -145,9 +150,13 @@ export async function enrichWorks(opts: {
       enrichedAt: Date;
     } = { enrichedAt: new Date() };
 
-    // Identidad externa (mdId) + nombres multi-idioma desde MD. Rediseño Fase 2:
-    // anclamos la identidad acá y completamos los nombres que falten (no pisa).
+    // Identidad externa (mdId/muId) + nombres multi-idioma. Rediseño Fase 2:
+    // anclamos la identidad acá y completamos lo que falte (no pisa).
     if (md?.id && !w.mdId) patch.mdId = md.id;
+    if (mu?.seriesId && !w.muId) patch.muId = mu.seriesId;
+    // Autor desde MU (fuente confiable). Solo si falta y no está curado a mano.
+    if (mu?.author && !w.author?.trim() && !w.curated.includes("author"))
+      patch.author = mu.author;
     if (md?.titleEn && !w.titleEn) patch.titleEn = md.titleEn;
     if (md?.titleNative && !w.titleNative) patch.titleNative = md.titleNative;
     // Romaji (originalTitle): ficha de Ivrea primero (ya intentado), luego MD ja-ro.
@@ -173,12 +182,14 @@ export async function enrichWorks(opts: {
       !!patch.coverImage ||
       !!patch.synopsis ||
       !!patch.mdId ||
+      !!patch.muId ||
+      !!patch.author ||
       !!patch.titleEn ||
       !!patch.titleNative;
     if (gotData) enriched++;
     if (gotData && samples.length < 25)
       samples.push(
-        `${w.title} → ${patch.genres ? `[${patch.genres.slice(0, 4).join(", ")}]` : "sin géneros"}${patch.mdId ? " +mdId" : ""}${patch.titleEn ? " +en" : ""}${patch.titleNative ? " +ja" : ""}${patch.coverImage ? " +cover" : ""}`,
+        `${w.title} → ${patch.genres ? `[${patch.genres.slice(0, 4).join(", ")}]` : "sin géneros"}${patch.mdId ? " +mdId" : ""}${patch.muId ? " +muId" : ""}${patch.author ? ` +autor(${patch.author})` : ""}${patch.titleEn ? " +en" : ""}${patch.titleNative ? " +ja" : ""}`,
       );
 
     if (!opts.dryRun)

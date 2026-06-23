@@ -32,7 +32,9 @@ async function main() {
       : onlyMissingGenres
         ? prisma.work.count({ where: { editions: { some: {} }, genres: { isEmpty: true } } })
         : onlyMissingIdentity
-          ? prisma.work.count({ where: { editions: { some: {} }, mdId: null } })
+          ? prisma.work.count({
+              where: { editions: { some: {} }, OR: [{ mdId: null }, { muId: null }] },
+            })
           : prisma.work.count({ where: { enrichedAt: null } }),
   );
   const label = onlyMissingCover
