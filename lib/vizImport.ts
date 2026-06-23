@@ -194,7 +194,8 @@ export async function importVizSeries(
     title: displayTitle,
     coverImage: cover,
     author: mu.author,
-    synopsis: mu.description,
+    // La sinopsis inglesa va a la EDICIÓN VIZ, no al Work (el Work prefiere ES;
+    // el enrich completa el Work con EN solo si la obra no tiene edición ES).
     originalTitle: mu.title,
   }).catch(() => null);
   if (!workId) return { ok: false, reason: "no se pudo crear Work" };
@@ -224,6 +225,7 @@ export async function importVizSeries(
     url: `https://www.viz.com/search?search=${encodeURIComponent(title)}`,
     language: "en",
     country: "US",
+    synopsis: mu.description, // sinopsis EN en la edición VIZ (no en el Work ES)
   });
   await prisma.publisherEdition
     .updateMany({ where: { publisher: VIZ, slug }, data: { workId } })

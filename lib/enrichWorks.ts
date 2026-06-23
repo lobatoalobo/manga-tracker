@@ -18,16 +18,22 @@ export interface EnrichResult {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Variantes de título para matchear: original (romaji) + título, más el título
- * sin subtítulo ("JIGOKURAKU -HELL'S PARADISE-" → "JIGOKURAKU") y una versión
- * sin espacios ("GACHI AKUTA" → "GACHIAKUTA", que matchea "Gachiakuta").
+ * Variantes de título para matchear contra MU/MD. Además del original (romaji) y
+ * el título, prueba el prefijo antes del subtítulo:
+ *  - guion: "JIGOKURAKU -HELL'S PARADISE-" → "JIGOKURAKU"
+ *  - dos puntos: "Umimachi Diary: Diario de una Ciudad Costera" → "Umimachi Diary"
+ *    (Whakoom guarda los títulos AR como "Romaji: Traducción"; el romaji es lo
+ *    buscable en MU/MD). Exigimos espacio tras los ":" para no cortar "Re:Zero".
+ * Y una versión sin espacios ("GACHI AKUTA" → "GACHIAKUTA").
  */
-function buildTargets(originalTitle: string | null, title: string): string[] {
+export function buildTargets(originalTitle: string | null, title: string): string[] {
   const base = [originalTitle, title].filter(Boolean) as string[];
   const extra: string[] = [];
   for (const t of base) {
-    const stripped = t.split(/\s+[-–—]\s*/)[0].trim();
-    if (stripped && stripped !== t && stripped.length >= 3) extra.push(stripped);
+    for (const re of [/\s+[-–—]\s*/, /:\s+/]) {
+      const prefix = t.split(re)[0].trim();
+      if (prefix && prefix !== t && prefix.length >= 3) extra.push(prefix);
+    }
     const noSpace = t.replace(/\s+/g, "");
     if (noSpace !== t) extra.push(noSpace);
   }
@@ -57,31 +63,39 @@ export async function enrichWorks(opts: {
   limit?: number;
   force?: boolean; // re-enriquecer aunque ya tengan enrichedAt
   onlyMissingCover?: boolean; // solo Works sin portada (recovery de portadas)
+  onlyMissingGenres?: boolean; // solo Works sin géneros (re-match con la mejora)
+  onlyMissingIdentity?: boolean; // solo Works sin mdId (backfill identidad + nombres)
   dryRun?: boolean;
 } = {}): Promise<EnrichResult> {
   const limit = opts.limit ?? 50;
   const works = await dbRetry(() => prisma.work.findMany({
     where: opts.onlyMissingCover
       ? { coverImage: null }
-      : opts.force
-        ? {}
-        : { enrichedAt: null },
+      : opts.onlyMissingGenres
+        ? { editions: { some: {} }, genres: { isEmpty: true } }
+        : opts.onlyMissingIdentity
+          ? { editions: { some: {} }, OR: [{ mdId: null }, { muId: null }] }
+          : opts.force
+            ? {}
+            : { enrichedAt: null },
     take: limit,
     orderBy: { id: "asc" },
     select: {
       id: true,
       title: true,
       originalTitle: true,
+      titleEn: true,
+      titleNative: true,
+      mdId: true,
+      muId: true,
+      author: true,
+      curated: true,
       coverImage: true,
       synopsis: true,
       genres: true,
       rawGenres: true,
       demographic: true,
-      editions: {
-        where: { publisher: "Ivrea Argentina" },
-        select: { slug: true },
-        take: 1,
-      },
+      editions: { select: { publisher: true, slug: true, language: true } },
     },
   }));
 
@@ -91,10 +105,14 @@ export async function enrichWorks(opts: {
   const samples: string[] = [];
 
   for (const w of works) {
+    const ivreaSlug = w.editions.find((e) => e.publisher === "Ivrea Argentina")?.slug;
+    // ¿Tiene edición en español? Si sí, NO le metemos sinopsis inglesa al Work
+    // (la vista ES no debe mostrar inglés). La inglesa vive en la edición VIZ.
+    const hasEsEdition = w.editions.some((e) => e.language === "es");
     // Backfill del título original (romaji) desde la ficha de Ivrea si falta.
     let originalTitle = w.originalTitle;
-    if (!originalTitle && w.editions[0]?.slug) {
-      const ficha = await getIvreaDataBySlug(w.editions[0].slug).catch(() => null);
+    if (!originalTitle && ivreaSlug) {
+      const ficha = await getIvreaDataBySlug(ivreaSlug).catch(() => null);
       if (ficha?.originalTitle) originalTitle = ficha.originalTitle;
       await sleep(300);
     }
@@ -119,6 +137,9 @@ export async function enrichWorks(opts: {
     const { genres, demographic } = normalizeGenres(raw);
     const patch: {
       originalTitle?: string;
+      titleEn?: string;
+      titleNative?: string;
+      author?: string;
       genres?: string[];
       rawGenres?: string[];
       demographic?: string;
@@ -127,6 +148,18 @@ export async function enrichWorks(opts: {
       enrichedAt: Date;
     } = { enrichedAt: new Date() };
 
+    // Identidad externa (mdId/muId): se escribe APARTE del patch principal, porque
+    // es @unique y un choque (dos works → misma serie) NO debe tumbar el resto del
+    // update (autor/géneros/nombres). Rediseño Fase 2/3.
+    const newMdId = md?.id && !w.mdId ? md.id : null;
+    const newMuId = mu?.seriesId && !w.muId ? String(mu.seriesId) : null;
+    // Autor desde MU (fuente confiable). Solo si falta y no está curado a mano.
+    if (mu?.author && !w.author?.trim() && !w.curated.includes("author"))
+      patch.author = mu.author;
+    if (md?.titleEn && !w.titleEn) patch.titleEn = md.titleEn;
+    if (md?.titleNative && !w.titleNative) patch.titleNative = md.titleNative;
+    // Romaji (originalTitle): ficha de Ivrea primero (ya intentado), luego MD ja-ro.
+    if (!originalTitle && md?.titleRomaji) originalTitle = md.titleRomaji;
     if (originalTitle && originalTitle !== w.originalTitle)
       patch.originalTitle = originalTitle;
     if (raw.length && w.rawGenres.length === 0) patch.rawGenres = raw;
@@ -139,20 +172,36 @@ export async function enrichWorks(opts: {
       const c = (await storeCover(src)) ?? proxiedCover(src);
       if (c) patch.coverImage = c;
     }
-    // Sinopsis: la de la editorial (español) manda; respaldo MU/MD (inglés).
-    if (!w.synopsis && (mu?.description || md?.description))
+    // Sinopsis del Work: la de la editorial (español) manda. El respaldo inglés
+    // (MU/MD) SOLO si la obra no tiene edición ES (si la tiene, la inglesa iría a
+    // la edición VIZ, no al Work). Evita el "Source: VIZ Media" en obras de Ivrea.
+    if (!w.synopsis && !hasEsEdition && (mu?.description || md?.description))
       patch.synopsis = (mu?.description || md?.description) as string;
 
     const gotData =
-      !!patch.genres || !!patch.coverImage || !!patch.synopsis;
+      !!patch.genres ||
+      !!patch.coverImage ||
+      !!patch.synopsis ||
+      !!newMdId ||
+      !!newMuId ||
+      !!patch.author ||
+      !!patch.titleEn ||
+      !!patch.titleNative;
     if (gotData) enriched++;
     if (gotData && samples.length < 25)
       samples.push(
-        `${w.title} → ${patch.genres ? `[${patch.genres.slice(0, 4).join(", ")}]` : "sin géneros"}${patch.coverImage ? " +cover" : ""}${patch.synopsis ? " +syn" : ""}`,
+        `${w.title} → ${patch.genres ? `[${patch.genres.slice(0, 4).join(", ")}]` : "sin géneros"}${newMdId ? " +mdId" : ""}${newMuId ? " +muId" : ""}${patch.author ? ` +autor(${patch.author})` : ""}${patch.titleEn ? " +en" : ""}${patch.titleNative ? " +ja" : ""}`,
       );
 
-    if (!opts.dryRun)
+    if (!opts.dryRun) {
       await dbRetry(() => prisma.work.update({ where: { id: w.id }, data: patch })).catch(() => {});
+      // Ids externos, cada uno aislado: un choque @unique o un id raro no se lleva
+      // puesto el update principal (era el bug del overflow de muId Int).
+      if (newMdId)
+        await prisma.work.update({ where: { id: w.id }, data: { mdId: newMdId } }).catch(() => {});
+      if (newMuId)
+        await prisma.work.update({ where: { id: w.id }, data: { muId: newMuId } }).catch(() => {});
+    }
     await sleep(350);
   }
 

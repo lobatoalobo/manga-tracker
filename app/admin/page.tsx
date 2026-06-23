@@ -5,7 +5,7 @@ import { isAdmin } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { getCatalogIntegrity, getWorksMissingCover } from "@/lib/adminChecks";
 import { getDuplicateWorkGroups } from "@/lib/mergeWorks";
-import { getAuthorVariantClusters } from "@/lib/authorMerge";
+import { getAuthorVariantClusters, getWorksMissingAuthor } from "@/lib/authorMerge";
 import { countPendingReports } from "@/lib/reports";
 import { countPendingStores } from "@/lib/stores";
 import { countPendingIndieWorks } from "@/lib/indie";
@@ -16,7 +16,7 @@ export default async function AdminHome() {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) notFound();
 
-  const [edCounts, integrity, reports, stores, indie, works, upcoming, missingCover, dups, authorDups] =
+  const [edCounts, integrity, reports, stores, indie, works, upcoming, missingCover, dups, authorDups, missingAuthor] =
     await Promise.all([
       prisma.publisherEdition.groupBy({ by: ["publisher"], _count: { _all: true } }),
       getCatalogIntegrity(),
@@ -28,6 +28,7 @@ export default async function AdminHome() {
       getWorksMissingCover(),
       getDuplicateWorkGroups(),
       getAuthorVariantClusters(),
+      getWorksMissingAuthor(),
     ]);
 
   const editorials = edCounts
@@ -64,7 +65,7 @@ export default async function AdminHome() {
           alert={dups.length > 0}
         />
       </div>
-      <div className="mb-4 grid grid-cols-2 gap-3">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Stat
           href="/admin/herramientas#sin-portada"
           label="🖼 Sin portada"
@@ -76,6 +77,12 @@ export default async function AdminHome() {
           label="✍️ Autores a unificar"
           value={authorDups.length}
           alert={authorDups.length > 0}
+        />
+        <Stat
+          href="/admin/autores?tab=sin-autor"
+          label="✍️ Series sin autor"
+          value={missingAuthor.length}
+          alert={missingAuthor.length > 0}
         />
       </div>
       <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3">

@@ -10,6 +10,7 @@
  */
 import { enrichWorks } from "../lib/enrichWorks";
 import { prisma } from "../lib/prisma";
+import { dbRetry } from "../lib/dbRetry";
 
 async function main() {
   const arg = (name: string) => {
@@ -20,15 +21,39 @@ async function main() {
   const dryRun = process.argv.includes("--dry");
   const force = process.argv.includes("--force");
   const onlyMissingCover = process.argv.includes("--missing-cover");
+  const onlyMissingGenres = process.argv.includes("--missing-genres");
+  const onlyMissingIdentity = process.argv.includes("--missing-identity");
 
-  const pending = onlyMissingCover
-    ? await prisma.work.count({ where: { coverImage: null } })
-    : await prisma.work.count({ where: { enrichedAt: null } });
-  console.log(
-    `${onlyMissingCover ? "Works sin portada" : "Works sin enriquecer"}: ${pending}. Procesando hasta ${limit}…\n`,
+  // dbRetry: el endpoint directo de Neon tira P1001 en cold-start (este count es
+  // lo primero que toca la base). Ver memoria maintenance-tooling-robust.
+  const pending = await dbRetry(() =>
+    onlyMissingCover
+      ? prisma.work.count({ where: { coverImage: null } })
+      : onlyMissingGenres
+        ? prisma.work.count({ where: { editions: { some: {} }, genres: { isEmpty: true } } })
+        : onlyMissingIdentity
+          ? prisma.work.count({
+              where: { editions: { some: {} }, OR: [{ mdId: null }, { muId: null }] },
+            })
+          : prisma.work.count({ where: { enrichedAt: null } }),
   );
+  const label = onlyMissingCover
+    ? "Works sin portada"
+    : onlyMissingGenres
+      ? "Works sin géneros"
+      : onlyMissingIdentity
+        ? "Works sin identidad (mdId)"
+        : "Works sin enriquecer";
+  console.log(`${label}: ${pending}. Procesando hasta ${limit}…\n`);
 
-  const r = await enrichWorks({ limit, dryRun, force, onlyMissingCover });
+  const r = await enrichWorks({
+    limit,
+    dryRun,
+    force,
+    onlyMissingCover,
+    onlyMissingGenres,
+    onlyMissingIdentity,
+  });
   console.log(r.samples.join("\n"));
   console.log(
     `\n${dryRun ? "[DRY] " : ""}scanned ${r.scanned} · con datos ${r.enriched} · match MU ${r.matchedMU} · match MD ${r.matchedMD}`,

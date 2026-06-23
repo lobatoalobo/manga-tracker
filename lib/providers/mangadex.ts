@@ -4,11 +4,32 @@ const DAY = 60 * 60 * 24;
 export interface MangaDexData {
   id: string;
   title: string;
+  titleEn: string | null; // título en inglés
+  titleNative: string | null; // título nativo japonés (kanji/kana)
+  titleRomaji: string | null; // romaji (ja-ro)
   year: number | null;
   genres: string[]; // tags de grupo genre/theme
   coverImage: string | null; // portada del original (thumb 512)
   description: string | null; // inglés
   aliases: string[]; // todos los nombres conocidos (incluye romaji ja-ro)
+}
+
+/**
+ * Primer valor para alguno de los `langs` buscando en title + altTitles. MD pone
+ * el romaji bajo "ja-ro", el nativo bajo "ja"/"ja-ro" inverso, el inglés en "en".
+ */
+function pickLang(
+  title: Record<string, string> | undefined,
+  altTitles: Record<string, string>[] | undefined,
+  langs: string[],
+): string | null {
+  const maps = [title ?? {}, ...(altTitles ?? [])];
+  for (const lang of langs)
+    for (const m of maps) {
+      const v = m?.[lang];
+      if (v && String(v).trim()) return String(v).trim();
+    }
+  return null;
 }
 
 const norm = (s: string) =>
@@ -83,6 +104,9 @@ export async function getMangaDex(
   return {
     id: m.id,
     title: a.title?.en ?? String(Object.values(a.title ?? {})[0] ?? ""),
+    titleEn: pickLang(a.title, a.altTitles, ["en"]),
+    titleNative: pickLang(a.title, a.altTitles, ["ja"]),
+    titleRomaji: pickLang(a.title, a.altTitles, ["ja-ro"]),
     year: a.year ? Number(a.year) : null,
     genres,
     coverImage: cover

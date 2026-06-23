@@ -404,14 +404,18 @@ model RateLimit {
 // queda como referencia opcional de enriquecimiento, no como llave.
 model Work {
   id         Int      @id @default(autoincrement())
-  title      String // título principal que mostramos
+  title      String // título principal que mostramos (display: ES > EN > romaji)
   normTitle  String // normalizado para agrupar ediciones y para búsqueda
-  // Título original (romaji) de la ficha de la editorial: llave de match con
-  // MangaUpdates / MangaDex para enriquecer (géneros, portada de respaldo).
-  originalTitle String?
+  // Nombres multi-idioma. `originalTitle` ES el romaji (llave de match con
+  // MangaUpdates / MangaDex). Los demás se completan desde MD/AniList una vez que
+  // la obra tiene identidad externa. Ver docs/analisis-sistema-datos.md.
+  originalTitle String? // romaji (titleRomaji)
+  titleEn       String? // título en inglés (VIZ / AniList english)
+  titleNative   String? // título nativo japonés (kanji/kana; AniList native / MD ja)
   coverImage String?
   author     String? // autor(es), editable; semilla de la ficha de la editorial
-  synopsis   String? // sinopsis, editable
+  assistants String? // asistentes/colaboradores (ayuda a desambiguar homónimos)
+  synopsis   String? // sinopsis del Work (preferimos ES; por edición ver PublisherEdition.synopsis)
   genres     String[] // géneros CANÓNICOS (es) para filtrar; ver lib/genres.ts
   // Géneros crudos de MU/MD (en inglés) antes de mapear: backup para re-mapear
   // sin re-enriquecer.
@@ -424,7 +428,11 @@ model Work {
   // Fecha estimada de salida, BORROSA y manual: "2026" (solo año) o "2026-07"
   // (mes+año). Whakoom/Ivrea a veces solo dan el año o el mes.
   releaseLabel String?
+  // Identidad externa estable: el matcheo se ancla acá (no en el título). Se
+  // resuelve UNA vez (por romaji + autor) y se reusa → re-match idempotente.
   anilistId  Int?     @unique // referencia externa opcional (snapshot/enriquecimiento)
+  muId       String?  @unique // id de MangaUpdates (series id; los nuevos exceden INT4)
+  mdId       String?  @unique // id de MangaDex (uuid)
   // Campos editados a mano por el admin (ej. "coverImage", "author"): NINGÚN job
   // los pisa, ni siquiera los `--force`. Ver updateWorkAction.
   curated    String[] @default([])
@@ -449,6 +457,9 @@ model PublisherEdition {
   // cuenta como "sin mapear". P. ej. cómics occidentales que vende Ivrea.
   nationalOnly Boolean @default(false)
   volumes      Int
+  // Sinopsis de ESTA edición, en su idioma (ES de Ivrea/Whakoom, EN de VIZ). Para
+  // obras con edición ES + EN (ej. Rai Rai Rai) que no deben pisarse entre sí.
+  synopsis        String?
   // Último conteo de tomos por el que ya se notificó "tomo nuevo". 0 = sin
   // baselinear (la primera vez se baselinea en silencio, sin notificar).
   notifiedVolumes Int     @default(0)

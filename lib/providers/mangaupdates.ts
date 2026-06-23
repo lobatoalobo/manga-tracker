@@ -88,12 +88,23 @@ function confidence(d: MangaUpdatesData, expected: number | null): number {
 }
 
 export interface MangaUpdatesEnrich {
-  seriesId: number;
+  seriesId: number; // = muId (identidad externa estable)
   title: string;
+  author: string | null;
   year: number | null;
   genres: string[];
   description: string | null;
   coverImage: string | null;
+}
+
+/** Autor principal de una serie MU (type author/story; fallback al primero). */
+function parseAuthor(d: { authors?: { name?: string; type?: string }[] }): string | null {
+  return (
+    (d.authors || [])
+      .filter((a) => /author|story/i.test(a.type || ""))
+      .map((a) => stripHtml(a.name || ""))[0] ??
+    (d.authors?.[0]?.name ? stripHtml(d.authors[0].name) : null)
+  );
 }
 
 /**
@@ -190,16 +201,10 @@ async function fetchLicensed(id: number): Promise<MuLicensed | null> {
     .filter((p: { type?: string }) => p.type === "English")
     .map((p: { publisher_name?: string }) => stripHtml(p.publisher_name || ""))
     .filter(Boolean);
-  const author =
-    (d.authors || [])
-      .filter((a: { type?: string }) => /author|story/i.test(a.type || ""))
-      .map((a: { name?: string }) => stripHtml(a.name || ""))[0] ??
-    (d.authors?.[0]?.name ? stripHtml(d.authors[0].name) : null);
-
   return {
     seriesId: id,
     title: stripHtml(d.title || ""),
-    author,
+    author: parseAuthor(d),
     year: d.year ? Number(d.year) : null,
     genres: (d.genres || []).map((g: { genre?: string }) => g.genre).filter(Boolean),
     description: d.description ? stripHtml(d.description) : null,
@@ -216,6 +221,7 @@ async function getSeriesFull(id: number): Promise<MangaUpdatesEnrich | null> {
   return {
     seriesId: id,
     title: stripHtml(d.title || ""),
+    author: parseAuthor(d),
     year: d.year ? Number(d.year) : null,
     genres: (d.genres || []).map((g: any) => g.genre).filter(Boolean),
     description: d.description ? stripHtml(d.description) : null,
