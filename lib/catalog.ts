@@ -4,9 +4,12 @@ import { rejectEditions } from "@/lib/rejectedSources";
 import { storeCover } from "@/lib/coverStore";
 import { decodeEntities } from "@/lib/decodeEntities";
 /**
- * ¿El nombre de autor `target` está en el string de autores `field` por NOMBRE
- * (todos sus tokens presentes), no por substring? Evita que "ONE" matchee
- * "BONES"/"Kurone". Maneja el orden y el formato "Apellido, Nombre".
+ * ¿`target` es el MISMO autor que alguno en el string `field`? Compara por
+ * IGUALDAD de conjunto de tokens (no subconjunto), así "Hiro" NO matchea
+ * "Hiro Kiyohara"/"Hiro Mashima"/"Arikawa Hiro" (eran autores distintos
+ * mezclados). Order-independent (ASANO Inio == Inio Asano). El `,` es ambiguo
+ * (separa co-autores Y el formato "Apellido, Nombre"), así que probamos como
+ * candidatos: el field completo (Apellido, Nombre) y cada segmento de co-autor.
  */
 export function authorNameMatches(
   target: string,
@@ -21,10 +24,15 @@ export function authorNameMatches(
       .replace(/[^a-z0-9 ]/g, " ")
       .split(/\s+/)
       .filter((t) => t.length >= 2);
-  const t = tok(target);
-  if (t.length === 0) return false;
-  const all = new Set(tok(field));
-  return t.every((x) => all.has(x));
+  const tset = new Set(tok(target));
+  if (tset.size === 0) return false;
+  const sameSet = (s: string): boolean => {
+    const c = new Set(tok(s));
+    return c.size === tset.size && [...c].every((x) => tset.has(x));
+  };
+  // field completo (cubre "Apellido, Nombre") + cada segmento de co-autor
+  // (separadores: , & + y "y"; ej. "REIJI MIYAJIMA + YUKA KINAMI").
+  return sameSet(field) || field.split(/,|&|\+| y /i).some(sameSet);
 }
 
 export const PUBLISHERS = [
