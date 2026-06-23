@@ -3,7 +3,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { isAdmin } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
-import { getCatalogIntegrity, getWorksMissingCover } from "@/lib/adminChecks";
+import { getCatalogIntegrity, getWorksMissingCover, countWorksMissingSynopsis } from "@/lib/adminChecks";
 import { getDuplicateWorkGroups } from "@/lib/mergeWorks";
 import { getAuthorVariantClusters, getWorksMissingAuthor } from "@/lib/authorMerge";
 import { countPendingReports } from "@/lib/reports";
@@ -16,7 +16,7 @@ export default async function AdminHome() {
   const session = await auth();
   if (!isAdmin(session?.user?.email)) notFound();
 
-  const [edCounts, integrity, reports, stores, indie, works, upcoming, missingCover, dups, authorDups, missingAuthor] =
+  const [edCounts, integrity, reports, stores, indie, works, upcoming, missingCover, dups, authorDups, missingAuthor, missingSynopsis] =
     await Promise.all([
       prisma.publisherEdition.groupBy({ by: ["publisher"], _count: { _all: true } }),
       getCatalogIntegrity(),
@@ -29,6 +29,7 @@ export default async function AdminHome() {
       getDuplicateWorkGroups(),
       getAuthorVariantClusters(),
       getWorksMissingAuthor(),
+      countWorksMissingSynopsis(),
     ]);
 
   const editorials = edCounts
@@ -83,6 +84,12 @@ export default async function AdminHome() {
           label="✍️ Series sin autor"
           value={missingAuthor.length}
           alert={missingAuthor.length > 0}
+        />
+        <Stat
+          href="/admin/sinopsis"
+          label="📝 Sinopsis incompletas"
+          value={missingSynopsis}
+          alert={missingSynopsis > 0}
         />
       </div>
       <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3">

@@ -20,6 +20,7 @@ import {
 import { createReport, setReportStatus, deleteReport } from "@/lib/reports";
 import { mergeWorks, unlinkWorkAnilist, deleteWork } from "@/lib/mergeWorks";
 import { renameAuthor } from "@/lib/authorMerge";
+import { translateSynopsis, translatorConfigured } from "@/lib/translate";
 import { storeCover, storeImageBytes } from "@/lib/coverStore";
 import {
   createStore,
@@ -261,6 +262,66 @@ export async function mergeWorksAction(sourceId: number, targetId: number) {
   revalidatePath("/admin/duplicados");
   revalidatePath("/catalogo");
   return { ok: true as const };
+}
+
+/**
+ * Admin: guarda manualmente una versión de la sinopsis (es/en). Marca esa versión
+ * como NO-automática (oficial) y la bloquea en `curated` (ningún job la pisa).
+ */
+export async function setSynopsisAction(
+  workId: number,
+  lang: "es" | "en",
+  value: string,
+) {
+  await assertAdmin();
+  const text = value.trim() || null;
+  const cur = await prisma.work.findUnique({
+    where: { id: workId },
+    select: { curated: true },
+  });
+  const curated = new Set(cur?.curated ?? []);
+  const field = lang === "es" ? "synopsisEs" : "synopsisEn";
+  if (text) curated.add(field);
+  else curated.delete(field);
+  await prisma.work.update({
+    where: { id: workId },
+    data: {
+      [field]: text,
+      [lang === "es" ? "synopsisEsAuto" : "synopsisEnAuto"]: false,
+      curated: [...curated],
+    },
+  });
+  revalidatePath("/admin/sinopsis");
+  return { ok: true as const };
+}
+
+/**
+ * Admin: traduce la sinopsis de `from` a `to` con el LLM y la guarda en la versión
+ * faltante, marcada como automática. Devuelve el texto para refrescar la UI.
+ */
+export async function translateSynopsisAction(
+  workId: number,
+  from: "es" | "en",
+  to: "es" | "en",
+) {
+  await assertAdmin();
+  if (!translatorConfigured())
+    return { ok: false as const, error: "Falta ANTHROPIC_API_KEY en el entorno." };
+  const w = await prisma.work.findUnique({
+    where: { id: workId },
+    select: { synopsisEs: true, synopsisEn: true },
+  });
+  const source = from === "es" ? w?.synopsisEs : w?.synopsisEn;
+  if (!source) return { ok: false as const, error: `No hay sinopsis en ${from} para traducir.` };
+  const out = await translateSynopsis(source, from, to);
+  if (!out) return { ok: false as const, error: "No se pudo traducir." };
+  const field = to === "es" ? "synopsisEs" : "synopsisEn";
+  await prisma.work.update({
+    where: { id: workId },
+    data: { [field]: out, [to === "es" ? "synopsisEsAuto" : "synopsisEnAuto"]: true },
+  });
+  revalidatePath("/admin/sinopsis");
+  return { ok: true as const, text: out };
 }
 
 /**
