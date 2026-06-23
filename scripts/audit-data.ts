@@ -19,6 +19,9 @@ async function main() {
         id: true,
         title: true,
         originalTitle: true, // romaji
+        titleEn: true,
+        titleNative: true,
+        mdId: true,
         author: true,
         anilistId: true,
         genres: true,
@@ -32,6 +35,9 @@ async function main() {
   const has = (f: (w: (typeof works)[number]) => boolean) => works.filter(f).length;
 
   const romaji = has((w) => !!w.originalTitle);
+  const titleEn = has((w) => !!w.titleEn);
+  const titleNative = has((w) => !!w.titleNative);
+  const mdId = has((w) => !!w.mdId);
   const author = has((w) => !!w.author && w.author.trim() !== "");
   const anilist = has((w) => w.anilistId != null);
   const genres = has((w) => w.genres.length > 0);
@@ -44,12 +50,15 @@ async function main() {
   console.log(`COBERTURA DE CAMPOS:`);
   console.log(`  título (display):  ${pct(N, N)}`);
   console.log(`  romaji (originalTitle): ${pct(romaji, N)}`);
+  console.log(`  título inglés (titleEn): ${pct(titleEn, N)}`);
+  console.log(`  título nativo JA (titleNative): ${pct(titleNative, N)}`);
   console.log(`  autor:             ${pct(author, N)}`);
-  console.log(`  anilistId:         ${pct(anilist, N)}  ← llave canónica existente`);
   console.log(`  géneros:           ${pct(genres, N)}`);
   console.log(`  sinopsis:          ${pct(synopsis, N)}`);
-  console.log(`  portada:           ${pct(cover, N)}`);
-  console.log(`  titleEn / titleNative(ja): 0% — el campo NO existe todavía (Fase 1)\n`);
+  console.log(`  portada:           ${pct(cover, N)}\n`);
+
+  console.log(`IDENTIDAD EXTERNA PERSISTIDA:`);
+  console.log(`  anilistId: ${pct(anilist, N)}  ·  mdId: ${pct(mdId, N)}\n`);
 
   // Matchabilidad: ¿podemos resolver identidad externa?
   const withAnilist = anilist;
