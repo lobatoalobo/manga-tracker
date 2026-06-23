@@ -95,13 +95,26 @@ catálogo propio. Ver `docs/plan-catalogo-local.md`.
 ## 5. Modelo de datos (núcleo)
 
 ### Catálogo
-- **`Work`** — la obra canónica. Campos: título, `originalTitle` (romaji, llave
-  de dedup cross-idioma), portada (URL de Blob propio), autor, sinopsis, géneros
-  canónicos (ES), demografía, `normTitle`, flags de "próximo a salir".
+- **`Work`** — la obra canónica. (Rediseño de datos jun-2026, ver
+  `docs/analisis-sistema-datos.md`.)
+  - **Nombres multi-idioma**: `title` (display, ES>EN>romaji), `originalTitle`
+    (romaji), `titleEn` (inglés), `titleNative` (japonés nativo). `normTitle` para
+    búsqueda/agrupado.
+  - **Identidad externa estable**: `anilistId`, `muId` (MangaUpdates), `mdId`
+    (MangaDex, uuid) — todos `@unique`. **El matcheo se ancla acá + autor, NO en el
+    título** (que es solo display). Se resuelven una vez y se reusan (idempotente).
+  - **Sinopsis por idioma**: `synopsisEs` / `synopsisEn` (+ flags `synopsisEsAuto`/
+    `synopsisEnAuto` = traducción automática). La nativa de la fuente manda; la que
+    falta se traduce con LLM (OpenAI/DeepL/Claude, ver `lib/translate`). El campo
+    `synopsis` quedó DEPRECADO (transición). Display: tabs ES/EN en la ficha.
+  - Otros: portada (R2 propio), `author`, `assistants`, géneros canónicos (ES),
+    `rawGenres`, demografía, `curated` (campos editados a mano que ningún job pisa),
+    flags de "próximo a salir".
 - **`PublisherEdition`** — una edición por editorial: `publisher`, `title`,
   `slug`, `volumes`, `status`, `url`, `language` (es/en/ja), `country`
-  (AR/US/ES/JP…), `workId`. Varias ediciones cuelgan del mismo Work (Ivrea AR +
-  VIZ US = misma obra, dos banderas).
+  (AR/US/ES/JP…), `synopsis` (en el idioma de la edición), `whakoomId` (llave
+  fuerte), `workId`. Varias ediciones cuelgan del mismo Work (Ivrea AR + VIZ US =
+  misma obra, dos banderas), cada una con su conteo/sinopsis sin pisarse.
 - **`Volume`** — tomos de una edición.
 - **`IvreaRelease`** — snapshot de próximos: tomo nuevo, debut, reedición (con
   fecha). Única fuente AR de fechas/próximos.
@@ -155,10 +168,15 @@ limpias. Lo que se resuelve:
    nombres (incluido el romaji) y con ese set se le pega a **MangaUpdates**, que
    confirma la licencia y da el conteo. Resuelve que las fuentes indexan en romaji
    ("My Hero Academia" = "Boku no Hero Academia" = 僕のヒーローアカデミア).
-3. **Dedup / unificación** — `findOrCreateWork` deduplica por
-   normTitle/originalTitle/tightTitleKey. Una serie que ya existe por Ivrea suma
-   la edición VIZ **al mismo Work** (no duplica): una obra puede tener ediciones
-   AR + US + ES + JP bajo una sola entidad, con sus banderas.
+3. **Dedup / unificación** — `findOrCreateWork` agrupa por `anilistId` (o, sin él,
+   por `tightTitleKey`). Una serie que ya existe por Ivrea suma la edición VIZ **al
+   mismo Work** (no duplica): una obra puede tener ediciones AR + US + ES + JP bajo
+   una sola entidad, con sus banderas. **Dirección del rediseño (jun-2026):** la
+   identidad se ancla en **id externo (anilistId/muId/mdId) + autor**, no en el
+   título (que es display); el enrich persiste esos ids para re-match idempotente
+   y trae los nombres multi-idioma. Ver `docs/analisis-sistema-datos.md`. La
+   sinopsis EN va a `synopsisEn` y la ES a `synopsisEs` (no se pisan); lo que falte
+   se traduce con LLM.
 4. **Mapeo tarjeta→edición** — los snapshots de Ivrea se mapean por **título**
    (más confiable que el slug del link, que a veces es genérico).
 5. **Guards de calidad** — bloqueo anti-hentai/doujin (no se importan) +

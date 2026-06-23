@@ -95,13 +95,25 @@ owned catalog. See `docs/plan-catalogo-local.md`.
 ## 5. Data model (core)
 
 ### Catalog
-- **`Work`** — the canonical work. Fields: title, `originalTitle` (romaji,
-  cross-language dedup key), cover (owned Blob URL), author, synopsis, canonical
-  genres (ES), demographic, `normTitle`, "upcoming" flags.
+- **`Work`** — the canonical work. (Data redesign Jun-2026, see
+  `docs/analisis-sistema-datos.md`.)
+  - **Multi-language titles**: `title` (display, ES>EN>romaji), `originalTitle`
+    (romaji), `titleEn`, `titleNative` (Japanese). `normTitle` for search/grouping.
+  - **Stable external identity**: `anilistId`, `muId` (MangaUpdates), `mdId`
+    (MangaDex uuid) — all `@unique`. **Matching is anchored on external id + author,
+    NOT on the title** (which is display-only); resolved once and reused (idempotent).
+  - **Per-language synopsis**: `synopsisEs` / `synopsisEn` (+ `synopsisEsAuto` /
+    `synopsisEnAuto` = machine-translated). The source's native one wins; the missing
+    one is LLM-translated (`lib/translate`: OpenAI/DeepL/Claude). `synopsis` is
+    DEPRECATED (transition). UI: ES/EN tabs on the serie page.
+  - Other: cover (owned R2), `author`, `assistants`, canonical genres (ES),
+    `rawGenres`, demographic, `curated` (manually edited fields no job overwrites),
+    "upcoming" flags.
 - **`PublisherEdition`** — one edition per publisher: `publisher`, `title`,
   `slug`, `volumes`, `status`, `url`, `language` (es/en/ja), `country`
-  (AR/US/ES/JP…), `workId`. Multiple editions hang off the same Work (Ivrea AR +
-  VIZ US = same work, two flags).
+  (AR/US/ES/JP…), `synopsis` (in the edition's language), `whakoomId`, `workId`.
+  Multiple editions hang off the same Work (Ivrea AR + VIZ US = same work, two
+  flags), each with its own volume count/synopsis without clobbering.
 - **`Volume`** — an edition's volumes.
 - **`IvreaRelease`** — upcoming snapshot: new volume, debut, reprint (with date).
   Sole AR source of dates/upcoming.
@@ -155,10 +167,15 @@ gets resolved:
    names (including romaji), and that set is fed to **MangaUpdates**, which
    confirms the license and gives the count. Solves that sources index by romaji
    ("My Hero Academia" = "Boku no Hero Academia" = 僕のヒーローアカデミア).
-3. **Dedup / unification** — `findOrCreateWork` deduplicates by
-   normTitle/originalTitle/tightTitleKey. A series already present via Ivrea adds
-   the VIZ edition **to the same Work** (no duplicate): a work can have AR + US +
-   ES + JP editions under a single entity, with their flags.
+3. **Dedup / unification** — `findOrCreateWork` groups by `anilistId` (or, without
+   it, by `tightTitleKey`). A series already present via Ivrea adds the VIZ edition
+   **to the same Work** (no duplicate): a work can have AR + US + ES + JP editions
+   under a single entity, with their flags. **Redesign direction (Jun-2026):**
+   identity is anchored on **external id (anilistId/muId/mdId) + author**, not the
+   title (which is display); enrich persists those ids for idempotent re-matching
+   and pulls the multi-language names. See `docs/analisis-sistema-datos.md`. EN
+   synopsis goes to `synopsisEn`, ES to `synopsisEs` (no clobbering); the missing
+   one is LLM-translated.
 4. **Card→edition mapping** — Ivrea snapshots are mapped by **title** (more
    reliable than the link slug, which is sometimes generic).
 5. **Quality guards** — anti-hentai/doujin block (not imported) + publisher
