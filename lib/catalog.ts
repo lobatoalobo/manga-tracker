@@ -194,11 +194,14 @@ export async function upsertPublisherEdition(e: {
   url: string;
   language?: string; // "es" (default) | "en" | "ja"
   country?: string | null; // "AR" | "US" | …
+  synopsis?: string | null; // sinopsis EN ESTE idioma (ES de Ivrea, EN de VIZ)
 }): Promise<void> {
   const intl =
     e.language || e.country !== undefined
       ? { language: e.language ?? "es", country: e.country ?? null }
       : {};
+  // Solo escribimos synopsis si vino (no la borramos en updates que no la traen).
+  const syn = e.synopsis ? { synopsis: e.synopsis } : {};
   const title = decodeEntities(e.title);
   await prisma.publisherEdition.upsert({
     where: { publisher_slug: { publisher: e.publisher, slug: e.slug } },
@@ -209,6 +212,7 @@ export async function upsertPublisherEdition(e: {
       status: e.status ?? null,
       url: e.url,
       ...intl,
+      ...syn,
     },
     create: {
       publisher: e.publisher,
@@ -219,6 +223,7 @@ export async function upsertPublisherEdition(e: {
       status: e.status ?? null,
       url: e.url,
       ...intl,
+      ...syn,
     },
   });
 }

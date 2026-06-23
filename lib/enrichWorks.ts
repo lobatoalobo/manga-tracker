@@ -95,11 +95,7 @@ export async function enrichWorks(opts: {
       genres: true,
       rawGenres: true,
       demographic: true,
-      editions: {
-        where: { publisher: "Ivrea Argentina" },
-        select: { slug: true },
-        take: 1,
-      },
+      editions: { select: { publisher: true, slug: true, language: true } },
     },
   }));
 
@@ -109,10 +105,14 @@ export async function enrichWorks(opts: {
   const samples: string[] = [];
 
   for (const w of works) {
+    const ivreaSlug = w.editions.find((e) => e.publisher === "Ivrea Argentina")?.slug;
+    // ¿Tiene edición en español? Si sí, NO le metemos sinopsis inglesa al Work
+    // (la vista ES no debe mostrar inglés). La inglesa vive en la edición VIZ.
+    const hasEsEdition = w.editions.some((e) => e.language === "es");
     // Backfill del título original (romaji) desde la ficha de Ivrea si falta.
     let originalTitle = w.originalTitle;
-    if (!originalTitle && w.editions[0]?.slug) {
-      const ficha = await getIvreaDataBySlug(w.editions[0].slug).catch(() => null);
+    if (!originalTitle && ivreaSlug) {
+      const ficha = await getIvreaDataBySlug(ivreaSlug).catch(() => null);
       if (ficha?.originalTitle) originalTitle = ficha.originalTitle;
       await sleep(300);
     }
@@ -172,8 +172,10 @@ export async function enrichWorks(opts: {
       const c = (await storeCover(src)) ?? proxiedCover(src);
       if (c) patch.coverImage = c;
     }
-    // Sinopsis: la de la editorial (español) manda; respaldo MU/MD (inglés).
-    if (!w.synopsis && (mu?.description || md?.description))
+    // Sinopsis del Work: la de la editorial (español) manda. El respaldo inglés
+    // (MU/MD) SOLO si la obra no tiene edición ES (si la tiene, la inglesa iría a
+    // la edición VIZ, no al Work). Evita el "Source: VIZ Media" en obras de Ivrea.
+    if (!w.synopsis && !hasEsEdition && (mu?.description || md?.description))
       patch.synopsis = (mu?.description || md?.description) as string;
 
     const gotData =
