@@ -12,9 +12,11 @@ import { useEffect, useRef, useState } from "react";
 export default function ExpandableText({
   text,
   clampLines = 6,
+  className = "mt-6",
 }: {
   text: string;
   clampLines?: number;
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [overflows, setOverflows] = useState(false);
@@ -38,7 +40,7 @@ export default function ExpandableText({
   }, [text, clampLines]);
 
   return (
-    <div className="mt-6">
+    <div className={className}>
       <p
         ref={ref}
         className="whitespace-pre-wrap text-sm leading-relaxed text-muted"
