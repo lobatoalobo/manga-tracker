@@ -415,7 +415,14 @@ model Work {
   coverImage String?
   author     String? // autor(es), editable; semilla de la ficha de la editorial
   assistants String? // asistentes/colaboradores (ayuda a desambiguar homónimos)
-  synopsis   String? // sinopsis del Work (preferimos ES; por edición ver PublisherEdition.synopsis)
+  synopsis   String? // DEPRECADO: usar synopsisEs/synopsisEn. Se mantiene de transición.
+  // Sinopsis por idioma (tabs ES/EN en la ficha). La nativa de la fuente manda
+  // (ES de Ivrea/Whakoom, EN de MU/MD/AniList); si falta una, se traduce de la
+  // otra con LLM y se marca `...Auto`. Ver docs/analisis-sistema-datos.md.
+  synopsisEs   String?
+  synopsisEn   String?
+  synopsisEsAuto Boolean @default(false) // la ES es traducción automática (no oficial)
+  synopsisEnAuto Boolean @default(false) // la EN es traducción automática
   genres     String[] // géneros CANÓNICOS (es) para filtrar; ver lib/genres.ts
   // Géneros crudos de MU/MD (en inglés) antes de mapear: backup para re-mapear
   // sin re-enriquecer.
