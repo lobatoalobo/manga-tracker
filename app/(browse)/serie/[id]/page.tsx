@@ -5,7 +5,7 @@ import { isAdmin } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { getSeries } from "@/lib/collection";
 import AdminWorkEdit from "@/components/AdminWorkEdit";
-import ExpandableText from "@/components/ExpandableText";
+import SynopsisTabs from "@/components/SynopsisTabs";
 import { getWishedKeys } from "@/lib/wishlist";
 import { isEnabled } from "@/lib/featureFlags";
 import {
@@ -430,8 +430,13 @@ export default async function SeriePage({
         </div>
       </div>
 
-      {synopsis ? (
-        <ExpandableText text={synopsis} />
+      {work.synopsisEs || work.synopsisEn || synopsis ? (
+        <SynopsisTabs
+          es={work.synopsisEs ?? (work.synopsisEn ? null : synopsis)}
+          en={work.synopsisEn}
+          esAuto={work.synopsisEsAuto}
+          enAuto={work.synopsisEnAuto}
+        />
       ) : upcoming ? (
         <p className="mt-6 text-sm text-muted">
           📅 La sinopsis y los datos completos se cargan cuando sale la serie.
