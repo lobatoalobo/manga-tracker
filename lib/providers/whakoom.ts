@@ -1,4 +1,5 @@
 import { fetchWithTimeout } from "@/lib/httpFetch";
+import { decodeEntities } from "@/lib/decodeEntities";
 
 export interface WhakoomVolume {
   number: number;
@@ -17,19 +18,6 @@ export interface WhakoomEdition {
   hasUnreleased: boolean; // hay un tomo anunciado/no publicado (class not-published)
   whakoomId: string | null; // id de la edición (/ediciones/<id>/…)
   volumesList: WhakoomVolume[]; // tomos individuales con su id de Whakoom
-}
-
-/** Decodifica entidades HTML (numéricas y las comunes con nombre). */
-function decodeEntities(s: string): string {
-  return s
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ");
 }
 
 const MONTHS: Record<string, number> = {

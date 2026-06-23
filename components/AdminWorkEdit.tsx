@@ -110,16 +110,30 @@ export default function AdminWorkEdit({
 
   const save = () =>
     start(async () => {
-      await updateWorkAction(workId, {
-        title: t.trim() || title,
-        author: au,
-        synopsis: syn,
-        coverImage: cov,
-        genres: gen.split(",").map((g) => g.trim()).filter(Boolean),
-        upcoming: up,
-        releaseLabel: rel,
-      });
-      await setCrumbQueryAction(pseudoId, crumb);
+      // Mandamos SOLO los campos que cambiaron respecto a lo cargado. Así editar
+      // la portada no reescribe (ni borra) el autor — era el bug de 300/Frank
+      // Miller. Si querés vaciar un campo a propósito, ese cambio sí se manda.
+      const data: {
+        title?: string;
+        author?: string;
+        synopsis?: string;
+        coverImage?: string;
+        genres?: string[];
+        upcoming?: boolean;
+        releaseLabel?: string;
+      } = {};
+      const newTitle = t.trim() || title;
+      if (newTitle !== title) data.title = newTitle;
+      if (au !== author) data.author = au;
+      if (syn !== synopsis) data.synopsis = syn;
+      if (cov !== coverImage) data.coverImage = cov;
+      const newGenres = gen.split(",").map((g) => g.trim()).filter(Boolean);
+      if (newGenres.join("|") !== genres.join("|")) data.genres = newGenres;
+      if (up !== upcoming) data.upcoming = up;
+      if (rel !== releaseLabel) data.releaseLabel = rel;
+
+      if (Object.keys(data).length) await updateWorkAction(workId, data);
+      if (crumb !== crumbInitial) await setCrumbQueryAction(pseudoId, crumb);
       setMsg("Guardado");
       router.refresh();
       setTimeout(() => setMsg(null), 2500);
