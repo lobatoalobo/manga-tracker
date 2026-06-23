@@ -56,16 +56,22 @@ Migraciones: crear el SQL a mano en `prisma/migrations/<ts>_<nombre>/migration.s
 
 ---
 
-## Enriquecimiento (géneros / portada / sinopsis)
+## Enriquecimiento (identidad / nombres / géneros / sinopsis)
+
+Rediseño de datos jun-2026 (ver `docs/analisis-sistema-datos.md`): el enrich
+persiste **identidad externa** (mdId/muId) + **nombres multi-idioma** + autor
+confiable, además de géneros/sinopsis. Match por romaji + prefijo "Romaji: ES".
 
 | Comando | Qué hace |
 |---|---|
-| `npx tsx scripts/enrich-works.ts [--limit N] [--dry] [--force]` | Géneros + respaldo de portada/sinopsis desde MangaUpdates + MangaDex (match por título original). Resumable. |
+| `npx tsx scripts/enrich-works.ts [--limit N] [--dry] [--force]` | Géneros + nombres (EN/JA/romaji) + identidad (mdId/muId) + autor (MU) + respaldo de portada/sinopsis-EN. Resumable. |
+| `… enrich-works.ts --missing-genres` | Solo obras sin géneros (re-match). |
+| `… enrich-works.ts --missing-identity` | Solo obras sin mdId/muId (backfill de identidad + nombres). |
+| `… enrich-works.ts --missing-cover` | Solo obras sin portada (recovery MU/MD). |
+| `npx tsx scripts/audit-data.ts` | **Auditoría** (read-only): cobertura de campos, identidad, matchabilidad, focos de problema (autores/sinopsis faltantes, ediciones multi-idioma). |
+| `npx tsx scripts/backfill-synopsis-lang.ts [--dry]` | Separa la `synopsis` existente a `synopsisEs`/`synopsisEn` por idioma detectado (sin traducir). |
+| `npx tsx scripts/translate-synopses.ts [--limit N] [--dry]` | Completa la versión de sinopsis faltante traduciendo la otra con LLM (marcada auto). Requiere `OPENAI_API_KEY` (o DEEPL/ANTHROPIC). |
 | `npx tsx scripts/curate-genres.ts [--dry]` | Géneros curados a mano para obras que no matchean en MU/MD. |
-| `npx tsx scripts/enrich-whakoom.ts <editionId> <whakoomUrl> [--force]` | Enriquece el Work de una edición con datos de Whakoom (autor/sinopsis/portada). |
-| `npx tsx scripts/backfill-work-authors.ts [editorial] [--apply]` | Rellena `Work.author`/`synopsis` desde Whakoom para imports viejos. |
-| `npx tsx scripts/backfill-ivrea-authors.ts [--dry]` | Rellena autor (y portada/sinopsis) releyendo la ficha de Ivrea. |
-| `npx tsx scripts/enrich-covers.ts` | 🟥 Rellena `Work.coverImage` desde AniList para works mapeados sin portada. |
 
 ---
 
@@ -73,9 +79,7 @@ Migraciones: crear el SQL a mano en `prisma/migrations/<ts>_<nombre>/migration.s
 
 | Comando | Qué hace |
 |---|---|
-| `npx tsx scripts/depurate-catalog.ts [--apply]` | 1 edición regular por (obra, editorial); borra specials/duplicados + works huérfanos. |
-| `npx tsx scripts/consolidate-dups.ts [--apply]` | Consolida duplicados de misma editorial+título+tomos en una edición. |
-| `npx tsx scripts/split-homonyms.ts [--apply]` | Separa homónimos fusionados (Citrus vs Citrus+). |
+| `npx tsx scripts/recrawl-ivrea.ts --contradictions [--dry]` | Re-crawlea fichas de Ivrea con conteo contradictorio (próximo tomo #N con ≥N tomos) y trae el conteo AR real. **Correr solo con Ivrea arriba** (a veces banea la IP local). |
 | `npx tsx scripts/fix-ivrea-urls.ts [--limit N] [--apply]` | Arregla links de Ivrea que quedaron a Whakoom + sincroniza tomos. |
 | `npx tsx scripts/fix-whakoom-counts.ts [--dry]` | Corrige conteo de tomos publicados de imports de Whakoom (excluye upcoming). |
 | `npx tsx scripts/auto-map.ts [--limit N] [--apply]` | 🟥 Auto-mapea a AniList ediciones sin mapear (por título original + autor). |
@@ -89,6 +93,21 @@ Migraciones: crear el SQL a mano en `prisma/migrations/<ts>_<nombre>/migration.s
 | Comando | Qué hace |
 |---|---|
 | `npx tsx scripts/ivrea-proximas.ts [--dry]` | Reconcilia el chip "🔜 Próximo a salir" desde /proximas/ de Ivrea (igual que el cron diario). |
+
+---
+
+## Portadas (Cloudflare R2)
+
+Las portadas se hostean en R2 (propias, persistentes; ver memoria covers-r2).
+Todas usan `dbRetry` + `storeCover` (sube a R2). **OJO Ivrea**: no abusar desde la
+IP local (baneo).
+
+| Comando | Qué hace |
+|---|---|
+| `npx tsx scripts/migrate-covers-r2.ts [--dry]` | Migra portadas existentes (hotlink/proxy/blob) a R2. |
+| `npx tsx scripts/ivrea-covers.ts [--limit N] [--force] [--dry]` | (Re)genera portadas de obras con edición Ivrea desde la ficha (nacional). `--force` respeta lo curado a mano. |
+| `npx tsx scripts/whakoom-covers.ts [--limit N] [--dry]` | Recupera portadas de obras sin portada con edición de Whakoom (corre **local**). |
+| `npx tsx scripts/refresh-ivrea-empty.ts [--dry]` | Refresca ediciones Ivrea con 0 tomos ("EN CATÁLOGO" sin tomo). **Ivrea arriba.** |
 
 ---
 
