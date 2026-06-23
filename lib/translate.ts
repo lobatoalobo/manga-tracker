@@ -2,17 +2,24 @@ import { fetchWithTimeout } from "@/lib/httpFetch";
 
 /**
  * Traducción de sinopsis ES↔EN para completar la versión que falta (la nativa de
- * la fuente manda; la traducida se marca `...Auto`). Soporta dos motores; usa el
- * que esté configurado:
- *   - DeepL  (DEEPL_API_KEY) — tiene capa gratuita (500K chars/mes). Preferido.
- *   - Claude (ANTHROPIC_API_KEY) — pago pero baratísimo; limpia atribuciones.
+ * la fuente manda; la traducida se marca `...Auto`). Soporta varios motores; usa
+ * el primero configurado:
+ *   - OpenAI (OPENAI_API_KEY)   — gpt-4o-mini, baratísimo (~$0.30 todo el batch). Preferido.
+ *   - DeepL  (DEEPL_API_KEY)    — calidad alta; free es one-time 1M chars.
+ *   - Claude (ANTHROPIC_API_KEY)— baratísimo; limpia atribuciones.
  * NO-OP sin ninguna key (devuelve null). Ver docs/analisis-sistema-datos.md.
  */
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
+const OPENAI_API = "https://api.openai.com/v1/chat/completions";
+const OPENAI_MODEL = "gpt-4o-mini";
 
 export function translatorConfigured(): boolean {
-  return !!(process.env.DEEPL_API_KEY || process.env.ANTHROPIC_API_KEY);
+  return !!(
+    process.env.OPENAI_API_KEY ||
+    process.env.DEEPL_API_KEY ||
+    process.env.ANTHROPIC_API_KEY
+  );
 }
 
 const LANG = { es: "español", en: "inglés" } as const;
@@ -49,6 +56,35 @@ async function viaDeepL(text: string, from: "es" | "en", to: "es" | "en"): Promi
     if (!r.ok) return null;
     const j = await r.json();
     const out = j?.translations?.[0]?.text;
+    return typeof out === "string" && out.trim() ? out.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function viaOpenAI(text: string, from: "es" | "en", to: "es" | "en"): Promise<string | null> {
+  const key = process.env.OPENAI_API_KEY!;
+  const prompt =
+    `Traducí esta sinopsis de manga del ${LANG[from]} al ${LANG[to]}. ` +
+    `Devolvé SOLO la traducción, sin comillas, sin notas ni prefacios. ` +
+    `Mantené los nombres propios.\n\n${text}`;
+  try {
+    const r = await fetchWithTimeout(
+      OPENAI_API,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: OPENAI_MODEL,
+          max_tokens: 1500,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      },
+      30_000,
+    );
+    if (!r.ok) return null;
+    const j = await r.json();
+    const out = j?.choices?.[0]?.message?.content;
     return typeof out === "string" && out.trim() ? out.trim() : null;
   } catch {
     return null;
@@ -98,6 +134,7 @@ export async function translateSynopsis(
 ): Promise<string | null> {
   if (!text?.trim() || from === to) return null;
   const clean = stripSource(text.trim());
+  if (process.env.OPENAI_API_KEY) return viaOpenAI(clean, from, to);
   if (process.env.DEEPL_API_KEY) return viaDeepL(clean, from, to);
   if (process.env.ANTHROPIC_API_KEY) return viaClaude(clean, from, to);
   return null;
