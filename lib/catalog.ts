@@ -145,6 +145,20 @@ export function tightTitleKey(value: string): string {
 }
 
 /**
+ * Clave de romaji para emparejar la MISMA serie publicada en distintos idiomas
+ * (VIZ en inglés vs Ivrea en español) cuando ningún lado tiene id externo. Saca
+ * el sufijo "(Autor)" que algunas fuentes pegan al romaji ("Rojiura (ITO Junji)")
+ * de modo que "Rojiura (ITO Junji)" y "ROJIURA" colapsan a "rojiura".
+ *
+ * Usa `tightTitleKey` (NO `normalizeTitle`) a propósito: preserva el "+" y demás,
+ * para NO fusionar una serie con su secuela (Citrus vs Citrus+, que comparten
+ * romaji base pero son obras distintas).
+ */
+export function romajiKey(value: string): string {
+  return tightTitleKey(value.replace(/\s*\([^)]*\)\s*$/, "").trim());
+}
+
+/**
  * Limpia el título de una editorial para buscarlo en AniList. Las editoriales
  * agregan decoraciones que AniList no tiene (subtítulos entre guiones o
  * paréntesis), p. ej. "Aku No Hana -Las Flores Del Mal-" → "Aku No Hana".
@@ -797,6 +811,28 @@ export async function findOrCreateWork(opts: {
     const tight = tightTitleKey(title);
     const cands = await prisma.work.findMany({ where: { normTitle }, select: { ...sel, title: true } });
     existing = cands.find((w) => tightTitleKey(w.title) === tight) ?? null;
+  }
+  // Puente ROMAJI + AUTOR: si no matcheó por id ni por título (típico cuando una
+  // edición viene en otro idioma — VIZ en inglés vs Ivrea en español — y ningún
+  // lado tiene id externo), buscamos otra obra con el MISMO romaji (originalTitle
+  // normalizado, sin el sufijo "(Autor)") y autor compatible. Evita que se parta
+  // la misma serie en dos Works (ej. "Alley" VIZ vs "El Callejón" Ivrea = Rojiura).
+  if (!existing && originalTitle && author) {
+    const core = originalTitle.replace(/\s*\([^)]*\)\s*$/, "").trim();
+    const rk = romajiKey(originalTitle);
+    if (rk.length >= 4) {
+      const cands = await prisma.work.findMany({
+        where: { originalTitle: { contains: core, mode: "insensitive" } },
+        select: { ...sel, originalTitle: true },
+      });
+      existing =
+        cands.find(
+          (w) =>
+            w.originalTitle &&
+            romajiKey(w.originalTitle) === rk &&
+            authorNameMatches(author, w.author),
+        ) ?? null;
+    }
   }
 
   if (existing) {
