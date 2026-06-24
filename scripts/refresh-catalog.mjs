@@ -52,6 +52,9 @@ const steps = [
   // Ivrea desacoplado a Vercel (/api/cron/ivrea-catalogo). Acá solo Whakoom + enrich.
   { name: "Whakoom (todas)", args: ["scripts/crawl.ts", "whakoom-all"] },
   { name: "Enrich works", args: ["scripts/enrich-works.ts", "--limit", "300"] },
+  // Completa la versión de sinopsis que falte (ES↔EN) traduciendo la otra, así
+  // toda obra queda con las 2 tabs. NO-OP sin OPENAI/DEEPL/ANTHROPIC key.
+  { name: "Traducir sinopsis", args: ["scripts/translate-synopses.ts", "--limit", "500"] },
 ];
 
 const ts = () => new Date().toISOString().replace("T", " ").slice(0, 19);

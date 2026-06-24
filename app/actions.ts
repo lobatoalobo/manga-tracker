@@ -18,8 +18,15 @@ import {
   type ReadingStatus,
 } from "@/lib/collection";
 import { createReport, setReportStatus, deleteReport } from "@/lib/reports";
-import { mergeWorks, unlinkWorkAnilist, deleteWork } from "@/lib/mergeWorks";
+import {
+  mergeWorks,
+  unlinkWorkAnilist,
+  deleteWork,
+  cleanRedundantEditions,
+  cleanOrphanWorks,
+} from "@/lib/mergeWorks";
 import { renameAuthor } from "@/lib/authorMerge";
+import { translateSynopsis, translatorConfigured } from "@/lib/translate";
 import { storeCover, storeImageBytes } from "@/lib/coverStore";
 import {
   createStore,
@@ -261,6 +268,82 @@ export async function mergeWorksAction(sourceId: number, targetId: number) {
   revalidatePath("/admin/duplicados");
   revalidatePath("/catalogo");
   return { ok: true as const };
+}
+
+/**
+ * Admin: auto-resuelve ediciones duplicadas del mismo Work (mantiene la canónica)
+ * y limpia Works huérfanos. Self-healing del catálogo (caso I"s). Solo admin.
+ */
+export async function cleanCatalogDupesAction() {
+  await assertAdmin();
+  const editions = await cleanRedundantEditions();
+  const orphans = await cleanOrphanWorks();
+  revalidatePath("/admin/duplicados");
+  revalidatePath("/admin/herramientas");
+  return { ok: true as const, editions, orphans };
+}
+
+/**
+ * Admin: guarda manualmente una versión de la sinopsis (es/en). Marca esa versión
+ * como NO-automática (oficial) y la bloquea en `curated` (ningún job la pisa).
+ */
+export async function setSynopsisAction(
+  workId: number,
+  lang: "es" | "en",
+  value: string,
+) {
+  await assertAdmin();
+  const text = value.trim() || null;
+  const cur = await prisma.work.findUnique({
+    where: { id: workId },
+    select: { curated: true },
+  });
+  const curated = new Set(cur?.curated ?? []);
+  const field = lang === "es" ? "synopsisEs" : "synopsisEn";
+  if (text) curated.add(field);
+  else curated.delete(field);
+  await prisma.work.update({
+    where: { id: workId },
+    data: {
+      [field]: text,
+      [lang === "es" ? "synopsisEsAuto" : "synopsisEnAuto"]: false,
+      curated: [...curated],
+    },
+  });
+  revalidatePath("/admin/sinopsis");
+  return { ok: true as const };
+}
+
+/**
+ * Admin: traduce la sinopsis de `from` a `to` con el LLM y la guarda en la versión
+ * faltante, marcada como automática. Devuelve el texto para refrescar la UI.
+ */
+export async function translateSynopsisAction(
+  workId: number,
+  from: "es" | "en",
+  to: "es" | "en",
+) {
+  await assertAdmin();
+  if (!translatorConfigured())
+    return {
+      ok: false as const,
+      error: "Falta una API key de traducción (OPENAI_API_KEY) en el entorno.",
+    };
+  const w = await prisma.work.findUnique({
+    where: { id: workId },
+    select: { synopsisEs: true, synopsisEn: true },
+  });
+  const source = from === "es" ? w?.synopsisEs : w?.synopsisEn;
+  if (!source) return { ok: false as const, error: `No hay sinopsis en ${from} para traducir.` };
+  const out = await translateSynopsis(source, from, to);
+  if (!out) return { ok: false as const, error: "No se pudo traducir." };
+  const field = to === "es" ? "synopsisEs" : "synopsisEn";
+  await prisma.work.update({
+    where: { id: workId },
+    data: { [field]: out, [to === "es" ? "synopsisEsAuto" : "synopsisEnAuto"]: true },
+  });
+  revalidatePath("/admin/sinopsis");
+  return { ok: true as const, text: out };
 }
 
 /**
@@ -776,7 +859,8 @@ export async function updateWorkAction(
     title?: string;
     normTitle?: string;
     author?: string | null;
-    synopsis?: string | null;
+    synopsisEs?: string | null;
+    synopsisEsAuto?: boolean;
     coverImage?: string | null;
     genres?: string[];
     upcoming?: boolean;
@@ -788,7 +872,11 @@ export async function updateWorkAction(
     patch.normTitle = normalizeTitle(data.title);
   }
   if (data.author !== undefined) patch.author = data.author?.trim() || null;
-  if (data.synopsis !== undefined) patch.synopsis = data.synopsis?.trim() || null;
+  // La sinopsis del editor admin es la ES (oficial) → synopsisEs, no-auto.
+  if (data.synopsis !== undefined) {
+    patch.synopsisEs = data.synopsis?.trim() || null;
+    patch.synopsisEsAuto = false;
+  }
   if (data.coverImage !== undefined) {
     // La URL que pegue el admin se SUBE a R2 (propia, persistente); si falla, queda
     // la URL cruda. Si ya es de R2, se deja igual.
@@ -811,7 +899,7 @@ export async function updateWorkAction(
   const lock = (f: string, on: boolean) => (on ? curated.add(f) : curated.delete(f));
   if (data.title !== undefined) lock("title", !!data.title?.trim());
   if (data.author !== undefined) lock("author", !!patch.author);
-  if (data.synopsis !== undefined) lock("synopsis", !!patch.synopsis);
+  if (data.synopsis !== undefined) lock("synopsisEs", !!patch.synopsisEs);
   if (data.coverImage !== undefined) lock("coverImage", !!patch.coverImage);
   if (data.genres !== undefined) lock("genres", (patch.genres?.length ?? 0) > 0);
   if (data.releaseLabel !== undefined) lock("releaseLabel", !!patch.releaseLabel);

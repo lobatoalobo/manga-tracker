@@ -26,6 +26,61 @@ export interface MissingCoverItem {
   serieHref: string; // /serie/<id> para ver/verificar
 }
 
+export interface MissingSynopsisItem {
+  workId: number;
+  title: string;
+  serieHref: string;
+  es: string | null;
+  en: string | null;
+  esAuto: boolean;
+  enAuto: boolean;
+}
+
+const SYN_CAP = 400;
+
+/**
+ * Series VISIBLES a las que les falta AL MENOS una versión de sinopsis (ES o EN).
+ * Para completarlas desde /admin/sinopsis: si una está, se traduce a la otra; si
+ * faltan las dos, carga manual. Las que tienen las dos no aparecen. Prioriza las
+ * que tienen al menos una (se pueden traducir) — orden: una presente primero.
+ */
+export async function getWorksMissingSynopsis(): Promise<MissingSynopsisItem[]> {
+  const works = await prisma.work.findMany({
+    where: { editions: { some: {} }, OR: [{ synopsisEs: null }, { synopsisEn: null }] },
+    select: {
+      id: true,
+      title: true,
+      synopsisEs: true,
+      synopsisEn: true,
+      synopsisEsAuto: true,
+      synopsisEnAuto: true,
+    },
+    orderBy: { title: "asc" },
+  });
+  // Las que tienen una versión (traducibles) primero; después las que no tienen ninguna.
+  works.sort((a, b) => {
+    const ha = a.synopsisEs || a.synopsisEn ? 0 : 1;
+    const hb = b.synopsisEs || b.synopsisEn ? 0 : 1;
+    return ha - hb;
+  });
+  return works.slice(0, SYN_CAP).map((w) => ({
+    workId: w.id,
+    title: w.title,
+    serieHref: `/serie/${w.id}`,
+    es: w.synopsisEs,
+    en: w.synopsisEn,
+    esAuto: w.synopsisEsAuto,
+    enAuto: w.synopsisEnAuto,
+  }));
+}
+
+/** Conteo liviano de series sin alguna versión de sinopsis (para el panel). */
+export async function countWorksMissingSynopsis(): Promise<number> {
+  return prisma.work.count({
+    where: { editions: { some: {} }, OR: [{ synopsisEs: null }, { synopsisEn: null }] },
+  });
+}
+
 /**
  * Series VISIBLES sin portada (coverImage null y con al menos una edición, así
  * no listamos works huérfanos). Para arreglarlas rápido desde /admin/herramientas
@@ -54,56 +109,23 @@ export async function getWorksMissingCover(): Promise<MissingCoverItem[]> {
  * /admin/herramientas. Cada item trae el contexto y las acciones posibles.
  */
 export async function getCatalogIntegrity(): Promise<IntegrityCheck[]> {
-  const [zeroRaw, pubRows] = await Promise.all([
-    // Ediciones con 0 tomos. Excluimos las de obras ya marcadas "próxima"
-    // (debuts legítimos sin tomos): esas NO molestan, no van a la lista.
-    prisma.publisherEdition.findMany({
-      where: { volumes: 0 },
-      select: {
-        id: true,
-        title: true,
-        publisher: true,
-        slug: true,
-        url: true,
-        workId: true,
-        work: {
-          select: { upcoming: true, editions: { select: { volumes: true } } },
-        },
-      },
-      orderBy: { publisher: "asc" },
-    }),
-    // Duplicados: misma editorial + mismo normTitle (edición repetida).
-    prisma.publisherEdition.findMany({
-      select: {
-        id: true,
-        publisher: true,
-        normTitle: true,
-        title: true,
-        slug: true,
-        url: true,
-        volumes: true,
-        anilistId: true,
-        workId: true,
-      },
-    }),
-  ]);
+  // Ediciones con 0 tomos. Excluimos las de obras ya marcadas "próxima" (debuts
+  // legítimos sin tomos). Las "Ediciones duplicadas" se movieron a /admin/duplicados.
+  const zeroRaw = await prisma.publisherEdition.findMany({
+    where: { volumes: 0 },
+    select: {
+      id: true,
+      title: true,
+      publisher: true,
+      slug: true,
+      url: true,
+      workId: true,
+      work: { select: { upcoming: true, editions: { select: { volumes: true } } } },
+    },
+    orderBy: { publisher: "asc" },
+  });
 
   const zeroVol = zeroRaw.filter((r) => !r.work?.upcoming);
-
-  // Duplicados por (publisher, normTitle). Real solo si NO son series distintas
-  // con nombre parecido (ej. "Citrus" vs "Citrus+" → distinto anilistId).
-  const byKey = new Map<string, typeof pubRows>();
-  for (const r of pubRows) {
-    const k = `${r.publisher}::${r.normTitle}`;
-    const arr = byKey.get(k) ?? [];
-    arr.push(r);
-    byKey.set(k, arr);
-  }
-  const dupGroups = [...byKey.values()].filter((g) => {
-    if (g.length < 2) return false;
-    const series = new Set(g.filter((r) => r.anilistId != null).map((r) => r.anilistId));
-    return series.size < 2;
-  });
 
   return [
     {
@@ -125,21 +147,6 @@ export async function getCatalogIntegrity(): Promise<IntegrityCheck[]> {
           serieHref: r.workId ? `/serie/${r.workId}` : undefined,
         };
       }),
-    },
-    {
-      key: "dupes",
-      title: "Ediciones duplicadas (misma editorial + título)",
-      hint: "Misma serie cargada dos veces en la misma editorial. Borrá la repetida (a nivel EDICIÓN; los Works duplicados van en Series duplicadas).",
-      count: dupGroups.length,
-      samples: dupGroups.slice(0, CAP).flatMap((g) =>
-        g.map((r) => ({
-          label: `${r.title} · ${r.publisher}`,
-          detail: `${r.slug} · ${r.volumes}t · grupo de ${g.length}`,
-          editionId: r.id,
-          url: r.url,
-          serieHref: r.workId ? `/serie/${r.workId}` : undefined,
-        })),
-      ),
     },
   ];
 }

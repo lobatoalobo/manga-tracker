@@ -194,21 +194,25 @@ export async function importVizSeries(
     title: displayTitle,
     coverImage: cover,
     author: mu.author,
+    // Identidad externa: dedupea al Work correcto por muId/mdId, no por título.
+    muId: String(mu.seriesId),
+    mdId: md?.id ?? null,
     // La sinopsis inglesa va a la EDICIÓN VIZ, no al Work (el Work prefiere ES;
     // el enrich completa el Work con EN solo si la obra no tiene edición ES).
     originalTitle: mu.title,
   }).catch(() => null);
   if (!workId) return { ok: false, reason: "no se pudo crear Work" };
 
-  // Completa géneros/demografía/raw si el Work no los tenía (no pisa lo editado).
+  // Completa géneros/demografía/raw/sinopsis-EN si el Work no los tenía (no pisa).
   const w = await prisma.work.findUnique({
     where: { id: workId },
-    select: { genres: true, demographic: true, rawGenres: true },
+    select: { genres: true, demographic: true, rawGenres: true, synopsisEn: true },
   });
-  const patch: { genres?: string[]; demographic?: string; rawGenres?: string[] } = {};
+  const patch: { genres?: string[]; demographic?: string; rawGenres?: string[]; synopsisEn?: string } = {};
   if (w && w.genres.length === 0 && genres.length) patch.genres = genres;
   if (w && !w.demographic && demographic) patch.demographic = demographic;
   if (w && w.rawGenres.length === 0 && rawGenres.length) patch.rawGenres = rawGenres;
+  if (w && !w.synopsisEn && mu.description) patch.synopsisEn = mu.description; // EN de VIZ/MU
   if (Object.keys(patch).length)
     await prisma.work.update({ where: { id: workId }, data: patch }).catch(() => {});
 

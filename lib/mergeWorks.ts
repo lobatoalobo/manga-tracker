@@ -47,6 +47,101 @@ export async function getDuplicateWorkGroups(): Promise<DupGroup[]> {
 }
 
 /**
+ * Borra Works sin ninguna edición (huérfanos), salvo los debuts "próximo a salir"
+ * (que legítimamente no tienen edición todavía). Prevención: ninguna operación
+ * que mueva/borre ediciones debe dejar un Work huérfano (ver caso I"s/work 72).
+ */
+export async function cleanOrphanWorks(): Promise<number> {
+  const r = await prisma.work.deleteMany({
+    where: { editions: { none: {} }, upcoming: false },
+  });
+  return r.count;
+}
+
+export interface EditionDupEdition {
+  id: number;
+  slug: string;
+  title: string;
+  volumes: number;
+  workId: number | null;
+  anilistId: number | null;
+  url: string;
+}
+export interface EditionDupGroup {
+  publisher: string;
+  normTitle: string;
+  sameWork: boolean; // todas las ediciones cuelgan del mismo Work
+  editions: EditionDupEdition[];
+}
+
+/**
+ * Grupos de ediciones duplicadas (misma editorial + normTitle). Clasificados:
+ *  - `sameWork`: redundantes en el MISMO Work → borrar las extra (queda la
+ *    canónica). Ej. I"s con slugs "is" e "i-quot-s".
+ *  - `!sameWork`: la misma serie quedó en Works distintos → fusionar los Works.
+ * Excluye series realmente distintas con título parecido (distinto anilistId).
+ */
+export async function getEditionDuplicateGroups(): Promise<EditionDupGroup[]> {
+  const rows = await prisma.publisherEdition.findMany({
+    select: {
+      id: true, publisher: true, normTitle: true, slug: true, title: true,
+      volumes: true, workId: true, anilistId: true, url: true,
+    },
+  });
+  const byKey = new Map<string, EditionDupEdition[]>();
+  const meta = new Map<string, { publisher: string; normTitle: string }>();
+  for (const r of rows) {
+    const k = `${r.publisher}::${r.normTitle}`;
+    const arr = byKey.get(k) ?? [];
+    arr.push(r);
+    byKey.set(k, arr);
+    meta.set(k, { publisher: r.publisher, normTitle: r.normTitle });
+  }
+  const out: EditionDupGroup[] = [];
+  for (const [k, g] of byKey) {
+    if (g.length < 2) continue;
+    const series = new Set(g.filter((r) => r.anilistId != null).map((r) => r.anilistId));
+    if (series.size >= 2) continue; // series distintas, no es dup
+    const workIds = new Set(g.map((r) => r.workId));
+    out.push({
+      publisher: meta.get(k)!.publisher,
+      normTitle: meta.get(k)!.normTitle,
+      sameWork: workIds.size === 1,
+      editions: g,
+    });
+  }
+  return out;
+}
+
+/** Edición canónica de un grupo: con anilistId > más tomos > slug más corto. */
+function canonicalEdition(eds: EditionDupEdition[]): EditionDupEdition {
+  return [...eds].sort(
+    (a, b) =>
+      (b.anilistId ? 1 : 0) - (a.anilistId ? 1 : 0) ||
+      b.volumes - a.volumes ||
+      a.slug.length - b.slug.length,
+  )[0];
+}
+
+/**
+ * Auto-resuelve las ediciones redundantes del MISMO Work: mantiene la canónica y
+ * borra las extra. Self-healing para el caso I"s. Devuelve cuántas borró.
+ */
+export async function cleanRedundantEditions(): Promise<number> {
+  const groups = (await getEditionDuplicateGroups()).filter((g) => g.sameWork);
+  let deleted = 0;
+  for (const g of groups) {
+    const keep = canonicalEdition(g.editions);
+    for (const e of g.editions) {
+      if (e.id === keep.id) continue;
+      await prisma.publisherEdition.delete({ where: { id: e.id } }).catch(() => {});
+      deleted++;
+    }
+  }
+  return deleted;
+}
+
+/**
  * Desvincula un Work de su anilistId (lo pone null en el Work y en sus ediciones).
  * Para mismapeos: una obra distinta (novela/spin-off) quedó pegada al id de otra,
  * y así deja de aparecer como duplicado.

@@ -6,6 +6,7 @@ import {
   normalizeTitle,
 } from "@/lib/catalog";
 import { getRejected } from "@/lib/rejectedSources";
+import { cleanOrphanWorks } from "@/lib/mergeWorks";
 import { prisma } from "@/lib/prisma";
 
 const UA = { "User-Agent": "Mozilla/5.0" };
@@ -130,6 +131,10 @@ export async function crawlIvreaCatalog(): Promise<IvreaCatalogResult> {
     }
     saved++;
   });
+
+  // Re-puntear ediciones puede dejar Works sin ediciones (huérfanos) — los
+  // limpiamos para que no queden duplicados fantasma (ver caso I"s/work 72).
+  await cleanOrphanWorks().catch(() => {});
 
   return { catalog: entries.length, saved };
 }

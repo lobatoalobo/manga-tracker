@@ -55,14 +55,13 @@ const REGIONS = [
   { r: "int", label: "🇺🇸 Internacional" },
 ] as const;
 
-const SORTS = [
-  { s: "az", label: "A-Z" },
-  { s: "vols", label: "Más tomos" },
-] as const;
+// Orden: dos ejes que ciclan (A-Z y Tomos), cada uno con 3 estados. "none" =
+// orden por defecto del server (alfabético). Solo uno activo a la vez.
+type Sort = "none" | "az" | "za" | "vols-desc" | "vols-asc";
+const SORT_VALUES: Sort[] = ["none", "az", "za", "vols-desc", "vols-asc"];
 
 type Tab = (typeof TABS)[number]["t"];
 type Region = (typeof REGIONS)[number]["r"];
-type Sort = (typeof SORTS)[number]["s"];
 type GMode = "all" | "any";
 
 /** Etiqueta corta de editorial para los chips (sin sufijo redundante). */
@@ -87,7 +86,7 @@ function readUrl(): BrowseState {
     tab: "az",
     region: "all",
     pubs: [],
-    sort: "az",
+    sort: "none",
     completed: false,
     genres: [],
     gmode: "any",
@@ -106,7 +105,7 @@ function readUrl(): BrowseState {
     tab: tab === "series" || tab === "tomos" ? tab : "az",
     region: region === "ar" || region === "int" ? region : "all",
     pubs: split(p.get("pubs") ?? p.get("pub")),
-    sort: sort === "vols" ? "vols" : "az",
+    sort: (SORT_VALUES as string[]).includes(sort ?? "") ? (sort as Sort) : "none",
     completed: p.get("completed") === "1",
     genres: split(p.get("genres") ?? p.get("genre")),
     gmode: p.get("gmode") === "all" ? "all" : "any",
@@ -236,7 +235,7 @@ export default function CatalogBrowser({
     if (next.tab !== "az") params.set("tab", next.tab);
     if (next.region !== "all") params.set("region", next.region);
     if (next.pubs.length) params.set("pubs", next.pubs.join(","));
-    if (next.sort !== "az") params.set("sort", next.sort);
+    if (next.sort !== "none") params.set("sort", next.sort);
     if (next.completed) params.set("completed", "1");
     if (next.q.trim()) params.set("q", next.q.trim());
     if (next.genres.length) params.set("genres", next.genres.join(","));
@@ -325,12 +324,13 @@ export default function CatalogBrowser({
       return [...filtered].sort((a, b) =>
         (a.releaseLabel ?? "9999").localeCompare(b.releaseLabel ?? "9999"),
       );
-    // Todo y Próximos tomos respetan el Orden elegido ("az" = alfabético del
-    // server; "vols" = más tomos). Próximos tiene series con tomos, así que sirve.
-    if (sort === "vols")
-      return [...filtered].sort(
-        (a, b) => (b.maxVolumes ?? 0) - (a.maxVolumes ?? 0),
-      );
+    // Todo y Próximos tomos respetan el orden elegido. "none"/"az" = alfabético
+    // (el server ya devuelve normTitle asc); "za" = invertido; "vols-*" = por tomos.
+    if (sort === "za") return [...filtered].reverse();
+    if (sort === "vols-desc")
+      return [...filtered].sort((a, b) => (b.maxVolumes ?? 0) - (a.maxVolumes ?? 0));
+    if (sort === "vols-asc")
+      return [...filtered].sort((a, b) => (a.maxVolumes ?? 0) - (b.maxVolumes ?? 0));
     return filtered;
   }, [filtered, activeTab, sort]);
 
@@ -438,6 +438,33 @@ export default function CatalogBrowser({
               </button>
             ))}
           </div>
+
+          {/* Orden: dos botones que CICLAN (fuera del dropdown). A-Z: A-Z→Z-A→off.
+              Tomos: ↑ (más)→↓ (menos)→off. Solo uno activo a la vez. */}
+          {activeTab !== "series" && (
+            <div className="mb-2 flex flex-wrap gap-1.5 text-sm">
+              <button
+                type="button"
+                onClick={() =>
+                  update({ sort: sort === "az" ? "za" : sort === "za" ? "none" : "az" })
+                }
+                className={chipCls(sort === "az" || sort === "za")}
+              >
+                {sort === "za" ? "Z-A" : "A-Z"}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  update({
+                    sort: sort === "vols-desc" ? "vols-asc" : sort === "vols-asc" ? "none" : "vols-desc",
+                  })
+                }
+                className={chipCls(sort === "vols-desc" || sort === "vols-asc")}
+              >
+                {sort === "vols-asc" ? "Tomos ↓" : sort === "vols-desc" ? "Tomos ↑" : "Tomos"}
+              </button>
+            </div>
+          )}
         </>
       )}
 
@@ -485,26 +512,6 @@ export default function CatalogBrowser({
                     className={chipCls(pubs.includes(p))}
                   >
                     {pubLabel(p)} <span className="opacity-60">{n}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {showTabs && activeTab !== "series" && (
-            <div>
-              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
-                Orden
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {SORTS.map(({ s, label }) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => update({ sort: s })}
-                    className={chipCls(sort === s)}
-                  >
-                    {label}
                   </button>
                 ))}
               </div>
