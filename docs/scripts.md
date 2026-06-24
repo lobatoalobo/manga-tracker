@@ -48,7 +48,7 @@ Migraciones: crear el SQL a mano en `prisma/migrations/<ts>_<nombre>/migration.s
 
 | Comando | Qué hace |
 |---|---|
-| `node scripts/refresh-catalog.mjs` | Orquesta el refresh completo: Ivrea → whakoom-all → enrich-works (contra prod). Ver [frescura-catalogo.md](frescura-catalogo.md). |
+| `node scripts/refresh-catalog.mjs` | Orquesta el refresh completo (contra prod): whakoom-all → enrich-works → traducir sinopsis (completa ES↔EN) → mirror a staging. Ivrea va por su cron de Vercel. Ver [frescura-catalogo.md](frescura-catalogo.md). |
 | `powershell -File scripts/refresh-catalog.ps1` | Wrapper para el Task Scheduler (loguea en `logs/`). |
 | `powershell -File scripts/install-refresh-task.ps1 [-At HH:mm]` | Registra la tarea programada diaria de Windows. |
 | `node scripts/with-staging.mjs <cmd…>` | Corre cualquier comando con `DATABASE_URL` apuntando a staging. |
