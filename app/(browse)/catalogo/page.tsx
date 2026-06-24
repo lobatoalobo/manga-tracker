@@ -40,7 +40,9 @@ export default async function CatalogoPage({
     tab: sp.tab === "series" || sp.tab === "tomos" ? sp.tab : "az",
     region: sp.region === "ar" || sp.region === "int" ? sp.region : "all",
     pubs: split(sp.pubs ?? sp.pub),
-    sort: sp.sort === "vols" ? "vols" : "az",
+    sort: (["az", "za", "vols-desc", "vols-asc"] as const).includes(sp.sort as never)
+      ? (sp.sort as "az" | "za" | "vols-desc" | "vols-asc")
+      : "none",
     completed: sp.completed === "1",
     genres: split(sp.genres ?? sp.genre),
     gmode: sp.gmode === "all" ? "all" : "any",
