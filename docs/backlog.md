@@ -100,7 +100,7 @@ Perfil estilo Steam → achievements computados (50/100/200 mangas) → badges/c
 
 - **Recrawl Ivrea contradicciones** — 7 series con conteo contradictorio (Ao Ashi, Bastardo, Drama Queen, Eizouken, Saint Seiya Lost Canvas, Dai Dark, Dungeon Elf): correr `recrawl-ivrea --contradictions` **cuando Ivrea desbanee** la IP (memorias `pending-ivrea-recrawl`, `ivrea-ip-ban`). NUNCA asumir conteos.
 - **PR del próximo lote** — el commit del tool `whakoom-ivrea-diff.ts` está en `staging`, pendiente de entrar al próximo PR a `main` (workflow de lotes, memoria `dev-workflow`).
-- **Limpieza de works partidos por idioma (romaji)** — `scripts/scan-romaji-dups.ts` detecta **~43 grupos** de la misma serie partida en Works distintos (VIZ inglés/romaji vs Ivrea/Panini español, sin id externo compartido). Junji Ito (5) ya fusionado; la prevención (`findOrCreateWork` puente romaji+autor) evita NUEVOS. Falta una pasada de merge de los existentes, **caso por caso** (hay falsos positivos por datos malos, ej. Shaman King Zero/Flowers con `originalTitle` errado).
+- **Works partidos por idioma (romaji)** — ✅ limpiado (2026-06-24): `scripts/merge-romaji-dups.ts` fusionó **41 grupos** (+5 Junji Ito previos) + borró 26 ediciones redundantes (prod+staging). La prevención (`findOrCreateWork` puente romaji+autor) evita nuevos. **Quedan 3 a mano (datos malos, NO mergear automático):** `jujutsu kaisen` (anilistId distinto 101517 vs 105469 — revisar si es mismapeo), `yu gi oh` (#2564 Arc-V tiene `originalTitle` que colapsa con el base #20 — corregir originalTitle), `shaman king zero` (#133 Flowers con `originalTitle` errado — corregir).
 
 ---
 
