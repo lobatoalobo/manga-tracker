@@ -69,6 +69,7 @@ confiable, además de géneros/sinopsis. Match por romaji + prefijo "Romaji: ES"
 | `… enrich-works.ts --missing-identity` | Solo obras sin mdId/muId (backfill de identidad + nombres). |
 | `… enrich-works.ts --missing-cover` | Solo obras sin portada (recovery MU/MD). |
 | `npx tsx scripts/audit-data.ts` | **Auditoría** (read-only): cobertura de campos, identidad, matchabilidad, focos de problema (autores/sinopsis faltantes, ediciones multi-idioma). |
+| `npx tsx scripts/whakoom-ivrea-diff.ts [--refresh]` | **Diff read-only** Ivrea Whakoom vs nuestra base: qué ediciones lista Whakoom que nos faltan (match por tokens + colapsado sin puntuación). Cachea la enumeración en `scripts/.whakoom-ivrea-urls.json` (`--refresh` re-enumera). Correr **local** (Whakoom bloquea datacenter). |
 | `npx tsx scripts/backfill-synopsis-lang.ts [--dry]` | Separa la `synopsis` existente a `synopsisEs`/`synopsisEn` por idioma detectado (sin traducir). |
 | `npx tsx scripts/translate-synopses.ts [--limit N] [--dry]` | Completa la versión de sinopsis faltante traduciendo la otra con LLM (marcada auto). Requiere `OPENAI_API_KEY` (o DEEPL/ANTHROPIC). |
 | `npx tsx scripts/curate-genres.ts [--dry]` | Géneros curados a mano para obras que no matchean en MU/MD. |
