@@ -69,6 +69,7 @@ confiable, además de géneros/sinopsis. Match por romaji + prefijo "Romaji: ES"
 | `… enrich-works.ts --missing-identity` | Solo obras sin mdId/muId (backfill de identidad + nombres). |
 | `… enrich-works.ts --missing-cover` | Solo obras sin portada (recovery MU/MD). |
 | `npx tsx scripts/audit-data.ts` | **Auditoría** (read-only): cobertura de campos, identidad, matchabilidad, focos de problema (autores/sinopsis faltantes, ediciones multi-idioma). |
+| `npx tsx scripts/whakoom-ivrea-diff.ts [--refresh]` | **Diff read-only** Ivrea Whakoom vs nuestra base: qué ediciones lista Whakoom que nos faltan (match por tokens + colapsado sin puntuación). Cachea la enumeración en `scripts/.whakoom-ivrea-urls.json` (`--refresh` re-enumera). Correr **local** (Whakoom bloquea datacenter). |
 | `npx tsx scripts/backfill-synopsis-lang.ts [--dry]` | Separa la `synopsis` existente a `synopsisEs`/`synopsisEn` por idioma detectado (sin traducir). |
 | `npx tsx scripts/translate-synopses.ts [--limit N] [--dry]` | Completa la versión de sinopsis faltante traduciendo la otra con LLM (marcada auto). Requiere `OPENAI_API_KEY` (o DEEPL/ANTHROPIC). |
 | `npx tsx scripts/curate-genres.ts [--dry]` | Géneros curados a mano para obras que no matchean en MU/MD. |
@@ -79,6 +80,7 @@ confiable, además de géneros/sinopsis. Match por romaji + prefijo "Romaji: ES"
 
 | Comando | Qué hace |
 |---|---|
+| `npx tsx scripts/fix-volume-overcounts.ts [--apply]` | Capa el **sobre-conteo** de tomos: si una edición tiene un tomo NUEVO con fecha futura (en `IvreaRelease`), los publicados son `N-1`. **No re-fetchea Ivrea** (usa el snapshot) → seguro local. Misma lógica que corre el cron de /proximas/ (`capOvercountedIvreaEditions`). |
 | `npx tsx scripts/recrawl-ivrea.ts --contradictions [--dry]` | Re-crawlea fichas de Ivrea con conteo contradictorio (próximo tomo #N con ≥N tomos) y trae el conteo AR real. **Correr solo con Ivrea arriba** (a veces banea la IP local). |
 | `npx tsx scripts/fix-ivrea-urls.ts [--limit N] [--apply]` | Arregla links de Ivrea que quedaron a Whakoom + sincroniza tomos. |
 | `npx tsx scripts/fix-whakoom-counts.ts [--dry]` | Corrige conteo de tomos publicados de imports de Whakoom (excluye upcoming). |

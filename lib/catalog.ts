@@ -145,6 +145,20 @@ export function tightTitleKey(value: string): string {
 }
 
 /**
+ * Clave de romaji para emparejar la MISMA serie publicada en distintos idiomas
+ * (VIZ en inglés vs Ivrea en español) cuando ningún lado tiene id externo. Saca
+ * el sufijo "(Autor)" que algunas fuentes pegan al romaji ("Rojiura (ITO Junji)")
+ * de modo que "Rojiura (ITO Junji)" y "ROJIURA" colapsan a "rojiura".
+ *
+ * Usa `tightTitleKey` (NO `normalizeTitle`) a propósito: preserva el "+" y demás,
+ * para NO fusionar una serie con su secuela (Citrus vs Citrus+, que comparten
+ * romaji base pero son obras distintas).
+ */
+export function romajiKey(value: string): string {
+  return tightTitleKey(value.replace(/\s*\([^)]*\)\s*$/, "").trim());
+}
+
+/**
  * Limpia el título de una editorial para buscarlo en AniList. Las editoriales
  * agregan decoraciones que AniList no tiene (subtítulos entre guiones o
  * paréntesis), p. ej. "Aku No Hana -Las Flores Del Mal-" → "Aku No Hana".
@@ -751,6 +765,39 @@ export async function nationalCoversByAnilist(
 }
 
 /**
+ * Autor (mangaka) por clave de colección, para buscar la colección por autor.
+ * Clave = anilistId real (serie mapeada) o `-workId` (obra local). Devuelve el
+ * `Work.author` de cada una.
+ */
+export async function authorsByAnilist(
+  ids: number[],
+): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  if (ids.length === 0) return out;
+  const localWorkIds = ids.filter((i) => i < 0).map((i) => -i);
+  const positive = ids.filter((i) => i > 0);
+  // Obras locales: autor directo del Work (id = -anilistId).
+  if (localWorkIds.length) {
+    const works = await prisma.work.findMany({
+      where: { id: { in: localWorkIds }, author: { not: null } },
+      select: { id: true, author: true },
+    });
+    for (const w of works) if (w.author) out.set(-w.id, w.author);
+  }
+  // Series mapeadas: autor del Work vía su edición (igual que la portada).
+  if (positive.length) {
+    const eds = await prisma.publisherEdition.findMany({
+      where: { anilistId: { in: positive }, work: { author: { not: null } } },
+      select: { anilistId: true, work: { select: { author: true } } },
+    });
+    for (const e of eds)
+      if (e.anilistId != null && e.work?.author && !out.has(e.anilistId))
+        out.set(e.anilistId, e.work.author);
+  }
+  return out;
+}
+
+/**
  * Encuentra (o crea) la obra del catálogo local para una edición. Agrupa por
  * `anilistId` cuando existe (referencia fuerte) y, si no, por título normalizado
  * (varias ediciones de la misma serie comparten título). Devuelve el workId.
@@ -797,6 +844,28 @@ export async function findOrCreateWork(opts: {
     const tight = tightTitleKey(title);
     const cands = await prisma.work.findMany({ where: { normTitle }, select: { ...sel, title: true } });
     existing = cands.find((w) => tightTitleKey(w.title) === tight) ?? null;
+  }
+  // Puente ROMAJI + AUTOR: si no matcheó por id ni por título (típico cuando una
+  // edición viene en otro idioma — VIZ en inglés vs Ivrea en español — y ningún
+  // lado tiene id externo), buscamos otra obra con el MISMO romaji (originalTitle
+  // normalizado, sin el sufijo "(Autor)") y autor compatible. Evita que se parta
+  // la misma serie en dos Works (ej. "Alley" VIZ vs "El Callejón" Ivrea = Rojiura).
+  if (!existing && originalTitle && author) {
+    const core = originalTitle.replace(/\s*\([^)]*\)\s*$/, "").trim();
+    const rk = romajiKey(originalTitle);
+    if (rk.length >= 4) {
+      const cands = await prisma.work.findMany({
+        where: { originalTitle: { contains: core, mode: "insensitive" } },
+        select: { ...sel, originalTitle: true },
+      });
+      existing =
+        cands.find(
+          (w) =>
+            w.originalTitle &&
+            romajiKey(w.originalTitle) === rk &&
+            authorNameMatches(author, w.author),
+        ) ?? null;
+    }
   }
 
   if (existing) {

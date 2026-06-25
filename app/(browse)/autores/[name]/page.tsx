@@ -7,7 +7,6 @@ import CatalogBrowser, {
   type BrowseCard,
   type BrowseState,
 } from "@/components/CatalogBrowser";
-import { isEnabled } from "@/lib/featureFlags";
 
 export const metadata = { title: "Autor · Nakama" };
 
@@ -96,7 +95,7 @@ export default async function AutorPage({
         basePath={`/autores/${encodeURIComponent(author)}`}
         showTabs={false}
         showSearch={false}
-        showGenreFilters={await isEnabled("genre-filters")}
+        showGenreFilters={false}
       />
     </main>
   );

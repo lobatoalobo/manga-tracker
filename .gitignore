@@ -39,6 +39,9 @@ yarn-error.log*
 # logs del refresh programado del catálogo
 /logs
 
+# cache de enumeración de Whakoom (scripts/whakoom-ivrea-diff.ts)
+/scripts/.whakoom-*.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

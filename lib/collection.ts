@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getMangaById, searchMangaList } from "@/lib/anilist";
-import { nationalCoversByAnilist, upcomingForIds } from "@/lib/catalog";
+import { nationalCoversByAnilist, upcomingForIds, authorsByAnilist } from "@/lib/catalog";
 import { isPlausibleVolume } from "@/lib/volumes";
 import type { TrackedEdition, OwnedVolume } from "@prisma/client";
 
@@ -35,6 +35,7 @@ export interface SeriesView {
 export interface CollectionItem {
   anilistId: number;
   title: { romaji: string; english: string | null; native: string | null };
+  author: string | null;
   coverImage: string;
   edition: EditionView;
   upcoming: boolean;
@@ -64,12 +65,13 @@ export async function getCollectionItems(
     orderBy: { romajiTitle: "asc" },
   });
 
-  // Portada nacional (cuando la tenemos) en vez de la guardada/AniList, y flag
-  // "próximo a salir" para el badge.
+  // Portada nacional (cuando la tenemos) en vez de la guardada/AniList, flag
+  // "próximo a salir" para el badge, y autor (para buscar por mangaka).
   const ids = rows.map((m) => m.anilistId);
-  const [nationalCovers, upcoming] = await Promise.all([
+  const [nationalCovers, upcoming, authors] = await Promise.all([
     nationalCoversByAnilist(ids).catch(() => new Map<number, string>()),
     upcomingForIds(ids).catch(() => new Set<number>()),
+    authorsByAnilist(ids).catch(() => new Map<number, string>()),
   ]);
 
   const items: CollectionItem[] = [];
@@ -82,6 +84,7 @@ export async function getCollectionItems(
           english: m.englishTitle,
           native: m.nativeTitle,
         },
+        author: authors.get(m.anilistId) ?? null,
         coverImage: nationalCovers.get(m.anilistId) ?? m.coverImage,
         edition: toEditionView(e),
         upcoming: upcoming.has(m.anilistId),

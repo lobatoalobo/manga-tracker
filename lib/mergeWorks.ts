@@ -362,21 +362,19 @@ export async function mergeWorks(
   targetId: number,
 ): Promise<MergeReport> {
   if (sourceId === targetId) throw new Error("source y target son el mismo Work");
+  const sel = {
+    id: true, anilistId: true, coverImage: true, author: true,
+    synopsis: true, originalTitle: true, upcoming: true,
+    // Identidad externa + nombres + sinopsis multi-idioma: hay que preservarlos
+    // CUALQUIERA sea la dirección de la fusión (típico: el target nacional/ES no
+    // tiene muId/mdId/titleEn y el source VIZ sí). Ver redesign de datos.
+    muId: true, mdId: true, titleEn: true, titleNative: true, assistants: true,
+    synopsisEs: true, synopsisEn: true, synopsisEsAuto: true, synopsisEnAuto: true,
+    demographic: true, genres: true, rawGenres: true,
+  } as const;
   const [src, tgt] = await Promise.all([
-    prisma.work.findUnique({
-      where: { id: sourceId },
-      select: {
-        id: true, anilistId: true, coverImage: true, author: true,
-        synopsis: true, originalTitle: true, upcoming: true,
-      },
-    }),
-    prisma.work.findUnique({
-      where: { id: targetId },
-      select: {
-        id: true, anilistId: true, coverImage: true, author: true,
-        synopsis: true, originalTitle: true, upcoming: true,
-      },
-    }),
+    prisma.work.findUnique({ where: { id: sourceId }, select: sel }),
+    prisma.work.findUnique({ where: { id: targetId }, select: sel }),
   ]);
   if (!src) throw new Error(`Work source ${sourceId} no existe`);
   if (!tgt) throw new Error(`Work target ${targetId} no existe`);
@@ -399,10 +397,15 @@ export async function mergeWorks(
       });
       editionsMoved = moved.count;
 
-      // `Work.anilistId` es @unique: liberamos el del source ANTES de pasarlo al
-      // target (si no, el update del target choca porque el source aún lo tiene).
-      if (src.anilistId)
-        await tx.work.update({ where: { id: sourceId }, data: { anilistId: null } });
+      // `anilistId`/`muId`/`mdId` son @unique: liberamos los del source ANTES de
+      // pasarlos al target (si no, el update del target choca porque el source aún
+      // los tiene). El source se borra al final igual, así que nullearlos es seguro.
+      const free: Record<string, unknown> = {};
+      if (src.anilistId) free.anilistId = null;
+      if (src.muId) free.muId = null;
+      if (src.mdId) free.mdId = null;
+      if (Object.keys(free).length)
+        await tx.work.update({ where: { id: sourceId }, data: free });
 
       // 2) Backfill de campos del target desde el source (sin pisar lo existente).
       const patch: Record<string, unknown> = {};
@@ -412,6 +415,23 @@ export async function mergeWorks(
       if (!tgt.synopsis && src.synopsis) patch.synopsis = src.synopsis;
       if (!tgt.originalTitle && src.originalTitle) patch.originalTitle = src.originalTitle;
       if (!tgt.upcoming && src.upcoming) patch.upcoming = true;
+      // Identidad externa + nombres + sinopsis multi-idioma + géneros/demografía.
+      if (!tgt.muId && src.muId) patch.muId = src.muId;
+      if (!tgt.mdId && src.mdId) patch.mdId = src.mdId;
+      if (!tgt.titleEn && src.titleEn) patch.titleEn = src.titleEn;
+      if (!tgt.titleNative && src.titleNative) patch.titleNative = src.titleNative;
+      if (!tgt.assistants?.length && src.assistants?.length) patch.assistants = src.assistants;
+      if (!tgt.synopsisEs && src.synopsisEs) {
+        patch.synopsisEs = src.synopsisEs;
+        patch.synopsisEsAuto = src.synopsisEsAuto;
+      }
+      if (!tgt.synopsisEn && src.synopsisEn) {
+        patch.synopsisEn = src.synopsisEn;
+        patch.synopsisEnAuto = src.synopsisEnAuto;
+      }
+      if (!tgt.demographic && src.demographic) patch.demographic = src.demographic;
+      if (!tgt.genres?.length && src.genres?.length) patch.genres = src.genres;
+      if (!tgt.rawGenres?.length && src.rawGenres?.length) patch.rawGenres = src.rawGenres;
       if (Object.keys(patch).length)
         await tx.work.update({ where: { id: targetId }, data: patch });
 

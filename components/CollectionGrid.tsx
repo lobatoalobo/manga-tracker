@@ -55,10 +55,16 @@ export default function CollectionGrid({
   }, [items]);
 
   const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
     const out = items.filter((i) => {
-      const matchSearch = i.title.romaji
-        .toLowerCase()
-        .includes(search.toLowerCase());
+      // Busca por título (romaji/inglés/nativo) o por autor (mangaka).
+      const matchSearch =
+        q === "" ||
+        i.title.romaji.toLowerCase().includes(q) ||
+        i.title.english?.toLowerCase().includes(q) ||
+        i.title.native?.toLowerCase().includes(q) ||
+        i.author?.toLowerCase().includes(q) ||
+        false;
       const matchPublisher =
         publisher === "all" || i.edition.label === publisher;
       const matchReading =
@@ -100,8 +106,8 @@ export default function CollectionGrid({
       <div className="mb-2 flex flex-wrap gap-2">
         <input
           type="text"
-          placeholder="Buscar…"
-          aria-label="Buscar en tu colección"
+          placeholder="Buscar por título o autor…"
+          aria-label="Buscar en tu colección por título o autor"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="min-w-48 flex-1 rounded-lg border border-border bg-surface px-4 py-2 text-sm outline-none focus:border-accent"
