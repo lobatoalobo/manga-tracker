@@ -610,9 +610,14 @@ export async function browseWorks(opts: {
   // catálogo nacional (debuts y releases de Ivrea): naturalmente solo traen
   // obras nacionales (las VIZ no tienen debut/release de Ivrea).
   if (opts.tab === "series") {
-    // Próximas SERIES: debuts GENUINOS (upcoming + sin ninguna edición). Si ya
-    // tiene una edición (de Ivrea o de otra editorial), no es un debut próximo.
-    conds.push({ upcoming: true, editions: { none: {} } });
+    // Próximas SERIES = anunciada (upcoming) y SIN ningún tomo publicado todavía.
+    // Antes se exigía `editions: { none }` → una serie ya catalogada por Ivrea con
+    // 0 tomos (la mete en /catalogo/ antes de que salga el tomo 1) desaparecía
+    // aunque estuviera marcada upcoming. Ahora basta con que no tenga tomos.
+    conds.push({
+      upcoming: true,
+      NOT: { editions: { some: { volumes: { gt: 0 } } } },
+    });
   } else if (opts.tab === "tomos") {
     // Próximos TOMOS: obras con un tomo nuevo o reedición futura (vía edición→
     // work). NO incluye debuts/oneshots (esos son "series nuevas", otro tab/chip).
