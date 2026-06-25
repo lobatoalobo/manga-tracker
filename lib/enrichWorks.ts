@@ -67,19 +67,26 @@ export async function enrichWorks(opts: {
   onlyMissingCover?: boolean; // solo Works sin portada (recovery de portadas)
   onlyMissingGenres?: boolean; // solo Works sin géneros (re-match con la mejora)
   onlyMissingIdentity?: boolean; // solo Works sin mdId (backfill identidad + nombres)
+  publisher?: string; // acotar a works con una edición de esta editorial (ej. Panini)
   dryRun?: boolean;
 } = {}): Promise<EnrichResult> {
   const limit = opts.limit ?? 50;
+  const base = opts.onlyMissingCover
+    ? { coverImage: null }
+    : opts.onlyMissingGenres
+      ? { editions: { some: {} }, genres: { isEmpty: true } }
+      : opts.onlyMissingIdentity
+        ? { editions: { some: {} }, OR: [{ mdId: null }, { muId: null }] }
+        : opts.force
+          ? {}
+          : { enrichedAt: null };
+  // Filtro opcional por editorial: works con al menos una edición cuyo publisher
+  // contenga `publisher` (contains, robusto a "Panini" vs "Panini Argentina").
+  const where = opts.publisher
+    ? { AND: [base, { editions: { some: { publisher: { contains: opts.publisher } } } }] }
+    : base;
   const works = await dbRetry(() => prisma.work.findMany({
-    where: opts.onlyMissingCover
-      ? { coverImage: null }
-      : opts.onlyMissingGenres
-        ? { editions: { some: {} }, genres: { isEmpty: true } }
-        : opts.onlyMissingIdentity
-          ? { editions: { some: {} }, OR: [{ mdId: null }, { muId: null }] }
-          : opts.force
-            ? {}
-            : { enrichedAt: null },
+    where,
     take: limit,
     orderBy: { id: "asc" },
     select: {

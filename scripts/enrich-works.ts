@@ -23,19 +23,23 @@ async function main() {
   const onlyMissingCover = process.argv.includes("--missing-cover");
   const onlyMissingGenres = process.argv.includes("--missing-genres");
   const onlyMissingIdentity = process.argv.includes("--missing-identity");
+  const publisher = arg("--publisher"); // ej. "Panini" (contains, robusto)
+  const pubWhere = publisher
+    ? { editions: { some: { publisher: { contains: publisher } } } }
+    : {};
 
   // dbRetry: el endpoint directo de Neon tira P1001 en cold-start (este count es
   // lo primero que toca la base). Ver memoria maintenance-tooling-robust.
   const pending = await dbRetry(() =>
     onlyMissingCover
-      ? prisma.work.count({ where: { coverImage: null } })
+      ? prisma.work.count({ where: { coverImage: null, ...pubWhere } })
       : onlyMissingGenres
-        ? prisma.work.count({ where: { editions: { some: {} }, genres: { isEmpty: true } } })
+        ? prisma.work.count({ where: { editions: { some: {} }, genres: { isEmpty: true }, ...pubWhere } })
         : onlyMissingIdentity
           ? prisma.work.count({
-              where: { editions: { some: {} }, OR: [{ mdId: null }, { muId: null }] },
+              where: { editions: { some: {} }, OR: [{ mdId: null }, { muId: null }], ...pubWhere },
             })
-          : prisma.work.count({ where: { enrichedAt: null } }),
+          : prisma.work.count({ where: { enrichedAt: null, ...pubWhere } }),
   );
   const label = onlyMissingCover
     ? "Works sin portada"
@@ -53,6 +57,7 @@ async function main() {
     onlyMissingCover,
     onlyMissingGenres,
     onlyMissingIdentity,
+    publisher,
   });
   console.log(r.samples.join("\n"));
   console.log(

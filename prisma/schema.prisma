@@ -429,6 +429,11 @@ model Work {
   rawGenres   String[]
   // Demografía (Shonen/Shojo/Seinen/Josei/Kodomo): eje aparte del género.
   demographic String?
+  // Tipo de contenido. Define qué se muestra/oculta (ej. Panini mezcla manga y
+  // cómics Marvel/DC). MANGA por defecto; COMIC se clasifica por no matchear
+  // MU/MD + heurística occidental. Override manual en el editor admin (curated).
+  // Valores: MANGA | COMIC | LIGHT_NOVEL | ARTBOOK | DATABOOK | OTHER.
+  type        String  @default("MANGA")
   // Cuándo se enriqueció desde MU/MD (null = pendiente). Para el job batch.
   enrichedAt DateTime?
   upcoming   Boolean  @default(false) // "Próximo a salir" en AR (preventa/anunciada)
