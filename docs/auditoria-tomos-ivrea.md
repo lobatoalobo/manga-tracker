@@ -72,6 +72,12 @@ under-count nuestro**, pero este dato no lo confirma. Va al Grupo C conceptualme
 
 ## Grupo B — 🔴 Sobre-conteo (contamos de más; Whakoom da el publicado)
 
+> **✅ B1 corregido (2026-06-24)** con `scripts/fix-volume-overcounts.ts`: las 6
+> contradicciones + Saint Seiya Lost Canvas (8→7) capadas a `min(tomo futuro) − 1`,
+> corroborado por Whakoom. La lógica (`capOvercountedIvreaEditions`) ahora corre
+> también en el cron de /proximas/ → **no vuelve a pasar**. **B2 sigue pendiente**
+> (revisar caso por caso; sin señal de fecha-futura).
+
 Tenemos MÁS que Whakoom. Incluye **las 7 contradicciones conocidas** (contamos
 tomos que todavía no salieron) que Whakoom **corrobora de forma independiente**.
 

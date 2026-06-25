@@ -5,6 +5,7 @@ import {
   type IvreaProxima,
 } from "@/lib/providers/ivrea";
 import { findOrCreateWork, normalizeTitle } from "@/lib/catalog";
+import { publishedVolumes } from "@/lib/volumes";
 
 export interface ProximasResult {
   cards: number; // tarjetas totales en /proximas/
@@ -14,6 +15,7 @@ export interface ProximasResult {
   newSeries: number; // próximas series (debuts) sembradas desde /news/
   debutWorks: number; // works con chip "próximo a salir" (= newSeries)
   clearedStale: number; // works que tenían el chip y se apagaron
+  volumeCaps: number; // ediciones cuyo conteo se capó por tomo futuro (sobre-conteo)
 }
 
 function kindOf(c: IvreaProxima): string {
@@ -81,6 +83,59 @@ export function chooseIvreaEdition(
  *     crawl les engancha la edición por título). Esas son el set de "próximo a
  *     salir"; el resto se apaga (limpia chips viejos de cualquier editorial).
  */
+export interface VolumeCapChange {
+  editionId: number;
+  title: string;
+  from: number;
+  to: number;
+}
+
+/**
+ * Corrige el SOBRE-CONTEO de tomos: el crawl del catálogo cuenta tomos que Ivrea
+ * anuncia pero todavía NO salieron (la contradicción "📅 Próximo tomo #2" con "3
+ * tomos"). Usa el snapshot YA guardado en `IvreaRelease` (no re-fetchea Ivrea):
+ * si una edición tiene un tomo NUEVO con fecha futura en el tomo N, los publicados
+ * son N-1 → capa `edition.volumes` y borra los `Volume` fantasma (> N-1).
+ *
+ * Idempotente: si ya está capado, no hace nada. Solo BAJA el conteo, nunca lo sube.
+ * Lo corre el cron de /proximas/ (root fix, se mantiene solo) y el script
+ * `fix-volume-overcounts.ts` (one-off). Ver memoria pending-ivrea-recrawl: acá NO
+ * asumimos, usamos la fecha futura que la propia Ivrea publicó.
+ */
+export async function capOvercountedIvreaEditions(
+  dryRun = false,
+): Promise<VolumeCapChange[]> {
+  const today = new Date(new Date().toISOString().slice(0, 10));
+  // Próximo tomo NUEVO (no reedición) con fecha futura, por edición.
+  const future = await prisma.ivreaRelease.findMany({
+    where: { editionId: { not: null }, kind: "volume", releaseDate: { gt: today }, volume: { not: null } },
+    select: { editionId: true, volume: true },
+  });
+  const minNext = new Map<number, number>();
+  for (const r of future) {
+    const v = r.volume!;
+    const cur = minNext.get(r.editionId!);
+    if (cur == null || v < cur) minNext.set(r.editionId!, v);
+  }
+  if (minNext.size === 0) return [];
+
+  const eds = await prisma.publisherEdition.findMany({
+    where: { id: { in: [...minNext.keys()] } },
+    select: { id: true, title: true, volumes: true },
+  });
+  const changes: VolumeCapChange[] = [];
+  for (const e of eds) {
+    const capped = publishedVolumes(e.volumes, minNext.get(e.id)!);
+    if (capped >= e.volumes) continue; // ya correcto
+    changes.push({ editionId: e.id, title: e.title, from: e.volumes, to: capped });
+    if (!dryRun) {
+      await prisma.publisherEdition.update({ where: { id: e.id }, data: { volumes: capped } });
+      await prisma.volume.deleteMany({ where: { editionId: e.id, number: { gt: capped } } });
+    }
+  }
+  return changes;
+}
+
 export async function reconcileIvreaProximas(
   dryRun = false,
 ): Promise<ProximasResult> {
@@ -190,6 +245,10 @@ export async function reconcileIvreaProximas(
     });
   }
 
+  // Capar el sobre-conteo: ahora que el snapshot de IvreaRelease está fresco,
+  // las ediciones con un tomo futuro no deben contar ese tomo como publicado.
+  const volumeCaps = (await capOvercountedIvreaEditions(dryRun)).length;
+
   return {
     cards: cards.length,
     snapshot: rows.length,
@@ -198,5 +257,6 @@ export async function reconcileIvreaProximas(
     newSeries: debuts.size,
     debutWorks: debutWorkIds.length,
     clearedStale: stale,
+    volumeCaps,
   };
 }

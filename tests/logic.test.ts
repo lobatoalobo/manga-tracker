@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { workCardFlags, publisherKey, authorNameMatches, romajiKey } from "@/lib/catalog";
-import { volumeCap, isPlausibleVolume } from "@/lib/volumes";
+import { volumeCap, isPlausibleVolume, publishedVolumes } from "@/lib/volumes";
 import { parseStatus } from "@/lib/providers/mangaupdates";
 import { chooseIvreaEdition, type EdLite } from "@/lib/ivreaProximas";
 
@@ -40,6 +40,24 @@ describe("workCardFlags (banderas de la card)", () => {
 
   it("obra con edición publicada NO es isUpcoming aunque tenga el flag", () => {
     expect(workCardFlags([ivrea], true).isUpcoming).toBe(false);
+  });
+});
+
+describe("publishedVolumes (capar sobre-conteo por tomo futuro)", () => {
+  it("Drama Queen: 3 contados, próximo tomo #2 → 1 publicado", () => {
+    expect(publishedVolumes(3, 2)).toBe(1);
+  });
+  it("Dai Dark: 9 contados, próximo tomo #6 → 5 publicados", () => {
+    expect(publishedVolumes(9, 6)).toBe(5);
+  });
+  it("sin tomo futuro no cambia el conteo", () => {
+    expect(publishedVolumes(7, null)).toBe(7);
+  });
+  it("nunca SUBE el conteo (próximo lejano)", () => {
+    expect(publishedVolumes(3, 9)).toBe(3);
+  });
+  it("ya correcto es idempotente (1 tomo, próximo #2)", () => {
+    expect(publishedVolumes(1, 2)).toBe(1);
   });
 });
 
