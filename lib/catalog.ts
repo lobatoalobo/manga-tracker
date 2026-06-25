@@ -765,6 +765,39 @@ export async function nationalCoversByAnilist(
 }
 
 /**
+ * Autor (mangaka) por clave de colección, para buscar la colección por autor.
+ * Clave = anilistId real (serie mapeada) o `-workId` (obra local). Devuelve el
+ * `Work.author` de cada una.
+ */
+export async function authorsByAnilist(
+  ids: number[],
+): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  if (ids.length === 0) return out;
+  const localWorkIds = ids.filter((i) => i < 0).map((i) => -i);
+  const positive = ids.filter((i) => i > 0);
+  // Obras locales: autor directo del Work (id = -anilistId).
+  if (localWorkIds.length) {
+    const works = await prisma.work.findMany({
+      where: { id: { in: localWorkIds }, author: { not: null } },
+      select: { id: true, author: true },
+    });
+    for (const w of works) if (w.author) out.set(-w.id, w.author);
+  }
+  // Series mapeadas: autor del Work vía su edición (igual que la portada).
+  if (positive.length) {
+    const eds = await prisma.publisherEdition.findMany({
+      where: { anilistId: { in: positive }, work: { author: { not: null } } },
+      select: { anilistId: true, work: { select: { author: true } } },
+    });
+    for (const e of eds)
+      if (e.anilistId != null && e.work?.author && !out.has(e.anilistId))
+        out.set(e.anilistId, e.work.author);
+  }
+  return out;
+}
+
+/**
  * Encuentra (o crea) la obra del catálogo local para una edición. Agrupa por
  * `anilistId` cuando existe (referencia fuerte) y, si no, por título normalizado
  * (varias ediciones de la misma serie comparten título). Devuelve el workId.
