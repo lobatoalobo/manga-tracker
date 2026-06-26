@@ -7,6 +7,7 @@ import {
   setCrumbQueryAction,
   uploadCoverAction,
   deleteWorkAction,
+  setEditionVolumesAction,
 } from "@/app/actions";
 import { crumbSearch } from "@/lib/crumb";
 import ReleaseDatePicker from "@/components/ReleaseDatePicker";
@@ -30,6 +31,7 @@ export default function AdminWorkEdit({
   upcoming,
   releaseLabel,
   crumbInitial,
+  editions,
 }: {
   workId: number;
   pseudoId: number;
@@ -41,6 +43,7 @@ export default function AdminWorkEdit({
   upcoming: boolean;
   releaseLabel: string;
   crumbInitial: string;
+  editions: { id: number; label: string; volumes: number }[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -217,6 +220,19 @@ export default function AdminWorkEdit({
             <ReleaseDatePicker value={rel} onChange={setRel} />
           </div>
         )}
+        {editions.length > 0 && (
+          <div className="rounded-lg border border-border p-2">
+            <p className="mb-1 text-xs font-medium text-muted">Tomos por edición</p>
+            <div className="grid gap-1.5">
+              {editions.map((e) => (
+                <EditionVolumes key={e.id} edition={e} onSaved={() => router.refresh()} />
+              ))}
+            </div>
+            <p className="mt-1 text-[11px] text-muted">
+              El conteo que fijes acá queda bloqueado: el crawl no lo pisa.
+            </p>
+          </div>
+        )}
         <div>
           <label className="text-xs text-muted">
             Búsqueda en Crumb (lo que se usa en el botón "Comprar")
@@ -262,6 +278,48 @@ export default function AdminWorkEdit({
           “Series duplicadas”.
         </p>
       </div>
+    </div>
+  );
+}
+
+/** Fila para fijar a mano el conteo de tomos de una edición (admin). */
+function EditionVolumes({
+  edition,
+  onSaved,
+}: {
+  edition: { id: number; label: string; volumes: number };
+  onSaved: () => void;
+}) {
+  const [v, setV] = useState(String(edition.volumes));
+  const [saving, start] = useTransition();
+  const [ok, setOk] = useState(false);
+  const save = () =>
+    start(async () => {
+      const r = await setEditionVolumesAction(edition.id, Number(v));
+      if (r.ok) {
+        setOk(true);
+        setTimeout(() => setOk(false), 2000);
+        onSaved();
+      }
+    });
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="min-w-0 flex-1 truncate text-muted">{edition.label}</span>
+      <input
+        type="number"
+        min={0}
+        value={v}
+        onChange={(e) => setV(e.target.value)}
+        className="w-16 rounded-md border border-border bg-surface-2 px-2 py-1 text-center outline-none focus:border-accent"
+        aria-label={`Tomos de ${edition.label}`}
+      />
+      <button
+        onClick={save}
+        disabled={saving || v === String(edition.volumes)}
+        className="rounded-md border border-border px-2 py-1 transition hover:border-accent disabled:opacity-40"
+      >
+        {ok ? "✓" : "Fijar"}
+      </button>
     </div>
   );
 }

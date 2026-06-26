@@ -426,6 +426,11 @@ export default async function SeriePage({
               upcoming={work.upcoming}
               releaseLabel={work.releaseLabel ?? ""}
               crumbInitial={crumbQuery}
+              editions={work.editions.map((e) => ({
+                id: e.id,
+                label: e.publisher.replace(" Argentina", ""),
+                volumes: e.volumes,
+              }))}
             />
           )}
         </div>

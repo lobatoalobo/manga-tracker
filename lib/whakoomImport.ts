@@ -13,6 +13,18 @@ import {
 import { ovniSearchUrl } from "./ovni";
 import { getRejected, whakoomIdFromUrl } from "./rejectedSources";
 import { prisma } from "./prisma";
+import { storeCover } from "./coverStore";
+
+/**
+ * Portada del TOMO 1 (anti-spoiler): el og:image de la edición de Whakoom suele
+ * ser un tomo adelantado. Sacamos la del comic del tomo 1. null si no se puede.
+ */
+async function tomo1CoverUrl(volumesList: WhakoomVolume[]): Promise<string | null> {
+  const c = volumesList.find((v) => v.number === 1)?.comicId;
+  if (!c) return null;
+  const r = await fetchWhakoomHtml(`https://www.whakoom.com/comics/${c}`);
+  return r.ok ? (r.html.match(/og:image" content="([^"]+)"/i)?.[1]?.trim() ?? null) : null;
+}
 
 /**
  * Slug destino para una edición de Whakoom. Si ya existe una fila de esta misma
@@ -63,13 +75,28 @@ async function persistEditionIdentity(opts: {
   // OJO: NO guardamos releaseDate desde Whakoom. Su "Fecha de publicación" es la
   // fecha PASADA del tomo, no un lanzamiento futuro → inútil para "sale en X". La
   // fecha de salida es MANUAL (editor). Acá solo la usamos para detectar preventa.
+  // NO le pasamos la portada de la edición (suele ser un tomo adelantado/spoiler):
+  // la resolvemos abajo, priorizando la del tomo 1.
   const workId = await findOrCreateWork({
     title: opts.title,
     anilistId: opts.anilistId,
-    coverImage: opts.cover,
     author: opts.author,
     synopsis: opts.synopsis,
   }).catch(() => null);
+
+  // Portada = TOMO 1, SOLO si el work no tiene portada todavía (no re-fetcheamos
+  // para los existentes → no penaliza el crawl). Respeta lo curado a mano.
+  if (workId) {
+    const w = await prisma.work
+      .findUnique({ where: { id: workId }, select: { coverImage: true, curated: true } })
+      .catch(() => null);
+    if (w && !w.coverImage && !w.curated.includes("coverImage")) {
+      const t1 = (await tomo1CoverUrl(opts.volumesList).catch(() => null)) ?? opts.cover;
+      const cover = t1 ? await storeCover(t1).catch(() => null) : null;
+      if (cover)
+        await prisma.work.update({ where: { id: workId }, data: { coverImage: cover } }).catch(() => {});
+    }
+  }
 
   const data: { whakoomId?: string; workId?: number } = {};
   if (opts.whakoomId) data.whakoomId = opts.whakoomId;

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { workCardFlags, publisherKey, authorNameMatches, romajiKey } from "@/lib/catalog";
 import { volumeCap, isPlausibleVolume, publishedVolumes } from "@/lib/volumes";
+import { looksLikeComic } from "@/lib/contentType";
 import { parseStatus } from "@/lib/providers/mangaupdates";
 import { chooseIvreaEdition, type EdLite } from "@/lib/ivreaProximas";
 
@@ -40,6 +41,20 @@ describe("workCardFlags (banderas de la card)", () => {
 
   it("obra con edición publicada NO es isUpcoming aunque tenga el flag", () => {
     expect(workCardFlags([ivrea], true).isUpcoming).toBe(false);
+  });
+});
+
+describe("looksLikeComic (manga vs cómic en Panini)", () => {
+  it("cómics Marvel/DC = comic", () => {
+    for (const t of ["Spider-Man", "X-Men Legends", "Capitán América", "Los Cuatro Fantásticos", "Batman/Deadpool", "Marvel Omnibus: Eternos"])
+      expect(looksLikeComic(t)).toBe(true);
+  });
+  it("manga = NO comic", () => {
+    for (const t of ["Berserk", "Naruto", "Jujutsu Kaisen", "Zom 100", "One-Punch Man"])
+      expect(looksLikeComic(t)).toBe(false);
+  });
+  it("'... Manga' en el título fuerza manga (Star Wars Manga)", () => {
+    expect(looksLikeComic("Star Wars Manga")).toBe(false);
   });
 });
 

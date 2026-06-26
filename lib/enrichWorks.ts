@@ -67,19 +67,27 @@ export async function enrichWorks(opts: {
   onlyMissingCover?: boolean; // solo Works sin portada (recovery de portadas)
   onlyMissingGenres?: boolean; // solo Works sin géneros (re-match con la mejora)
   onlyMissingIdentity?: boolean; // solo Works sin mdId (backfill identidad + nombres)
+  publisher?: string; // acotar a works con una edición de esta editorial (ej. Panini)
   dryRun?: boolean;
 } = {}): Promise<EnrichResult> {
   const limit = opts.limit ?? 50;
+  const base = opts.onlyMissingCover
+    ? { coverImage: null }
+    : opts.onlyMissingGenres
+      ? { editions: { some: {} }, genres: { isEmpty: true } }
+      : opts.onlyMissingIdentity
+        ? { editions: { some: {} }, OR: [{ mdId: null }, { muId: null }] }
+        : opts.force
+          ? {}
+          : { enrichedAt: null };
+  // NUNCA enriquecer cómics: MU/MD son bases de manga (matchean mal los Marvel/DC
+  // y contaminan/fusionan). Ver memoria panini-classify. + filtro opcional por
+  // editorial (contains, robusto a "Panini" vs "Panini Argentina").
+  const and: object[] = [base, { type: { not: "COMIC" } }];
+  if (opts.publisher) and.push({ editions: { some: { publisher: { contains: opts.publisher } } } });
+  const where = { AND: and };
   const works = await dbRetry(() => prisma.work.findMany({
-    where: opts.onlyMissingCover
-      ? { coverImage: null }
-      : opts.onlyMissingGenres
-        ? { editions: { some: {} }, genres: { isEmpty: true } }
-        : opts.onlyMissingIdentity
-          ? { editions: { some: {} }, OR: [{ mdId: null }, { muId: null }] }
-          : opts.force
-            ? {}
-            : { enrichedAt: null },
+    where,
     take: limit,
     orderBy: { id: "asc" },
     select: {

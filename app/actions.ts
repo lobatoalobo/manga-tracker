@@ -612,6 +612,23 @@ export async function updateEditionAction(
   revalidatePath("/admin/mapeos");
 }
 
+/**
+ * Fija a mano el conteo de tomos de una edición (corrige conteos que la fuente
+ * trae mal, ej. Naruto). Marca `volumesLocked` para que el crawl NO lo pise. Solo
+ * admin. El display de la ficha usa `edition.volumes`, así que se ve al instante.
+ */
+export async function setEditionVolumesAction(id: number, volumes: number) {
+  await assertAdmin();
+  if (!Number.isInteger(volumes) || volumes < 0 || volumes > 2000)
+    return { ok: false as const, error: "Conteo inválido." };
+  await prisma.publisherEdition.update({
+    where: { id },
+    data: { volumes, volumesLocked: true },
+  });
+  revalidatePath("/catalogo");
+  return { ok: true as const };
+}
+
 /** Borra una entrada del catálogo (edición fantasma / duplicada / sin tomos). */
 export async function deleteEditionAction(id: number) {
   await assertAdmin();
