@@ -24,9 +24,11 @@ async function main() {
   const onlyMissingGenres = process.argv.includes("--missing-genres");
   const onlyMissingIdentity = process.argv.includes("--missing-identity");
   const publisher = arg("--publisher"); // ej. "Panini" (contains, robusto)
-  const pubWhere = publisher
-    ? { editions: { some: { publisher: { contains: publisher } } } }
-    : {};
+  // Nunca contar/enriquecer cómics (MU/MD son de manga). + filtro por editorial.
+  const pubWhere: object = {
+    type: { not: "COMIC" },
+    ...(publisher ? { editions: { some: { publisher: { contains: publisher } } } } : {}),
+  };
 
   // dbRetry: el endpoint directo de Neon tira P1001 en cold-start (este count es
   // lo primero que toca la base). Ver memoria maintenance-tooling-robust.

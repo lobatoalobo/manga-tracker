@@ -80,11 +80,12 @@ export async function enrichWorks(opts: {
         : opts.force
           ? {}
           : { enrichedAt: null };
-  // Filtro opcional por editorial: works con al menos una edición cuyo publisher
-  // contenga `publisher` (contains, robusto a "Panini" vs "Panini Argentina").
-  const where = opts.publisher
-    ? { AND: [base, { editions: { some: { publisher: { contains: opts.publisher } } } }] }
-    : base;
+  // NUNCA enriquecer cómics: MU/MD son bases de manga (matchean mal los Marvel/DC
+  // y contaminan/fusionan). Ver memoria panini-classify. + filtro opcional por
+  // editorial (contains, robusto a "Panini" vs "Panini Argentina").
+  const and: object[] = [base, { type: { not: "COMIC" } }];
+  if (opts.publisher) and.push({ editions: { some: { publisher: { contains: opts.publisher } } } });
+  const where = { AND: and };
   const works = await dbRetry(() => prisma.work.findMany({
     where,
     take: limit,
