@@ -469,6 +469,9 @@ model PublisherEdition {
   // cuenta como "sin mapear". P. ej. cómics occidentales que vende Ivrea.
   nationalOnly Boolean @default(false)
   volumes      Int
+  // Conteo de tomos editado a mano por el admin: el crawl (upsertPublisherEdition)
+  // NO lo pisa cuando está en true. Para corregir conteos que la fuente trae mal.
+  volumesLocked Boolean @default(false)
   // Sinopsis de ESTA edición, en su idioma (ES de Ivrea/Whakoom, EN de VIZ). Para
   // obras con edición ES + EN (ej. Rai Rai Rai) que no deben pisarse entre sí.
   synopsis        String?

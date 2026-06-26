@@ -232,12 +232,19 @@ export async function upsertPublisherEdition(e: {
   // Solo escribimos synopsis si vino (no la borramos en updates que no la traen).
   const syn = e.synopsis ? { synopsis: e.synopsis } : {};
   const title = decodeEntities(e.title);
+  // Si el admin fijó el conteo a mano (volumesLocked), NO lo pisamos con el de la
+  // fuente. Ver setEditionVolumesAction.
+  const existing = await prisma.publisherEdition.findUnique({
+    where: { publisher_slug: { publisher: e.publisher, slug: e.slug } },
+    select: { volumesLocked: true },
+  });
+  const volField = existing?.volumesLocked ? {} : { volumes: e.volumes };
   await prisma.publisherEdition.upsert({
     where: { publisher_slug: { publisher: e.publisher, slug: e.slug } },
     update: {
       title,
       normTitle: normalizeTitle(title),
-      volumes: e.volumes,
+      ...volField,
       status: e.status ?? null,
       url: e.url,
       ...intl,
