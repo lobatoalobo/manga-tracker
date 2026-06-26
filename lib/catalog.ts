@@ -47,12 +47,12 @@ export const PUBLISHERS = [
 ] as const;
 
 /**
- * Editoriales que el catálogo MUESTRA hoy (MVP = solo Ivrea, la fuente más
- * validada y con fechas/próximos). Las demás (Panini/Ovni argentinas y las
- * españolas Distrito/Kemuri/Utopía/Larp/Planeta) están en la base pero NO se
- * listan en el browse/búsqueda hasta sumarlas bien. Ampliar acá cuando toque.
+ * Editoriales nacionales que el catálogo MUESTRA. Ivrea (la más validada, con
+ * fechas/próximos) + Panini (manga; sus cómics Marvel/DC se ocultan por
+ * `type=COMIC` hasta integrar GCD). Ovni y las españolas siguen en la base pero
+ * NO listadas hasta sumarlas bien. Ampliar acá cuando toque.
  */
-export const CATALOG_PUBLISHERS = ["Ivrea Argentina"] as const;
+export const CATALOG_PUBLISHERS = ["Ivrea Argentina", "Panini Argentina"] as const;
 
 /**
  * Editoriales EXTRANJERAS que el catálogo muestra en la sección Internacional
@@ -82,14 +82,21 @@ export const VISIBLE_PUBLISHERS = [
  */
 export function inCatalogWhere(): import("@prisma/client").Prisma.WorkWhereInput {
   return {
-    OR: [
-      // Tiene una edición visible (Ivrea/VIZ). NO exigimos volumes>0: una serie
-      // real puede tener 0 tomos por un gap de conteo (Whakoom) o por ser
-      // reciente — mejor mostrarla que hacerla desaparecer. (El conteo lo arregla
-      // el crawl; el caso novela/artbook se resuelve con Work.type, no ocultando.)
-      { editions: { some: { publisher: { in: [...VISIBLE_PUBLISHERS] } } } },
-      // O es un debut GENUINO: próximo a salir y sin NINGUNA edición todavía.
-      { upcoming: true, editions: { none: {} } },
+    // Los cómics (Marvel/DC de Panini) se ocultan del catálogo hasta integrar GCD.
+    // Ver memoria panini-classify. El default es MANGA, así que no afecta a Ivrea.
+    AND: [
+      { type: { not: "COMIC" } },
+      {
+        OR: [
+          // Tiene una edición visible (Ivrea/Panini/VIZ). NO exigimos volumes>0:
+          // una serie real puede tener 0 tomos por un gap de conteo (Whakoom) o por
+          // ser reciente — mejor mostrarla que hacerla desaparecer. (El conteo lo
+          // arregla el crawl; novela/artbook se resuelve con Work.type, no ocultando.)
+          { editions: { some: { publisher: { in: [...VISIBLE_PUBLISHERS] } } } },
+          // O es un debut GENUINO: próximo a salir y sin NINGUNA edición todavía.
+          { upcoming: true, editions: { none: {} } },
+        ],
+      },
     ],
   };
 }
