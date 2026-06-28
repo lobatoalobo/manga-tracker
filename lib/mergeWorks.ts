@@ -127,6 +127,62 @@ function canonicalEdition(eds: EditionDupEdition[]): EditionDupEdition {
  * Auto-resuelve las ediciones redundantes del MISMO Work: mantiene la canónica y
  * borra las extra. Self-healing para el caso I"s. Devuelve cuántas borró.
  */
+const collapseSlug = (s: string) => s.replace(/[^a-z0-9]/g, "");
+
+export interface EdLite {
+  id: number;
+  slug: string;
+  volumes: number;
+  vrows: number; // filas en volumesList (0 = edición "vacía")
+}
+
+/**
+ * De un grupo de ediciones del MISMO publisher, cuáles son duplicados vacíos a
+ * borrar: las VACÍAS (vrows 0) que tienen un hermano CON tomos del mismo conteo
+ * —o el mismo slug colapsado—. Pura y testeable. Conservadora: NO marca variantes
+ * legítimas (otro conteo y con datos) ni mis-merges (series distintas). Cubre el
+ * caso Takagi/Spy×Family/Fushigi que el merge dejaba suelto.
+ */
+export function emptyDuplicateEditions(group: EdLite[]): EdLite[] {
+  return group.filter(
+    (e) =>
+      e.vrows === 0 &&
+      group.some(
+        (s) =>
+          s.id !== e.id &&
+          s.vrows > 0 &&
+          (s.volumes === e.volumes || collapseSlug(s.slug) === collapseSlug(e.slug)),
+      ),
+  );
+}
+
+/**
+ * Limpia ediciones redundantes de UN Work tras una fusión (ver
+ * `emptyDuplicateEditions`). Devuelve cuántas borró.
+ */
+export async function cleanRedundantEditionsForWork(workId: number): Promise<number> {
+  const eds = await prisma.publisherEdition.findMany({
+    where: { workId },
+    select: {
+      id: true, publisher: true, slug: true, volumes: true,
+      _count: { select: { volumesList: true } },
+    },
+  });
+  const byPub = new Map<string, EdLite[]>();
+  for (const e of eds)
+    (byPub.get(e.publisher) ?? byPub.set(e.publisher, []).get(e.publisher)!).push({
+      id: e.id, slug: e.slug, volumes: e.volumes, vrows: e._count.volumesList,
+    });
+  let deleted = 0;
+  for (const [, group] of byPub) {
+    for (const e of emptyDuplicateEditions(group)) {
+      await prisma.publisherEdition.delete({ where: { id: e.id } }).catch(() => {});
+      deleted++;
+    }
+  }
+  return deleted;
+}
+
 export async function cleanRedundantEditions(): Promise<number> {
   const groups = (await getEditionDuplicateGroups()).filter((g) => g.sameWork);
   let deleted = 0;

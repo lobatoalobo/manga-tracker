@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { workCardFlags, publisherKey, authorNameMatches, romajiKey } from "@/lib/catalog";
 import { volumeCap, isPlausibleVolume, publishedVolumes } from "@/lib/volumes";
 import { looksLikeComic } from "@/lib/contentType";
+import { emptyDuplicateEditions, type EdLite as DupEd } from "@/lib/mergeWorks";
 import { parseStatus } from "@/lib/providers/mangaupdates";
 import { chooseIvreaEdition, type EdLite } from "@/lib/ivreaProximas";
 
@@ -73,6 +74,31 @@ describe("publishedVolumes (capar sobre-conteo por tomo futuro)", () => {
   });
   it("ya correcto es idempotente (1 tomo, próximo #2)", () => {
     expect(publishedVolumes(1, 2)).toBe(1);
+  });
+});
+
+describe("emptyDuplicateEditions (dedup tras merge)", () => {
+  const ed = (id: number, slug: string, volumes: number, vrows: number): DupEd =>
+    ({ id, slug, volumes, vrows });
+  it("Takagi: borra la vacía con mismo conteo (bug del merge)", () => {
+    const g = [ed(1, "takagi-la-maestra-de-las-bromas", 20, 20), ed(2, "takagi-san", 20, 0)];
+    expect(emptyDuplicateEditions(g).map((e) => e.id)).toEqual([2]);
+  });
+  it("Spy×Family: borra la vacía con slug colapsado igual", () => {
+    const g = [ed(1, "spy-x-family", 16, 17), ed(2, "spyxfamily", 16, 0)];
+    expect(emptyDuplicateEditions(g).map((e) => e.id)).toEqual([2]);
+  });
+  it("variante legítima (con datos, otro conteo) NO se borra", () => {
+    const g = [ed(1, "given", 9, 9), ed(2, "given-illustrations", 1, 1)];
+    expect(emptyDuplicateEditions(g)).toEqual([]);
+  });
+  it("mis-merge (series distintas, ambas con datos) NO se toca", () => {
+    const g = [ed(1, "re-zero-capitulo-1", 2, 2), ed(2, "re-zero-capitulo-2", 5, 5)];
+    expect(emptyDuplicateEditions(g)).toEqual([]);
+  });
+  it("ambas vacías → no borra ninguna (sin hermano con datos)", () => {
+    const g = [ed(1, "a", 5, 0), ed(2, "ab", 5, 0)];
+    expect(emptyDuplicateEditions(g)).toEqual([]);
   });
 });
 
