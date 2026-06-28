@@ -118,6 +118,27 @@ describe("romajiKey (puente VIZ-EN ↔ Ivrea-ES por romaji)", () => {
   });
 });
 
+describe("looksLikeComic (manga vs cómic)", () => {
+  it("título Marvel/DC → cómic", () => {
+    expect(looksLikeComic("Spider-Man")).toBe(true);
+    expect(looksLikeComic("Batman/Deadpool")).toBe(true);
+  });
+  it("autor de cómic → cómic aunque el título no lo diga (Tokyo Ghost, Saga)", () => {
+    expect(looksLikeComic("Tokyo Ghost", "Rick Remender")).toBe(true);
+    expect(looksLikeComic("Saga", "Brian K. Vaughan")).toBe(true);
+  });
+  it("manga con autor japonés → NO cómic", () => {
+    expect(looksLikeComic("Sankarea", "Mitsuru Hattori")).toBe(false);
+    expect(looksLikeComic("Berserk", "Kentaro Miura")).toBe(false);
+  });
+  it("'enamorarse' NO matchea (no más falso positivo namor)", () => {
+    expect(looksLikeComic("Demasiado cerca para enamorarse", "Nakata Akira")).toBe(false);
+  });
+  it("'Star Wars Manga' es manga", () => {
+    expect(looksLikeComic("Star Wars Manga", "Hisao Tamaki")).toBe(false);
+  });
+});
+
 describe("authorNameMatches (autor por nombre, no substring)", () => {
   it("'ONE' NO matchea 'BONES' ni 'Kurone' (bug Carole/Konosuba)", () => {
     expect(authorNameMatches("ONE", "BONES, Shinichiro Watanabe")).toBe(false);

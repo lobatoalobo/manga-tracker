@@ -15,7 +15,7 @@ const COMIC_TERMS = [
   "spider-man", "spiderman", "spider-boy", "spider-gwen", "spider-cero", "spider-verse",
   "x-men", "x-treme", "x-force", "avengers", "wolverine", "deadpool", "venom", "carnage",
   "hulk", "thor", "iron man", "iron-man", "capitán américa", "captain america",
-  "daredevil", "moon knight", "doctor strange", "ghost rider", "punisher", "namor",
+  "daredevil", "moon knight", "doctor strange", "ghost rider", "punisher",
   "cuatro fantásticos", "4 fantasticos", "fantastic four", "guardianes de la galaxia",
   "black panther", "pantera negra", "capitana marvel", "capitán marvel", "captain marvel",
   "silver surfer", "eternos", "eternals", "shang-chi", "miles morales", "gambit",
@@ -48,10 +48,28 @@ const MANGA_OVERRIDES = [
   "star wars manga",
 ];
 
-/** ¿El título parece un cómic occidental (Marvel/DC/indie)? */
-export function looksLikeComic(title: string): boolean {
+// Autores de cómic occidental/argentino: su obra es COMIC aunque el título no
+// tenga una marca Marvel/DC (clave para editoriales indie como Utopía/Ovni).
+const COMIC_AUTHORS = [
+  "mark millar", "rick remender", "gerard way", "paco roca", "neil gaiman",
+  "brian k. vaughan", "garth ennis", "joe kelly", "jamie hewlett", "simon spurrier",
+  "bastien", "manu larcenet", "gustavo duarte", "juan díaz canales", "luciano saracino",
+  "ariel olivetti", "enrique alcatena", "salvador sanz",
+];
+
+/**
+ * ¿Parece un cómic occidental? Por título (marcas Marvel/DC/indie) o por autor
+ * (lista de autores de cómic). El autor desambigua los indie que el título no
+ * delata (Tokyo Ghost, Saga, Umbrella Academy…), incluso si matchean MU/MD.
+ */
+export function looksLikeComic(title: string, author?: string | null): boolean {
   const t = title.toLowerCase();
   if (/\bmanga\b/.test(t)) return false; // "Star Wars Manga", "… Manga"
   if (MANGA_OVERRIDES.some((m) => t.includes(m))) return false;
-  return COMIC_TERMS.some((term) => t.includes(term));
+  if (COMIC_TERMS.some((term) => t.includes(term))) return true;
+  if (author) {
+    const a = author.toLowerCase();
+    if (COMIC_AUTHORS.some((x) => a.includes(x))) return true;
+  }
+  return false;
 }
