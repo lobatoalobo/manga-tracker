@@ -23,6 +23,7 @@ import {
   unlinkWorkAnilist,
   deleteWork,
   cleanRedundantEditions,
+  cleanRedundantEditionsForWork,
   cleanOrphanWorks,
 } from "@/lib/mergeWorks";
 import { renameAuthor } from "@/lib/authorMerge";
@@ -265,9 +266,12 @@ export async function deleteReportAction(id: number) {
 export async function mergeWorksAction(sourceId: number, targetId: number) {
   await assertAdmin();
   await mergeWorks(sourceId, targetId);
+  // Tras fusionar, limpiar las ediciones redundantes que quedan (misma editorial,
+  // una vacía duplicando a otra) — antes había que borrarlas a mano (caso Takagi).
+  const cleaned = await cleanRedundantEditionsForWork(targetId);
   revalidatePath("/admin/duplicados");
   revalidatePath("/catalogo");
-  return { ok: true as const };
+  return { ok: true as const, cleaned };
 }
 
 /**
