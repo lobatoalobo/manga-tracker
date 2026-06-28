@@ -22,6 +22,7 @@ import UsaFlag from "@/components/UsaFlag";
 import { CATALOG_PUBLISHERS, INTL_PUBLISHERS } from "@/lib/catalog";
 import WishButton from "@/components/WishButton";
 import TrackingPanel from "@/components/TrackingPanel";
+import ReadingLinks, { type ReadingLink } from "@/components/ReadingLinks";
 import { SignIn } from "@/components/AuthButtons";
 import type { Edition } from "@/lib/editions";
 
@@ -448,6 +449,11 @@ export default async function SeriePage({
           📅 La sinopsis y los datos completos se cargan cuando sale la serie.
         </p>
       ) : null}
+
+      <ReadingLinks
+        links={work.readingLinks as ReadingLink[] | null}
+        mdId={work.mdId}
+      />
 
       {series && series.editions.length > 0 && (
         <TrackingPanel

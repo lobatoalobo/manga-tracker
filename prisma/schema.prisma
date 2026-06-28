@@ -434,6 +434,10 @@ model Work {
   // MU/MD + heurística occidental. Override manual en el editor admin (curated).
   // Valores: MANGA | COMIC | LIGHT_NOVEL | ARTBOOK | DATABOOK | OTHER.
   type        String  @default("MANGA")
+  // Links de lectores LEGALES (MANGA Plus, VIZ…), curados por AniList (type
+  // STREAMING). Array de {url, site, language}. Se rellena por batch (sin AniList
+  // en runtime). El botón "Leer en MangaDex" se deriva del mdId, no se guarda acá.
+  readingLinks Json?
   // Cuándo se enriqueció desde MU/MD (null = pendiente). Para el job batch.
   enrichedAt DateTime?
   upcoming   Boolean  @default(false) // "Próximo a salir" en AR (preventa/anunciada)
