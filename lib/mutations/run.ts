@@ -81,16 +81,11 @@ export async function runMutation<I, P = void>(
   const metrics: AffectedCounts | null =
     preview?.affected ?? options.metadata?.affected ?? null;
 
-  // 3. POLICY / circuit-breaker
+  // 3. POLICY / circuit-breaker (también en dry-run: avisa que SERÍA bloqueado)
   checkPolicy(definition.policy, options.limits, metrics);
 
-  // 4. CONFIRM (según operación + entorno)
-  if (confirmationRequired(definition.policy, ctx.env)) {
-    const ok = options.confirm ? await options.confirm(ctx, definition, preview) : false;
-    if (!ok) throw new ConfirmationRequiredError();
-  }
-
-  // Dry-run: auditar el intento y parar (execute NO se llama).
+  // Dry-run: auditar el intento y parar (execute NO se llama). Un preview no
+  // confirma nada — la confirmación gatea solo la ejecución real (paso 4).
   if (dryRun) {
     await audit("attempt", {
       affected: metrics ?? undefined,
@@ -99,6 +94,12 @@ export async function runMutation<I, P = void>(
       durationMs: Date.now() - started,
     });
     return { dryRun, skipped: false, affected: metrics, preview, correlationId: ctx.correlationId };
+  }
+
+  // 4. CONFIRM (según operación + entorno) — solo antes de ejecutar de verdad.
+  if (confirmationRequired(definition.policy, ctx.env)) {
+    const ok = options.confirm ? await options.confirm(ctx, definition, preview) : false;
+    if (!ok) throw new ConfirmationRequiredError();
   }
 
   // 5. EXECUTE (transacción + R1: re-validar adentro antes de escribir)

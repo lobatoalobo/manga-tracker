@@ -401,40 +401,43 @@ async function rekeyDomain(tx: Tx, from: number, to: number): Promise<void> {
   }
 }
 
+/** Campos del Work que la fusión lee para decidir backfill/identidad. */
+export const mergeWorkSelect = {
+  id: true, title: true, anilistId: true, coverImage: true, author: true,
+  synopsis: true, originalTitle: true, upcoming: true,
+  // Identidad externa + nombres + sinopsis multi-idioma: hay que preservarlos
+  // CUALQUIERA sea la dirección de la fusión (típico: el target nacional/ES no
+  // tiene muId/mdId/titleEn y el source VIZ sí). Ver redesign de datos.
+  muId: true, mdId: true, titleEn: true, titleNative: true, assistants: true,
+  synopsisEs: true, synopsisEn: true, synopsisEsAuto: true, synopsisEnAuto: true,
+  demographic: true, genres: true, rawGenres: true,
+} satisfies Prisma.WorkSelect;
+
+export type MergeWorkRow = Prisma.WorkGetPayload<{ select: typeof mergeWorkSelect }>;
+
+export interface MergePlan {
+  sourceId: number;
+  targetId: number;
+  finalKey: number;
+  srcOldKey: number;
+  tgtOldKey: number;
+  /** Campos @unique a liberar en el source ANTES de pasarlos al target. */
+  free: Record<string, null>;
+  /** Backfill de campos vacíos del target desde el source. */
+  patch: Record<string, unknown>;
+}
+
 /**
- * Fusiona dos `Work` que son la MISMA serie pero quedaron separados (típico: una
- * edición se importó sin anilistId → Work por título; el anilistId se resolvió
- * después sobre la edición y nunca reconcilió el Work). Ver lib/catalog
- * `findOrCreateWork` y la memoria anilist-removal.
- *
- * Mueve las ediciones del `source` al `target`, re-clavea TODA la data de usuario
- * que vive en el "espacio de ids del dominio" (anilistId; para obras locales la
- * clave es `-workId`), resolviendo los choques de unicidad por usuario, y borra el
- * Work source. El `target` es el que se conserva (elegí el que tiene anilistId /
- * mejor ficha). Idempotente-ish: si no hay nada que mover, no rompe.
+ * Decide QUÉ cambia la fusión (PLAN puro, sin DB). Lo consumen tanto `mergeWorks`
+ * como la mutación `mergeWork` (preview lo arma, execute lo aplica) — una sola
+ * lógica, cero drift. Ver docs/mutation-framework.md.
  */
-export async function mergeWorks(
+export function buildMergePlan(
   sourceId: number,
   targetId: number,
-): Promise<MergeReport> {
-  if (sourceId === targetId) throw new Error("source y target son el mismo Work");
-  const sel = {
-    id: true, anilistId: true, coverImage: true, author: true,
-    synopsis: true, originalTitle: true, upcoming: true,
-    // Identidad externa + nombres + sinopsis multi-idioma: hay que preservarlos
-    // CUALQUIERA sea la dirección de la fusión (típico: el target nacional/ES no
-    // tiene muId/mdId/titleEn y el source VIZ sí). Ver redesign de datos.
-    muId: true, mdId: true, titleEn: true, titleNative: true, assistants: true,
-    synopsisEs: true, synopsisEn: true, synopsisEsAuto: true, synopsisEnAuto: true,
-    demographic: true, genres: true, rawGenres: true,
-  } as const;
-  const [src, tgt] = await Promise.all([
-    prisma.work.findUnique({ where: { id: sourceId }, select: sel }),
-    prisma.work.findUnique({ where: { id: targetId }, select: sel }),
-  ]);
-  if (!src) throw new Error(`Work source ${sourceId} no existe`);
-  if (!tgt) throw new Error(`Work target ${targetId} no existe`);
-
+  src: MergeWorkRow,
+  tgt: MergeWorkRow,
+): MergePlan {
   // Clave de dominio de cada Work: positiva = anilistId (la colección/deseados se
   // clavan por el anilistId de la serie), negativa = -id para obras locales. El
   // target PUEDE adquirir el anilistId del source en el backfill; su clave final
@@ -442,63 +445,90 @@ export async function mergeWorks(
   const finalKey = tgt.anilistId ?? src.anilistId ?? -targetId;
   const srcOldKey = src.anilistId ?? -sourceId;
   const tgtOldKey = tgt.anilistId ?? -targetId;
-  let editionsMoved = 0;
 
+  const free: Record<string, null> = {};
+  if (src.anilistId) free.anilistId = null;
+  if (src.muId) free.muId = null;
+  if (src.mdId) free.mdId = null;
+
+  const patch: Record<string, unknown> = {};
+  if (!tgt.anilistId && src.anilistId) patch.anilistId = src.anilistId;
+  if (!tgt.coverImage && src.coverImage) patch.coverImage = src.coverImage;
+  if (!tgt.author && src.author) patch.author = src.author;
+  if (!tgt.synopsis && src.synopsis) patch.synopsis = src.synopsis;
+  if (!tgt.originalTitle && src.originalTitle) patch.originalTitle = src.originalTitle;
+  if (!tgt.upcoming && src.upcoming) patch.upcoming = true;
+  if (!tgt.muId && src.muId) patch.muId = src.muId;
+  if (!tgt.mdId && src.mdId) patch.mdId = src.mdId;
+  if (!tgt.titleEn && src.titleEn) patch.titleEn = src.titleEn;
+  if (!tgt.titleNative && src.titleNative) patch.titleNative = src.titleNative;
+  if (!tgt.assistants?.length && src.assistants?.length) patch.assistants = src.assistants;
+  if (!tgt.synopsisEs && src.synopsisEs) {
+    patch.synopsisEs = src.synopsisEs;
+    patch.synopsisEsAuto = src.synopsisEsAuto;
+  }
+  if (!tgt.synopsisEn && src.synopsisEn) {
+    patch.synopsisEn = src.synopsisEn;
+    patch.synopsisEnAuto = src.synopsisEnAuto;
+  }
+  if (!tgt.demographic && src.demographic) patch.demographic = src.demographic;
+  if (!tgt.genres?.length && src.genres?.length) patch.genres = src.genres;
+  if (!tgt.rawGenres?.length && src.rawGenres?.length) patch.rawGenres = src.rawGenres;
+
+  return { sourceId, targetId, finalKey, srcOldKey, tgtOldKey, free, patch };
+}
+
+/**
+ * APLICA un `MergePlan` dentro de una transacción ya abierta. Devuelve cuántas
+ * ediciones movió. No lee identidad ni decide nada (eso es `buildMergePlan`).
+ */
+export async function applyMergeInTx(tx: Tx, plan: MergePlan): Promise<number> {
+  // 1) Ediciones del source → target (el núcleo del dedup).
+  const moved = await tx.publisherEdition.updateMany({
+    where: { workId: plan.sourceId },
+    data: { workId: plan.targetId },
+  });
+  // 2) Liberar @unique del source y backfill del target.
+  if (Object.keys(plan.free).length)
+    await tx.work.update({ where: { id: plan.sourceId }, data: plan.free });
+  if (Object.keys(plan.patch).length)
+    await tx.work.update({ where: { id: plan.targetId }, data: plan.patch });
+  // 3) Re-clave de TODA la data de usuario de ambas claves viejas → la final.
+  if (plan.srcOldKey !== plan.finalKey) await rekeyDomain(tx, plan.srcOldKey, plan.finalKey);
+  if (plan.tgtOldKey !== plan.finalKey) await rekeyDomain(tx, plan.tgtOldKey, plan.finalKey);
+  // 4) Borrar el Work source (sus ediciones ya se movieron).
+  await tx.work.delete({ where: { id: plan.sourceId } });
+  return moved.count;
+}
+
+/**
+ * Fusiona dos `Work` que son la MISMA serie pero quedaron separados (típico: una
+ * edición se importó sin anilistId → Work por título; el anilistId se resolvió
+ * después sobre la edición y nunca reconcilió el Work). Ver lib/catalog
+ * `findOrCreateWork` y la memoria anilist-removal.
+ *
+ * El `target` es el que se conserva (elegí el que tiene anilistId / mejor ficha).
+ * La nueva mutación `mergeWork` (lib/catalog/mutations) envuelve esto con
+ * validación de "misma serie" + preview + audit; este wrapper queda para los
+ * scripts/colas que ya lo usan.
+ */
+export async function mergeWorks(
+  sourceId: number,
+  targetId: number,
+): Promise<MergeReport> {
+  if (sourceId === targetId) throw new Error("source y target son el mismo Work");
+  const [src, tgt] = await Promise.all([
+    prisma.work.findUnique({ where: { id: sourceId }, select: mergeWorkSelect }),
+    prisma.work.findUnique({ where: { id: targetId }, select: mergeWorkSelect }),
+  ]);
+  if (!src) throw new Error(`Work source ${sourceId} no existe`);
+  if (!tgt) throw new Error(`Work target ${targetId} no existe`);
+
+  const plan = buildMergePlan(sourceId, targetId, src, tgt);
+  let editionsMoved = 0;
   await prisma.$transaction(
     async (tx) => {
-      // 1) Ediciones del source → target (el núcleo del dedup).
-      const moved = await tx.publisherEdition.updateMany({
-        where: { workId: sourceId },
-        data: { workId: targetId },
-      });
-      editionsMoved = moved.count;
-
-      // `anilistId`/`muId`/`mdId` son @unique: liberamos los del source ANTES de
-      // pasarlos al target (si no, el update del target choca porque el source aún
-      // los tiene). El source se borra al final igual, así que nullearlos es seguro.
-      const free: Record<string, unknown> = {};
-      if (src.anilistId) free.anilistId = null;
-      if (src.muId) free.muId = null;
-      if (src.mdId) free.mdId = null;
-      if (Object.keys(free).length)
-        await tx.work.update({ where: { id: sourceId }, data: free });
-
-      // 2) Backfill de campos del target desde el source (sin pisar lo existente).
-      const patch: Record<string, unknown> = {};
-      if (!tgt.anilistId && src.anilistId) patch.anilistId = src.anilistId;
-      if (!tgt.coverImage && src.coverImage) patch.coverImage = src.coverImage;
-      if (!tgt.author && src.author) patch.author = src.author;
-      if (!tgt.synopsis && src.synopsis) patch.synopsis = src.synopsis;
-      if (!tgt.originalTitle && src.originalTitle) patch.originalTitle = src.originalTitle;
-      if (!tgt.upcoming && src.upcoming) patch.upcoming = true;
-      // Identidad externa + nombres + sinopsis multi-idioma + géneros/demografía.
-      if (!tgt.muId && src.muId) patch.muId = src.muId;
-      if (!tgt.mdId && src.mdId) patch.mdId = src.mdId;
-      if (!tgt.titleEn && src.titleEn) patch.titleEn = src.titleEn;
-      if (!tgt.titleNative && src.titleNative) patch.titleNative = src.titleNative;
-      if (!tgt.assistants?.length && src.assistants?.length) patch.assistants = src.assistants;
-      if (!tgt.synopsisEs && src.synopsisEs) {
-        patch.synopsisEs = src.synopsisEs;
-        patch.synopsisEsAuto = src.synopsisEsAuto;
-      }
-      if (!tgt.synopsisEn && src.synopsisEn) {
-        patch.synopsisEn = src.synopsisEn;
-        patch.synopsisEnAuto = src.synopsisEnAuto;
-      }
-      if (!tgt.demographic && src.demographic) patch.demographic = src.demographic;
-      if (!tgt.genres?.length && src.genres?.length) patch.genres = src.genres;
-      if (!tgt.rawGenres?.length && src.rawGenres?.length) patch.rawGenres = src.rawGenres;
-      if (Object.keys(patch).length)
-        await tx.work.update({ where: { id: targetId }, data: patch });
-
-      // 3) Re-clave de TODA la data de usuario de ambas claves viejas → la final.
-      //    (Para una fusión mixta local+anilistId, las claves difieren; para la
-      //    cola automática suelen coincidir y queda no-op.)
-      if (srcOldKey !== finalKey) await rekeyDomain(tx, srcOldKey, finalKey);
-      if (tgtOldKey !== finalKey) await rekeyDomain(tx, tgtOldKey, finalKey);
-
-      // 4) Borrar el Work source (sus ediciones ya se movieron).
-      await tx.work.delete({ where: { id: sourceId } });
+      editionsMoved = await applyMergeInTx(tx, plan);
     },
     { timeout: 30000 },
   );
