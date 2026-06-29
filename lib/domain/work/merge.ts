@@ -50,6 +50,27 @@ export interface MergePlan {
   patch: Record<string, unknown>;
 }
 
+/** Forma mínima para comparar títulos (la usan `titlesAgree` y `sameSeries`). */
+export interface TitledWork {
+  title: string;
+  originalTitle: string | null;
+}
+
+/**
+ * Átomo compartido: ¿dos obras coinciden por TÍTULO (estricto) o ROMAJI base,
+ * SIN mirar ids externos? Conserva "+": Citrus ≠ Citrus+. Lo usa `sameSeries` (como
+ * una de sus señales) y el guard anti-over-merge de `enrichWorks` (que justamente
+ * NO debe confiar en el id externo en disputa). Antes estaba duplicado en ambos.
+ */
+export function titlesAgree(a: TitledWork, b: TitledWork): boolean {
+  if (tightTitleKey(a.title) === tightTitleKey(b.title)) return true;
+  return (
+    !!a.originalTitle &&
+    !!b.originalTitle &&
+    romajiKey(a.originalTitle) === romajiKey(b.originalTitle)
+  );
+}
+
 /**
  * Invariante del merge — la causa raíz de los over-merge fue NO tener esto: el
  * matcher pegaba el muId de una serie base a un spin-off y se fusionaban series
@@ -64,11 +85,8 @@ export function sameSeries(a: SeriesIdentity, b: SeriesIdentity): boolean {
   if (a.anilistId && a.anilistId === b.anilistId) return true;
   if (a.muId && a.muId === b.muId) return true;
   if (a.mdId && a.mdId === b.mdId) return true;
-  // …o mismo título estricto / mismo romaji base (conserva "+": Citrus ≠ Citrus+).
-  if (tightTitleKey(a.title) === tightTitleKey(b.title)) return true;
-  if (a.originalTitle && b.originalTitle && romajiKey(a.originalTitle) === romajiKey(b.originalTitle))
-    return true;
-  return false;
+  // …o coincidencia de título/romaji.
+  return titlesAgree(a, b);
 }
 
 /**

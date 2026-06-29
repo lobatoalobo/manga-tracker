@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sameSeries, type SeriesIdentity } from "@/lib/domain/work/merge";
+import { sameSeries, titlesAgree, type SeriesIdentity } from "@/lib/domain/work/merge";
 
 const W = (o: Partial<SeriesIdentity>): SeriesIdentity => ({
   title: "", anilistId: null, muId: null, mdId: null, originalTitle: null, ...o,
@@ -36,5 +36,21 @@ describe("sameSeries (invariante del merge)", () => {
   });
   it("NO fusiona una serie con su secuela (Citrus vs Citrus+)", () => {
     expect(sameSeries(W({ title: "Citrus" }), W({ title: "Citrus+" }))).toBe(false);
+  });
+});
+
+describe("titlesAgree (átomo compartido con el guard de enrich)", () => {
+  const T = (title: string, originalTitle: string | null = null) => ({ title, originalTitle });
+  it("coincide por título estricto (ignora mayúsculas/acentos)", () => {
+    expect(titlesAgree(T("El Callejón"), T("el callejon"))).toBe(true);
+  });
+  it("coincide por romaji base aunque difiera el título traducido", () => {
+    expect(titlesAgree(T("The Alley", "Rojiura (ITO Junji)"), T("El Callejón", "ROJIURA"))).toBe(true);
+  });
+  it("NO coincide base vs spin-off (el caso del over-merge)", () => {
+    expect(titlesAgree(T("Attack on Titan"), T("Attack on Titan: Sin Remordimientos"))).toBe(false);
+  });
+  it("NO confía en nada más que el título: distinto título = false", () => {
+    expect(titlesAgree(T("Naruto"), T("Bleach"))).toBe(false);
   });
 });
