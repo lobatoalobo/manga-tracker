@@ -624,3 +624,43 @@ model Report {
   status     String   @default("PENDING") // PENDING | RESOLVED
   createdAt  DateTime @default(now())
 }
+
+// Audit log del Mutation Framework. 1:1 con AuditEntry (lib/mutations/audit,
+// schema CONGELADO v1). Append-only: una fila por fase (attempt/success/failure/
+// skipped); el correlationId conecta todas las fases de una corrida. `affected`,
+// `summary` y `error` se aplanan en columnas para poder consultarlos. La
+// idempotencia se resuelve leyendo filas `success` por `mutationKey`.
+model MutationLog {
+  id                Int      @id @default(autoincrement())
+  schemaVersion     Int
+  frameworkVersion  Int
+  definitionVersion Int
+  phase             String // attempt | success | failure | skipped
+  name              String // operación (ej. "mergeWork")
+  kind              String // ej. "MERGE"
+  actorType         String // script | user | cron | admin | import
+  actorId           String
+  env               String // production | staging | preview | development
+  correlationId     String
+  requestId         String?
+  dryRun            Boolean
+  // affected (best-effort; ver decisión "pragmatic mode" en mutation-framework.md)
+  creates           Int?
+  updates           Int?
+  deletes           Int?
+  entities          String[]
+  irreversible      Boolean?
+  summaryDomain     String?
+  summaryHuman      String?
+  warnings          String[]
+  mutationKey       String?
+  mutationScope     String?
+  durationMs        Int?
+  errorName         String?
+  errorMessage      String?
+  at                DateTime
+
+  @@index([correlationId])
+  @@index([name, at])
+  @@index([mutationKey])
+}

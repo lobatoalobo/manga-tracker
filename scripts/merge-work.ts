@@ -1,6 +1,10 @@
 import { mergeWork } from "@/lib/catalog/mutations/mergeWork";
-import { prismaMutationIO } from "@/lib/mutations/adapters/prisma";
-import { ConsoleAuditSink, runMutation } from "@/lib/mutations";
+import {
+  PrismaAuditSink,
+  PrismaIdempotencyStore,
+  prismaMutationIO,
+} from "@/lib/mutations/adapters/prisma";
+import { CompositeAuditSink, ConsoleAuditSink, runMutation } from "@/lib/mutations";
 
 /**
  * Fusiona dos Works vía el Mutation Framework. Dry-run por default (muestra el
@@ -25,7 +29,9 @@ async function main() {
       ...prismaMutationIO(),
       actor: { type: "script", id: "merge-work" },
       dryRun: !execute,
-      audit: new ConsoleAuditSink(),
+      // Ve el evento en consola Y lo persiste en MutationLog.
+      audit: new CompositeAuditSink([new ConsoleAuditSink(), new PrismaAuditSink()]),
+      idempotencyStore: new PrismaIdempotencyStore(), // no re-mergear el mismo par
       confirm: async () => true, // CLI: la confirmación la da el flag --execute
     },
   );

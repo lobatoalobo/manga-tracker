@@ -163,3 +163,40 @@ Las **operaciones** viven fuera del framework (`lib/catalog/mutations/*` hoy;
 Recorder (mini-ORM — si alguna vez hace falta) · artifact de diff a R2 (cuando los
 diffs crezcan) · dashboards sobre `MutationLog` · event-sourcing/CQRS · reversibilidad
 universal (el "undo" real es el restore PITR de Neon, ver runbook).
+
+## Decisiones registradas en el stress test (`mergeWork`)
+
+Migrar la operación más peligrosa endureció el contrato. Decisiones **explícitas**
+(no comportamiento accidental):
+
+- **D1 — `preview` vs `execute`: pragmatic mode + warnings (no strict).** `preview`
+  es best-effort: estima `affected` con lo que es barato de contar (ediciones +
+  campos de backfill), pero NO precomputa todos los side-effects (el re-clave de data
+  de usuario es variable y precomputarlo duplicaría la lógica). `execute` es la
+  verdad. Si difieren, se **audita como warning**, NO se aborta. Elegido así porque el
+  dominio es heterogéneo y no todo efecto es contable sin duplicar código. (Strict
+  mode —abortar si no coincide— queda descartado para este sistema.)
+- **D2 — `plan` (MutationPlan): `preview` genera, `execute` consume.** Una sola
+  lógica (`buildMergePlan` puro + `applyMergeInTx`), sin re-derivar en execute → sin
+  drift. R1 (re-validar en la tx) + atomicidad cubren el TOCTOU; el plan no se
+  recalcula.
+- **D3 — orden del pipeline: confirm va DESPUÉS del early-return de dry-run.** Bug
+  encontrado en uso real: un `preview` no confirma nada; la confirmación gatea solo
+  la ejecución real. (Señal de que el control-flow ya importa: el sistema cruzó el
+  umbral de "toy".)
+- **D4 — `ctx.read as PrismaClient` en el dominio: 🔴 abstraction leak conocido.** El
+  dominio todavía "sabe" que existe Prisma al castear el handle opaco. La abstracción
+  está bien a nivel pipeline pero incompleta en el borde del dominio. **No se toca
+  ahora** — se deja marcado para cuando exista `lib/domain/*`.
+- **D5 — `AuditEntry` CONGELADO v1.** Visto en uso real, se fija el shape;
+  `MutationLog` lo persiste 1:1 (aplanado). Cambios futuros = campo opcional +
+  bump de `AUDIT_SCHEMA_VERSION`.
+
+## `MutationLog` (Paso 4)
+
+Tabla append-only (una fila por fase; `correlationId` conecta la corrida). El core
+sigue Prisma-free: el default de `runMutation` es `ConsoleAuditSink`; los callers
+(scripts, server actions) inyectan `PrismaAuditSink` (y `PrismaIdempotencyStore`)
+desde `lib/mutations/adapters/prisma`. La migración existe como archivo; **aplicarla
+es un paso aparte y gated** (staging hoy comparte DB con prod — ver memoria
+test-environment).

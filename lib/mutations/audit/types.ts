@@ -6,7 +6,11 @@ export type AuditPhase = "attempt" | "success" | "failure" | "skipped";
 /**
  * Entrada de auditoría — el contrato que toda `AuditSink` recibe. Versionada
  * (`schemaVersion` + `definitionVersion`) para poder leer logs viejos tras
- * cambiar el formato. La tabla `MutationLog` (paso 4) se modela sobre esto.
+ * cambiar el formato. La tabla `MutationLog` se modela 1:1 sobre esto.
+ *
+ * ⚠️ CONGELADO (v1) tras el stress test de `mergeWork`. NO cambiar el shape: si
+ * hace falta un campo nuevo, agregarlo OPCIONAL y bumpear `AUDIT_SCHEMA_VERSION`.
+ * `PrismaAuditSink` persiste exactamente estos campos.
  */
 export interface AuditEntry {
   readonly schemaVersion: number;

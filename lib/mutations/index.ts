@@ -6,6 +6,7 @@ export { runMutation } from "./run";
 export { checkPolicy, confirmationRequired } from "./policy";
 export { resolveEnv, newCorrelationId } from "./context";
 export { ConsoleAuditSink } from "./audit/console";
+export { CompositeAuditSink } from "./audit/composite";
 export type { AuditSink } from "./audit/sink";
 export {
   type AuditEntry,
