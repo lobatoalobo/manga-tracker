@@ -16,7 +16,9 @@ import {
 
 // --- dobles de prueba: testeamos el CONTRATO, no las implementaciones reales ---
 const fakeDb = { tag: "db" };
-const txRunner: TransactionRunner = { run: (fn) => fn({ tag: "tx" }) };
+const txRunner: TransactionRunner = {
+  run: (fn) => fn({ read: { tag: "tx" }, write: { client: { tag: "tx" }, lock: async () => {} } }),
+};
 const actor: Actor = { type: "script", id: "test" };
 
 function spySink() {
@@ -25,9 +27,12 @@ function spySink() {
   return { entries, sink };
 }
 function opts(over: Partial<RunOptions> = {}): RunOptions {
-  return { actor, db: fakeDb, transaction: txRunner, ...over };
+  return { actor, read: fakeDb, transaction: txRunner, ...over };
 }
 const counts = (c = 0, u = 0, d = 0): AffectedCounts => ({ creates: c, updates: u, deletes: d });
+const prev = (affected: AffectedCounts) => ({
+  affected, irreversible: false, summary: { domain: "test", human: "" }, plan: undefined,
+});
 function def(over: Partial<MutationDefinition<{ n: number }>> = {}) {
   return defineMutation<{ n: number }>({
     name: "example", definitionVersion: 1, kind: "TEST",
@@ -59,7 +64,7 @@ describe("Mutation Framework — pipeline", () => {
     const d = def({
       execute,
       policy: { maxDeletes: 1 },
-      preview: async () => ({ affected: counts(0, 0, 5), summary: [] }),
+      preview: async () => prev(counts(0, 0, 5)),
     });
     await expect(runMutation(d, { n: 1 }, opts({ dryRun: false }))).rejects.toThrow(PolicyError);
     expect(execute).not.toHaveBeenCalled();
@@ -114,7 +119,7 @@ describe("Mutation Framework — pipeline", () => {
   it("mismatch preview(10)/execute(12): success + warning, NO aborta", async () => {
     const { entries, sink } = spySink();
     const d = def({
-      preview: async () => ({ affected: counts(0, 10, 0), summary: [] }),
+      preview: async () => prev(counts(0, 10, 0)),
       execute: async () => ({ affected: counts(0, 12, 0) }),
     });
     const r = await runMutation(d, { n: 1 }, opts({ dryRun: false, audit: sink }));

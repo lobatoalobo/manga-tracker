@@ -24,11 +24,11 @@ const fmt = (a: AffectedCounts) => `+${a.creates}/~${a.updates}/-${a.deletes}`;
  * Orquesta el pipeline: validate → preview? → policy → confirm → execute(+R1) →
  * audit. Dry-run por default. El core no conoce reglas de negocio ni Prisma.
  */
-export async function runMutation<I>(
-  definition: MutationDefinition<I>,
+export async function runMutation<I, P = void>(
+  definition: MutationDefinition<I, P>,
   input: I,
   options: RunOptions,
-): Promise<MutationResult> {
+): Promise<MutationResult<P>> {
   const dryRun = options.dryRun ?? true;
   const ctx: MutationContext = Object.freeze({
     actor: options.actor,
@@ -37,7 +37,7 @@ export async function runMutation<I>(
     requestId: options.requestId,
     now: new Date(),
     dryRun,
-    db: options.db,
+    read: options.read,
   });
 
   const sink = options.audit ?? new ConsoleAuditSink();
@@ -75,8 +75,9 @@ export async function runMutation<I>(
   await definition.validate?.(ctx, input);
   hooks.afterValidate?.(ctx);
 
-  // 2. PREVIEW (opcional)
+  // 2. PREVIEW (opcional) — genera el PLAN que execute consume.
   const preview = definition.preview ? await definition.preview(ctx, input) : undefined;
+  const plan = preview?.plan as P;
   const metrics: AffectedCounts | null =
     preview?.affected ?? options.metadata?.affected ?? null;
 
@@ -104,10 +105,11 @@ export async function runMutation<I>(
   hooks.beforeExecute?.(ctx);
   let actual: AffectedCounts | null = metrics;
   try {
-    const outcome = await options.transaction.run(async (txDb) => {
-      const txCtx: MutationContext = Object.freeze({ ...ctx, db: txDb });
+    const outcome = await options.transaction.run(async (io) => {
+      // En execute, ctx.read APUNTA a la tx (misma snapshot que las escrituras).
+      const txCtx: MutationContext = Object.freeze({ ...ctx, read: io.read, write: io.write });
       await definition.validate?.(txCtx, input); // R1
-      return definition.execute(txCtx, input);
+      return definition.execute(txCtx, input, plan); // execute CONSUME el plan
     });
     if (outcome && outcome.affected) actual = outcome.affected;
   } catch (err) {

@@ -54,3 +54,9 @@ next-env.d.ts
 # Base de datos SQLite local (se recrea con las migraciones de Prisma)
 /prisma/dev.db
 /prisma/dev.db-journal
+
+# revisión manual de clasificación Panini (temporal)
+/panini-clasificacion.md
+
+/editoriales-chicas.md
+/ovni-manga.md

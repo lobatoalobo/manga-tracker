@@ -21,7 +21,8 @@ export interface AuditEntry {
   readonly requestId?: string;
   readonly dryRun: boolean;
   readonly affected?: AffectedCounts;
-  readonly summary?: readonly string[];
+  readonly irreversible?: boolean;
+  readonly summary?: { readonly domain: string; readonly human: string };
   readonly warnings?: readonly string[];
   readonly mutationKey?: string;
   readonly mutationScope?: string;

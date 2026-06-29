@@ -1,8 +1,8 @@
 /**
  * Tipos del Mutation Framework (Fase 0). Ver docs/mutation-framework.md.
- * El core NO importa Prisma: el acceso a datos entra por `ctx.db` (opaco) + un
- * `TransactionRunner` inyectado. Una mutación es un objeto de primer nivel:
- * validación + preview(opcional) + policy + confirmación + execute + auditoría.
+ * El core NO importa Prisma: el acceso a datos entra por handles opacos
+ * (`ctx.read`/`ctx.write`) que la operación castea. Una mutación es un objeto de
+ * primer nivel: validate(barato) + preview(genera PLAN) + execute(consume PLAN).
  */
 
 export type ActorType = "script" | "user" | "cron" | "admin" | "import";
@@ -13,11 +13,31 @@ export interface Actor {
 
 export type Env = "production" | "staging" | "preview" | "development";
 
+/** Referencia a una entidad para lockear filas (SELECT … FOR UPDATE en el adapter). */
+export interface EntityRef {
+  readonly table: string;
+  readonly id: string | number;
+}
+
 /**
- * Contexto INMUTABLE de una corrida. Nada lo modifica durante la ejecución; los
- * resultados viven en `MutationResult`. `db` es opaco para el framework (la
- * operación lo castea a su cliente, p. ej. Prisma): fuera de tx = lectura, dentro
- * de `execute` = cliente transaccional.
+ * Handle de ESCRITURA (solo presente dentro de `execute`). `client` es opaco (la
+ * operación lo castea a su cliente transaccional); `lock` es un primitive de
+ * concurrencia que el adapter implementa (no es policy del framework).
+ */
+export interface DbWriter {
+  readonly client: unknown;
+  lock(refs: readonly EntityRef[]): Promise<void>;
+}
+
+/**
+ * Contexto INMUTABLE de una corrida. Nada lo modifica; los resultados viven en
+ * `MutationResult`.
+ *
+ * CONTRATO FUERTE de `read`: es **snapshot-consistente dentro de la fase actual**.
+ * En `validate`/`preview` apunta a un cliente de lectura; en `execute` apunta a la
+ * **transacción activa** (misma snapshot que las escrituras). El código de lectura
+ * compartido entre preview y execute usa `ctx.read` y se comporta consistente en
+ * ambas. `write` solo existe en `execute`.
  */
 export interface MutationContext {
   readonly actor: Actor;
@@ -26,22 +46,30 @@ export interface MutationContext {
   readonly requestId?: string;
   readonly now: Date;
   readonly dryRun: boolean;
-  readonly db: unknown;
+  readonly read: unknown;
+  readonly write?: DbWriter;
 }
 
 export interface AffectedCounts {
   readonly creates: number;
   readonly updates: number;
   readonly deletes: number;
+  /** Tablas tocadas (no semántico): carga operativa, no significado de dominio. */
+  readonly entities?: readonly string[];
 }
 
-/** Resultado de `preview`. Estructura EXPLÍCITA (no un `metadata` gigante). */
-export interface MutationPreview {
+/**
+ * Resultado de `preview`. Incluye el **PLAN** (`P`, forma de dominio) que
+ * `execute` consume — preview decide QUÉ cambiar, execute solo lo APLICA. Esto
+ * elimina el drift lógico entre las dos fases.
+ */
+export interface MutationPreview<P = void> {
   readonly affected: AffectedCounts;
-  readonly summary: readonly string[]; // primeras N líneas de diff legible
+  readonly irreversible: boolean;
+  readonly summary: { readonly domain: string; readonly human: string };
+  readonly plan: P;
   readonly warnings?: readonly string[];
   readonly estimatedDurationMs?: number;
-  /** Datos propios de la operación, si los necesita. NO usar como cajón de sastre. */
   readonly extra?: unknown;
 }
 
@@ -65,46 +93,43 @@ export interface Idempotency {
   readonly expiresAt?: Date;
 }
 
-/** Lo que `execute` puede devolver para reportar su efecto REAL. */
 export interface ExecuteOutcome {
   readonly affected?: AffectedCounts;
 }
 
 /**
- * Definición tipada y versionada de UNA operación. `validate`/`preview` son
- * read-only; `execute` escribe (vía `ctx.db` transaccional). El framework solo
- * invoca estas funciones: nunca conoce las reglas de negocio.
+ * Definición tipada y versionada de UNA operación. `I` = input, `P` = forma del
+ * plan que preview produce y execute consume.
  */
-export interface MutationDefinition<I> {
+export interface MutationDefinition<I, P = void> {
   readonly name: string;
   readonly definitionVersion: number;
-  /** Categoría libre por operación (MERGE, DELETE, BULK_IMPORT, …). */
   readonly kind: string;
   readonly policy?: Policy;
+  /** Invariantes baratos (lecturas O(1)). NO cómputo de diff (eso es preview). */
   validate?(ctx: MutationContext, input: I): Promise<void> | void;
-  preview?(ctx: MutationContext, input: I): Promise<MutationPreview>;
-  execute(ctx: MutationContext, input: I): Promise<ExecuteOutcome | void>;
+  /** Lee y arma el PLAN + el diff. Read-only. */
+  preview?(ctx: MutationContext, input: I): Promise<MutationPreview<P>>;
+  /** APLICA el plan (vía `ctx.write`). No re-deriva. */
+  execute(ctx: MutationContext, input: I, plan: P): Promise<ExecuteOutcome | void>;
   idempotency?(input: I): Idempotency;
 }
 
-/** Abstracción de transacción: el core no sabe que abajo hay Prisma. */
+/** El adapter provee, dentro de la tx, los handles de lectura y escritura. */
 export interface TransactionRunner {
-  run<T>(fn: (txDb: unknown) => Promise<T>): Promise<T>;
+  run<T>(fn: (io: { read: unknown; write: DbWriter }) => Promise<T>): Promise<T>;
 }
 
-/** Resuelve si un `key` de idempotencia ya se ejecutó (no-dry, no expirado). */
 export interface IdempotencyStore {
   wasExecuted(idem: Idempotency, now: Date): Promise<boolean>;
 }
 
-/** Confirmación explícita; el entry point decide cómo (prompt, flag, …). */
-export type ConfirmFn = <I>(
+export type ConfirmFn = <I, P>(
   ctx: MutationContext,
-  definition: MutationDefinition<I>,
-  preview: MutationPreview | undefined,
+  definition: MutationDefinition<I, P>,
+  preview: MutationPreview<P> | undefined,
 ) => Promise<boolean>;
 
-/** Hooks de observabilidad (no-op en v1): métricas/tracing/profiling a futuro. */
 export interface MutationHooks {
   beforeValidate?(ctx: MutationContext): void;
   afterValidate?(ctx: MutationContext): void;
@@ -115,11 +140,12 @@ export interface MutationHooks {
 
 export interface RunOptions {
   readonly actor: Actor;
-  /** Default: true (dry-run). Aplicar requiere intención explícita. */
+  /** Default: true (dry-run). */
   readonly dryRun?: boolean;
   readonly correlationId?: string;
   readonly requestId?: string;
-  readonly db: unknown;
+  /** Cliente de lectura para validate/preview (fuera de la tx). */
+  readonly read: unknown;
   readonly transaction: TransactionRunner;
   readonly audit?: import("./audit/sink").AuditSink;
   readonly confirm?: ConfirmFn;
@@ -127,14 +153,13 @@ export interface RunOptions {
   readonly idempotencyStore?: IdempotencyStore;
   /** Para operaciones SIN preview: métricas que la policy usa igual. */
   readonly metadata?: { readonly affected?: AffectedCounts };
-  /** Override de límites por llamada. */
   readonly limits?: Partial<Limits>;
 }
 
-export interface MutationResult {
+export interface MutationResult<P = unknown> {
   readonly dryRun: boolean;
-  readonly skipped: boolean; // por idempotencia
+  readonly skipped: boolean;
   readonly affected: AffectedCounts | null;
-  readonly preview?: MutationPreview;
+  readonly preview?: MutationPreview<P>;
   readonly correlationId: string;
 }
