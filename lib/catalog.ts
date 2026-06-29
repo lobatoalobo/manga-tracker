@@ -55,6 +55,7 @@ export const PUBLISHERS = [
 export const CATALOG_PUBLISHERS = [
   "Ivrea Argentina",
   "Panini Argentina",
+  "Ovni Press",
   "Kemuri Ediciones",
   "Utopía Editorial",
   "Larp Editores",

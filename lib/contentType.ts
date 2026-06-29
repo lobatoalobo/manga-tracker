@@ -39,6 +39,13 @@ const COMIC_TERMS = [
   "tomb raider", "america's got powers", "convergencia", "g.o.d.s.",
   // Marvel/indie con título no obvio (autor occidental)
   "logan", "vota a loki", "warlock", "we stand on guard", "spider-woman", "storm:",
+  // Líneas DC / indie occidentales (sobre todo Ovni): eventos y franquicias.
+  "dceased", "crisis en tierras", "crisis on infinite", "noches oscuras", "death metal",
+  "liga de la justicia", "justice league", "walking dead", "zorro", "simpsons", "futurama",
+  "star wars", "godzilla", "rick and morty", "robocop", "terminator", "spawn",
+  "hellboy", "sandman", "watchmen", "v de vendetta", "fábulas", "fables", "el sheriff",
+  "injustice", "dark knight", "caballero blanco", "año uno", "año tres", "asilo arkham",
+  "dc especial", "dc comics", "todoslosmuertos", "los mejores del mundo",
 ];
 
 // Excepciones: títulos que matchean un término pero SON manga (ej. el manga
@@ -55,6 +62,19 @@ const COMIC_AUTHORS = [
   "brian k. vaughan", "garth ennis", "joe kelly", "jamie hewlett", "simon spurrier",
   "bastien", "manu larcenet", "gustavo duarte", "juan díaz canales", "luciano saracino",
   "ariel olivetti", "enrique alcatena", "salvador sanz",
+  // Guionistas/dibujantes de cómic occidental (DC/Marvel/Image/indie). Para
+  // editoriales muy cómic-pesadas como Ovni, el autor es el signal más fiable.
+  "jeff lemire", "mike mignola", "geoff johns", "grant morrison", "peter milligan",
+  "mark waid", "joshua williamson", "darwyn cooke", "greg rucka", "ed brubaker",
+  "robert kirkman", "brian michael bendis", "james tynion", "alan moore",
+  "jonathan hickman", "christopher yost", "cristopher yost", "nick spencer",
+  "scott snyder", "tom king", "warren ellis", "frank miller", "jeph loeb",
+  "gail simone", "brian azzarello", "jason aaron", "donny cates", "chip zdarsky",
+  "kelly sue", "matt fraction", "ales kot", "kieron gillen",
+  "al ewing", "tom taylor", "dan slott", "phillip kennedy",
+  "archie goodwin", "denny o'neil", "john byrne", "george pérez", "jim starlin",
+  "jim lee", "todd mcfarlane", "frank cho", "stjepan sejic", "becky cloonan",
+  "diego arandojo", "matías castro",
 ];
 
 /**
