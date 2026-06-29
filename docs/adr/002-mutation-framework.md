@@ -1,8 +1,10 @@
 # ADR-002: Mutation Framework
 
-- **Estado**: Aceptado
-- **Fecha**: 2026-06-29
+- **Estado**: Aceptado · **Implementado** (Fase 0, v1)
+- **Fecha**: 2026-06-29 · **Actualizado**: 2026-06-28 (as-built tras stress test)
 - **Spec**: [`../mutation-framework.md`](../mutation-framework.md)
+- **Código**: `lib/mutations/` (core, Prisma-free) · `lib/mutations/adapters/prisma.ts`
+  (único que toca Prisma) · `lib/catalog/mutations/mergeWork.ts` (1ª mutación real)
 
 ## Contexto
 
@@ -25,11 +27,14 @@ Action— pasa por el mismo contrato.
 
 Decisiones de diseño (las "esquinas" que se discutieron):
 
-1. **`{ validate, preview?, execute }`, NO un *recorder*.** Un recorder
+1. **`{ validate, preview?, execute }` con PLAN, NO un *recorder*.** Un recorder
    (`m.update/delete/create` que calcula el `after`) tendría que conocer la
    semántica de Prisma (updateMany, upsert, nested writes, increment, JSON…) y
-   terminaría siendo un mini-ORM. En su lugar: `preview()` lee y arma el diff;
-   `execute(tx)` usa **Prisma normal**. El framework **gobierna**, no reemplaza.
+   terminaría siendo un mini-ORM. En su lugar: `preview()` lee, arma el diff y
+   produce un **`MutationPlan` (P)**; `execute(ctx, input, plan)` **consume** ese
+   plan (no re-deriva) usando **Prisma normal** vía `ctx.write`. El framework
+   **gobierna**, no reemplaza. El core no importa Prisma: el acceso entra por
+   `ctx.read`/`ctx.write` opacos + `TransactionRunner` inyectado por el adapter.
 2. **`preview` es OPCIONAL.** No toda mutación necesita diff (regenerar caché,
    recalcular contador). Sin preview, la policy trabaja sobre metadata que provee
    la operación.
@@ -43,15 +48,45 @@ Decisiones de diseño (las "esquinas" que se discutieron):
 6. **Límites por OPERACIÓN concreta**, no por categoría: `mergeWork` mueve decenas
    de ediciones y está bien; `mergePublisher`/`mergeAuthor` son distintos.
 7. **Entorno explícito** (`APP_ENV`/`VERCEL_ENV`), nunca inferido de `DATABASE_URL`.
-8. **Auditoría por interfaz** (`AuditSink`). v1 usa `ConsoleAuditSink`; la tabla
-   `MutationLog` se diseña **después** de usar el framework (paso 4), para no
-   congelar un esquema antes de saber qué campos hacen falta.
+8. **Auditoría por interfaz** (`AuditSink`). El core default es `ConsoleAuditSink`
+   (Prisma-free); los callers inyectan `PrismaAuditSink`. La tabla `MutationLog` se
+   diseñó **después** de usar el framework (con el `AuditEntry` ya congelado v1), y
+   persiste el shape 1:1, aplanado y consultable.
 9. **Versionado**: `frameworkVersion` **y** `definitionVersion` (saber con qué
    versión de la operación se ejecutó un log viejo).
 10. **Idempotencia** `key` + `scope` + `expiresAt`: permanente por default, cada
     operación decide (sync 24h, bulk import 7d).
 11. **R2 para el diff completo: DIFERIDO.** Medir el peso real antes de optimizar.
     No se construye infra para problemas que todavía no existen.
+
+## Resultado del stress test (`mergeWork`)
+
+Migrar la operación más peligrosa (borra un Work + re-clava data de usuario) validó
+el diseño y lo endureció. Decisiones que salieron de usarlo de verdad (detalle en el
+spec, "Decisiones registradas"):
+
+- **Pragmatic mode + warnings** (no strict): `preview` es best-effort; `execute` es la
+  verdad; el mismatch se audita, no aborta.
+- **Plan-consume** confirmado: `buildMergePlan` (puro) + `applyMergeInTx` → una lógica,
+  cero drift; lo comparten el `mergeWorks()` viejo y la mutación.
+- **Bug encontrado y corregido**: el gate de confirmación corría antes del early-return
+  de dry-run (un preview no confirma). El control-flow ya importa críticamente.
+- **`ctx.read as PrismaClient`**: leak de abstracción conocido (🔴), el dominio aún
+  "sabe" de Prisma. Se difiere a la capa `lib/domain/*`.
+- **`AuditEntry` congelado v1**; `MutationLog` lo persiste 1:1.
+
+## Estado de implementación
+
+- ✔ Core (`types/define/run/policy/context/errors/audit`), Prisma-free, 100+ tests de
+  contrato.
+- ✔ Adapter Prisma (`TransactionRunner` + `lock` por `FOR UPDATE` + `PrismaAuditSink`
+  + `PrismaIdempotencyStore`).
+- ✔ `mergeWork` real + `sameSeries` (invariante puro, testeado) + script `merge-work`.
+- ✔ `MutationLog`: schema + migración **como archivo**.
+- ⏳ **Pendiente**: aplicar la migración y un re-run en vivo (dry-run) con logs reales.
+  Bloqueado a propósito: staging comparte DB con prod (memoria `test-environment`);
+  se hará cuando haya DB de staging separada o con aprobación explícita.
+- ⏳ v1.5: integración con Server Actions (admin críticas).
 
 ## Consecuencias
 
