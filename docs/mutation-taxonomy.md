@@ -12,7 +12,7 @@ escriben + las operaciones de `lib/*`.
 | 1 | **Graph rewrite** (merge) | reescribe FKs + reconcilia identidad + borra 1 nodo | por clave (direccional) | `maxDeletes: 1` | `sameSeries`/`titlesAgree` | ✅ `mergeWork` |
 | 2 | **Cascade prune** (delete) | borra nodo + toda su data dependiente | por clave | `maxDeletes: 1` | `workDomainKey` | ✅ `deleteWork` |
 | 3 | **Set reduction** (cleanup) | descubre set sucio en runtime, borra subset | inherente (re-detecta) | `maxDeletes: N` | `canonicalEdition` | ✅ `cleanRedundantEditions` |
-| 4 | **Attribute enrich/backfill** | `update` bulk de campos en nodos existentes; **sin cambio de topología** | inherente (overwrite) | `maxUpdates: N` | **no pisar campos curados** | ⏳ no migrada |
+| 4 | **Attribute enrich/backfill** | `update` bulk de campos en nodos existentes; **sin cambio de topología** | inherente (overwrite) | `maxUpdates: N` | **no pisar campos curados** | ✅ `normalizeGenres` |
 | 5 | **External sync/reconcile** | converge local ↔ fuente externa: create + update + delete juntos | convergencia | mixto (c/u/d) | curated + identidad externa | ⏳ no migrada |
 | (6) | **Reset/bulk-state** | wipe + reinicializa estado (notifs, preventa, staging) | n/a | `maxDeletes` alto | — (entornos no-prod) | ⏳ variante destructiva |
 
@@ -50,11 +50,35 @@ editados a mano (curados)"*. Hoy está disperso y re-implementado en **5 archivo
 próximo `titlesAgree`/`workDomainKey`: un invariante que debe vivir UNA vez en
 `lib/domain/work/*` y que la familia 4/5 consume.
 
-## Recomendación
+## Resultado: familia 4 migrada (`normalizeGenres`) — encaja sin rediseño
 
-Validar el framework contra **la familia 4 (enrich)** con un representante (ej.
-`reading-links` o `covers-tomo1`), porque: (a) es la familia dominante, (b) trae el
-invariante curated a consolidar, (c) ejercita el lado `maxUpdates` del breaker. Si
-encaja limpio → el espacio queda efectivamente **cerrado en 5 familias sobre un solo
-chasis**. Si el invariante curated o el 3-way diff del sync rompen el modelo → ahí
-recién hay señal arquitectónica nueva.
+Representante: `normalizeGenres` (rawGenres → genres canónicos + demografía). Bulk,
+sin I/O externo, PATCH-only. Hallazgos:
+
+- **PATCH-only en el mismo chasis**: el plan es una lista de patches de campos
+  (`GenrePatch[]`); preview hace **field diff**, no graph diff. Cero ramas nuevas.
+- **`maxUpdates` es operacional, no fino**: en enrich de catálogo completo la 1ª
+  corrida toca muchas obras → el breaker es un TECHO de cordura, no un guard 1:1 como
+  `maxDeletes`. Confirma que el circuit-breaker mide magnitud, no semántica.
+- **Invariante curated consolidado**: era el primer invariante TRANSVERSAL
+  (cross-entity attribute protection), disperso en 5 archivos. Ahora vive una vez en
+  `lib/domain/work/curated.ts` (`isCurated`/`dropCuratedFields`/`markCurated`) y lo
+  usan la mutación nueva + `enrichWorks`/`whakoomImport`/`authorMerge`. Es un
+  *mutation constraint primitive* del dominio, no del framework.
+
+### La pregunta de fondo: ¿el modelo distingue mutación estructural de semántica?
+
+**Sí — y la distinción YA estaba en el modelo, no hizo falta una "mutation type
+algebra".** Se expresa con dos campos que la operación declara y el framework no
+interpreta:
+
+- `irreversible`: estructural/destructiva (merge/delete/cleanup) = `true`; semántica
+  (enrich) = `false`. Primer caso con `irreversible: false`.
+- la forma de `affected`: las estructurales tienen `deletes`; las semánticas solo
+  `updates`; la familia 5 (sync) usará los tres.
+
+El framework sigue siendo **operacional** (cuenta y limita), el dominio aporta el
+**significado** (irreversibilidad, curated). No hace falta nueva abstracción: el
+espacio queda **cerrado en 5 familias sobre un solo chasis**. El único "unknown
+unknown" que resta es la familia 5 (sync, 3-way diff vs fuente externa); si algo va a
+tensionar el preview determinista, es ahí.

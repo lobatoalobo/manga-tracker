@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { dbRetry } from "@/lib/dbRetry";
 import { VISIBLE_PUBLISHERS } from "@/lib/catalog";
+import { markCurated } from "@/lib/domain/work/curated";
 
 /**
  * Unificación de autores. El autor es texto libre en `Work.author` (no hay tabla
@@ -216,12 +217,10 @@ export async function renameAuthor(
     const newAuthor = rewriteAuthorField(w.author ?? "", set, to);
     if (newAuthor == null) continue;
 
-    const curated = new Set(w.curated ?? []);
-    curated.add("author");
     await dbRetry(() =>
       prisma.work.update({
         where: { id: w.id },
-        data: { author: newAuthor, curated: [...curated] },
+        data: { author: newAuthor, curated: markCurated(w.curated ?? [], "author") },
       }),
     );
     changed++;

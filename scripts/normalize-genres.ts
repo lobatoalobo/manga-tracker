@@ -1,65 +1,35 @@
+import { normalizeGenres } from "@/lib/catalog/mutations/normalizeGenres";
+import { prismaGenreEnrichIO } from "@/lib/infra/work/genres";
+import { PrismaAuditSink } from "@/lib/infra/mutations";
+import { CompositeAuditSink, ConsoleAuditSink, runMutation } from "@/lib/mutations";
+
 /**
- * Normaliza los géneros existentes a la taxonomía canónica (lib/genres.ts):
- * guarda los crudos en `rawGenres` (backup), pone los canónicos en `genres` y
- * extrae la demografía a `demographic`. Idempotente: si ya hay `rawGenres`,
- * re-mapea desde ahí (no pierde el crudo).
+ * Normaliza géneros a la taxonomía canónica vía el Mutation Framework (familia
+ * enrich). Dry-run por default; `--execute` aplica. Respeta campos curados.
  *
- *   node scripts/with-staging.mjs npx tsx scripts/normalize-genres.ts [--apply]
- *   npx tsx scripts/normalize-genres.ts --apply           # contra prod (.env)
- * Sin --apply: dry-run (reporta, no escribe).
+ *   npx tsx scripts/normalize-genres.ts            # preview
+ *   npx tsx scripts/normalize-genres.ts --execute  # aplica
  */
-import { prisma } from "../lib/prisma";
-import { normalizeGenres } from "../lib/genres";
-
 async function main() {
-  const apply = process.argv.includes("--apply");
-  const works = await prisma.work.findMany({
-    select: { id: true, title: true, genres: true, rawGenres: true, demographic: true },
-  });
-
-  let changed = 0;
-  let demoSet = 0;
-  const samples: string[] = [];
-
-  for (const w of works) {
-    // Fuente = el crudo si ya lo respaldamos; si no, los géneros actuales (crudos).
-    const source = w.rawGenres.length ? w.rawGenres : w.genres;
-    if (source.length === 0) continue;
-    const { genres, demographic } = normalizeGenres(source);
-
-    const sameGenres =
-      genres.length === w.genres.length &&
-      genres.every((g) => w.genres.includes(g));
-    const sameRaw = w.rawGenres.length > 0;
-    const sameDemo = (w.demographic ?? null) === (demographic ?? null);
-    if (sameGenres && sameRaw && sameDemo) continue;
-
-    changed++;
-    if (demographic && !sameDemo) demoSet++;
-    if (samples.length < 20)
-      samples.push(
-        `${w.title}: [${source.slice(0, 4).join(", ")}] → [${genres.join(", ")}]${demographic ? ` · ${demographic}` : ""}`,
-      );
-
-    if (apply)
-      await prisma.work.update({
-        where: { id: w.id },
-        data: {
-          rawGenres: w.rawGenres.length ? w.rawGenres : w.genres,
-          genres,
-          demographic,
-        },
-      });
-  }
-
-  console.log(samples.join("\n"));
-  console.log(
-    `\n${apply ? "APLICADO" : "[DRY]"} · obras ${works.length} · a cambiar ${changed} · con demografía ${demoSet}`,
+  const execute = process.argv.includes("--execute");
+  const r = await runMutation(
+    normalizeGenres,
+    {},
+    {
+      ...prismaGenreEnrichIO(),
+      actor: { type: "script", id: "normalize-genres" },
+      dryRun: !execute,
+      audit: new CompositeAuditSink([new ConsoleAuditSink(), new PrismaAuditSink()]),
+      confirm: async () => true,
+    },
   );
-  await prisma.$disconnect();
+  console.log("\n" + (r.preview?.summary.human ?? ""));
+  console.log(r.dryRun ? "\nDRY-RUN — usá --execute para aplicar." : "\nAPLICADO.", r.affected);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .then(() => process.exit(0));

@@ -8,6 +8,7 @@ import { storeCover } from "@/lib/coverStore";
 import { dbRetry } from "@/lib/dbRetry";
 import { mergeWorks } from "@/lib/mergeWorks";
 import { titlesAgree } from "@/lib/domain/work/merge";
+import { isCurated } from "@/lib/domain/work/curated";
 
 export interface EnrichResult {
   scanned: number;
@@ -163,7 +164,7 @@ export async function enrichWorks(opts: {
     const newMdId = md?.id && !w.mdId ? md.id : null;
     const newMuId = mu?.seriesId && !w.muId ? String(mu.seriesId) : null;
     // Autor desde MU (fuente confiable). Solo si falta y no está curado a mano.
-    if (mu?.author && !w.author?.trim() && !w.curated.includes("author"))
+    if (mu?.author && !w.author?.trim() && !isCurated(w.curated, "author"))
       patch.author = mu.author;
     if (md?.titleEn && !w.titleEn) patch.titleEn = md.titleEn;
     if (md?.titleNative && !w.titleNative) patch.titleNative = md.titleNative;
