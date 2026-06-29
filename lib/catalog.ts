@@ -52,7 +52,14 @@ export const PUBLISHERS = [
  * `type=COMIC` hasta integrar GCD). Ovni y las españolas siguen en la base pero
  * NO listadas hasta sumarlas bien. Ampliar acá cuando toque.
  */
-export const CATALOG_PUBLISHERS = ["Ivrea Argentina", "Panini Argentina"] as const;
+export const CATALOG_PUBLISHERS = [
+  "Ivrea Argentina",
+  "Panini Argentina",
+  "Ovni Press",
+  "Kemuri Ediciones",
+  "Utopía Editorial",
+  "Larp Editores",
+] as const;
 
 /**
  * Editoriales EXTRANJERAS que el catálogo muestra en la sección Internacional

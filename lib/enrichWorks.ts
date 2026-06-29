@@ -7,6 +7,7 @@ import { proxiedCover } from "@/lib/coverProxy";
 import { storeCover } from "@/lib/coverStore";
 import { dbRetry } from "@/lib/dbRetry";
 import { mergeWorks } from "@/lib/mergeWorks";
+import { tightTitleKey, romajiKey } from "@/lib/catalog";
 
 export interface EnrichResult {
   scanned: number;
@@ -213,13 +214,31 @@ export async function enrichWorks(opts: {
       ] as const) {
         if (!val) continue;
         const other = await dbRetry(() =>
-          prisma.work.findFirst({ where: { [field]: val, id: { not: w.id } }, select: { id: true } }),
+          prisma.work.findFirst({
+            where: { [field]: val, id: { not: w.id } },
+            select: { id: true, title: true, originalTitle: true },
+          }),
         ).catch(() => null);
         if (other) {
-          await mergeWorks(w.id, other.id).catch(() => {});
-          mergedAway = true;
-          merged++;
-          break;
+          // GUARDA anti-over-merge: solo fusionamos si son la MISMA serie —
+          // mismo título normalizado o mismo romaji. Si el subtítulo difiere
+          // ("Attack on Titan" vs "…: Sin Remordimientos"), el matcher asignó el
+          // id de la serie base al spin-off por error → NO fusionar (queda sin ese
+          // id). Permite el dedup cross-idioma (Alley/El Callejón, mismo romaji).
+          const sameSeries =
+            tightTitleKey(w.title) === tightTitleKey(other.title) ||
+            (!!originalTitle &&
+              !!other.originalTitle &&
+              romajiKey(originalTitle) === romajiKey(other.originalTitle));
+          if (sameSeries) {
+            await mergeWorks(w.id, other.id).catch(() => {});
+            mergedAway = true;
+            merged++;
+            break;
+          }
+          // No es la misma serie: no asignamos este id (colisión @unique) y
+          // seguimos sin fusionar.
+          continue;
         }
       }
       if (mergedAway) {

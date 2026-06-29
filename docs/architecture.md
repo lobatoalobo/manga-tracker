@@ -28,7 +28,8 @@ multiple sources, that **does not depend on any external API at runtime**.
    MangaUpdates┤   (publisher truth: volume counts, licensees, romaji)
    MangaDex ───┤   (aliases/romaji + covers)
    Google Books┤   (discovery: enumerate by publisher)
-   Whakoom ────┘   (ES catalog, optional)
+   Whakoom ────┘   (catalog for the other AR publishers)
+   AniList ─────   (batch: legal reader links)
         │
         ▼
  ┌─────────────────────────────────────────┐
@@ -40,19 +41,19 @@ multiple sources, that **does not depend on any external API at runtime**.
         ▼
    Work ─┬─ PublisherEdition (AR/US/ES/JP) ─┬─ Volume
          └─ IvreaRelease (upcoming/reprints)│
-        │                                    + covers → Vercel Blob (owned)
+        │                                    + covers → Cloudflare R2 (owned)
         ▼
    PostgreSQL (Neon)
         │
         ▼
-   Next.js (App Router / RSC)  ← runtime: reads ONLY Postgres + Blob
+   Next.js (App Router / RSC)  ← runtime: reads ONLY Postgres + R2
         │
         ▼
    User
 ```
 
 External sources are queried **only during ingestion** (crawl/cron). The runtime
-serves everything from Postgres + our own Blob storage.
+serves everything from Postgres + our own covers in R2.
 
 ---
 
@@ -64,10 +65,10 @@ serves everything from Postgres + our own Blob storage.
 | Language | TypeScript |
 | UI | React 19, Tailwind, mobile-first |
 | ORM / DB | Prisma 6 + PostgreSQL (Neon serverless) |
-| Storage | Vercel Blob (owned covers) |
+| Storage | Cloudflare R2 (owned covers, S3-compatible) |
 | Auth | NextAuth v5 — Google OAuth |
 | Notifications | Web Push (VAPID) + in-app notifications |
-| Scraping | cheerio (server-side HTML parser) |
+| Scraping | regex server-side parsers (no cheerio) + APIs (MU/MD/Google Books) |
 | Observability | Sentry |
 | Hosting | Vercel (serverless + Cron Jobs + Edge CDN) |
 
@@ -106,9 +107,18 @@ owned catalog. See `docs/plan-catalogo-local.md`.
     `synopsisEnAuto` = machine-translated). The source's native one wins; the missing
     one is LLM-translated (`lib/translate`: OpenAI/DeepL/Claude). `synopsis` is
     DEPRECATED (transition). UI: ES/EN tabs on the serie page.
-  - Other: cover (owned R2), `author`, `assistants`, canonical genres (ES),
-    `rawGenres`, demographic, `curated` (manually edited fields no job overwrites),
-    "upcoming" flags.
+  - **`type`** — content type (`MANGA` | `COMIC` | `LIGHT_NOVEL` | `ARTBOOK` |
+    `DATABOOK` | `OTHER`, default MANGA). Publishers like Panini/Ovni mix manga and
+    Marvel/DC/indie comics; `COMIC` is classified via `lib/contentType` (heuristic
+    by title Marvel/DC + Western author, hand-validated) and **hidden from the
+    catalog** until GCD is integrated. See `docs/backlog.md`.
+  - **`readingLinks`** (Json) — LEGAL reader links (MANGA Plus, VIZ…) curated by
+    AniList (`type: STREAMING`), backfilled by batch (no AniList at runtime). The
+    serie page shows "Read online" buttons (filtered to ES/EN) + a MangaDex link
+    derived from `mdId`.
+  - Other: cover (owned R2, **volume 1** anti-spoiler), `author`, `assistants`,
+    canonical genres (ES), `rawGenres`, demographic, `curated` (manually edited
+    fields no job overwrites), "upcoming" flags.
 - **`PublisherEdition`** — one edition per publisher: `publisher`, `title`,
   `slug`, `volumes`, `status`, `url`, `language` (es/en/ja), `country`
   (AR/US/ES/JP…), `synopsis` (in the edition's language), `whakoomId`, `workId`.
@@ -146,13 +156,15 @@ owned catalog. See `docs/plan-catalogo-local.md`.
 
 | Source | Role | Access | Notes |
 |---|---|---|---|
-| **Ivrea Argentina** | **Local truth**: AR catalog + dates (upcoming, reprints, debuts) | Scrape (cheerio) | Sole AR date source |
-| **MangaUpdates (MU)** | **Publisher truth**: per-format counts, licensees (confirms VIZ), genres, romaji, synopsis | API, no key | Per-title authority |
-| **MangaDex (MD)** | **Aliases** (romaji) + covers | API, no key | Blocks hotlinking → cover downloaded to Blob |
+| **Ivrea Argentina** | **Local truth**: AR catalog + **dates** (upcoming, reprints, debuts) | Scrape (regex) | Sole AR date/calendar source |
+| **Whakoom** | **Catalog for the other AR publishers** (Panini/Ovni/Kemuri/Utopía/Larp): titles, authors, volumes, covers | Scrape, runs LOCAL | Cloudflare blocks the datacenter. Gives NO future dates (only Ivrea has them) |
+| **MangaUpdates (MU)** | **Publisher truth**: per-format counts, licensees (confirms VIZ), genres, romaji, synopsis | API, no key | NOTE: also indexes Western comics → not usable to classify manga/comic |
+| **MangaDex (MD)** | **Aliases** (romaji) + identity (`mdId`) + covers | API, no key | Blocks hotlinking → cover downloaded to R2 |
 | **Google Books** | **Discovery**: enumerate by publisher (`inpublisher`) | API key | Multi-query breaks the ~100/query ceiling |
-| **Whakoom** | ES catalog (enrichment) | Scrape, runs LOCAL | Cloudflare blocks the datacenter |
+| **AniList** | Legal reader links (`readingLinks`) | API, no key | Batch only (off at runtime); legacy unification key |
 
-Responsibilities are not mixed: each source has a specific role.
+Responsibilities are not mixed: each source has a specific role. **Western comics
+(DC/Marvel/indie) wait for `comics.org` (GCD)** as a future source.
 
 ---
 
@@ -167,15 +179,25 @@ gets resolved:
    names (including romaji), and that set is fed to **MangaUpdates**, which
    confirms the license and gives the count. Solves that sources index by romaji
    ("My Hero Academia" = "Boku no Hero Academia" = 僕のヒーローアカデミア).
-3. **Dedup / unification** — `findOrCreateWork` groups by `anilistId` (or, without
-   it, by `tightTitleKey`). A series already present via Ivrea adds the VIZ edition
-   **to the same Work** (no duplicate): a work can have AR + US + ES + JP editions
-   under a single entity, with their flags. **Redesign direction (Jun-2026):**
-   identity is anchored on **external id (anilistId/muId/mdId) + author**, not the
-   title (which is display); enrich persists those ids for idempotent re-matching
-   and pulls the multi-language names. See `docs/analisis-sistema-datos.md`. EN
-   synopsis goes to `synopsisEn`, ES to `synopsisEs` (no clobbering); the missing
-   one is LLM-translated.
+3. **Dedup / unification** — `findOrCreateWork` resolves identity **id-first**:
+   `anilistId → muId → mdId → tightTitleKey(title)`, with a final bridge by
+   **romaji (`originalTitle`) + author** (unifies the same series across languages
+   when neither side has an external id: "Alley" VIZ ↔ "El Callejón" Ivrea). A
+   series already present adds another publisher's edition **to the same Work** (no
+   duplicate): a work can have AR + US + ES + JP editions under a single entity.
+   Identity is anchored on **external id + author**, not the title (display).
+   **Anti-over-merge guard** (in enrich): two works sharing an external id are only
+   merged if they're the SAME series (same `tightTitleKey` or romaji) — if the
+   subtitle differs ("Attack on Titan" vs "…: No Regrets"), the matcher
+   mis-assigned the base series' id to a spin-off and they are NOT merged.
+   `romajiKey` uses `tightTitleKey` so a series isn't merged with its sequel
+   (Citrus vs Citrus+). EN synopsis → `synopsisEn`, ES → `synopsisEs`; the missing
+   one is LLM-translated. See `docs/analisis-sistema-datos.md`.
+   - **Manga/comic classification** (`Work.type`): Whakoom exposes no category and
+     MU/MD index comics, so it's classified heuristically (`lib/contentType`: title
+     Marvel/DC/indie + Western author) with **human review**. Enrich **never touches
+     `type=COMIC`** (it polluted/merged them). Comics stay hidden from the catalog
+     until GCD.
 4. **Card→edition mapping** — Ivrea snapshots are mapped by **title** (more
    reliable than the link slug, which is sometimes generic).
 5. **Quality guards** — anti-hentai/doujin block (not imported) + publisher
@@ -205,11 +227,15 @@ duplicates** and **38 works unified** with their Ivrea editions.
     (index + pagination + faceting in Postgres) when the catalog requires it.
     See §10.
 - **Unified catalog**: national + international in one list; flags distinguish
-  origin (🇦🇷/🇺🇸) and can coexist.
+  origin (🇦🇷/🇺🇸) and can coexist. `inCatalogWhere()` is the single source of
+  visibility: includes `CATALOG_PUBLISHERS` (national) + VIZ, and **excludes
+  `type=COMIC`** (comics are in the DB but hidden until GCD).
 - **Upcoming / reprints**: new volumes (📅) and reprints (♻️) with dates, in the
-  catalog, the detail page and the shopping list.
-- **Covers**: in **owned storage** (Vercel Blob), served from our origin. Full
-  independence for images too.
+  catalog, the detail page and the shopping list. **Only Ivrea** provides a
+  calendar (the other publishers have no future-date source).
+- **Read online**: buttons to legal readers (`readingLinks`) + MangaDex.
+- **Covers**: in **owned storage** (Cloudflare R2), of **volume 1** (anti-spoiler),
+  served from our origin. Full independence for images too.
 
 ---
 
@@ -218,12 +244,16 @@ duplicates** and **38 works unified** with their Ivrea editions.
 All ingestion runs in the cloud except Whakoom (blocked, runs local). Auth via
 `CRON_SECRET` (fail-closed).
 
-- **`/api/cron/ivrea-proximas`** (daily): refreshes the Ivrea snapshot, propagates
-  totals to collections, fires the alerts whose date is today.
+- **`/api/cron/ivrea-catalogo`** (daily): crawls the Ivrea catalog
+  (volumes/status/cover). Caps over-counting (doesn't count future-dated volumes).
+- **`/api/cron/ivrea-proximas`** (daily): refreshes the Ivrea upcoming/reprints
+  snapshot, propagates totals to collections, fires the alerts whose date is today.
 - **`/api/cron/viz`** (weekly): **discovers** (Google Books) + **refreshes** a
-  rotated batch (MU) + **migrates** covers to Blob (batch) + syncs collections +
-  alerts.
+  rotated batch (MU) + **migrates** covers to R2 (batch) + syncs collections + alerts.
 - **`/api/cron/mangakas`** (weekly): rebuilds the author index.
+- **`refresh-catalog.mjs`** (local task on the user's PC, not a Vercel cron):
+  Whakoom (catalog for the other publishers) + enrich + synopsis translation +
+  mirror to staging. Whakoom blocks the datacenter, hence local.
 
 ---
 
@@ -236,7 +266,7 @@ Growth is accounted for; these are the axes and the plan:
 | **Browse / filters** | Client-side (load + filter in memory) | ~30,000+ works starts to hurt | Migrate to **server-side search**: Postgres index (`pg_trgm`/FTS) + pagination + faceting. The data model already supports it; it's a query-layer change, not a schema change. |
 | **Catalog refresh** | Weekly cron **rotated** by `updatedAt` (bounded batch/run) | Grows linearly with the catalog | Already **O(k) incremental per run**, not O(n) total: covers everything over several weeks without exceeding `maxDuration`. At larger scale: higher frequency or sharded parallelism. |
 | **Discovery** | Google Books + MU verification, discarding existing | GB quota | Bounded per run; only processes new candidates. |
-| **Covers** | Owned Blob + batch migration in the cron | Blob bandwidth | CDN cache (immutable); at scale, evaluate resize/optimization. |
+| **Covers** | Owned R2 + batch migration in the cron | R2 bandwidth | CDN cache (immutable); R2 has no egress fees. At scale, evaluate resize/optimization. |
 | **DB** | Neon serverless | — | Branching for staging; read-replicas if needed. |
 
 ---
@@ -252,8 +282,8 @@ Growth is accounted for; these are the axes and the plan:
   filters / statistics / recommendations / faceted search at scale, normalize to
   `Genre` + `WorkGenre` (join). Bounded migration when serious faceting is needed.
 - **Covers: transition** — the `/api/cover` proxy (safety net) coexists with owned
-  Blob while migration finishes; the proxy can be retired once 100% of covers are
-  in Blob.
+  R2 while migration finishes; the proxy can be retired once 100% of covers are in
+  R2.
 
 ---
 
@@ -279,24 +309,27 @@ Growth is accounted for; these are the axes and the plan:
 
 ## 14. Metrics (snapshot)
 
-> Full catalog in the database (includes publishers still hidden in the MVP). The
-> **visible** MVP catalog is Ivrea + VIZ; the rest (Panini/Ovni/Spanish) is
-> ingested but not listed yet.
+> The **visible** catalog is the national publishers **Ivrea + Panini + Ovni +
+> Kemuri + Utopía + Larp** (their **manga** only) + VIZ (international). Western
+> **comics** (~714 `type=COMIC` works) and the Spanish publishers are in the DB but
+> **hidden** until GCD is integrated / their origin is defined.
 
-**Catalog**
-- ~1,840 works (`Work`)
-- ~1,940 editions (`PublisherEdition`) — by language: ES ~1,680, EN ~262
-- ~8,370 volumes (`Volume`)
-- By publisher: Ovni 628 · Ivrea 595 · Panini 286 · **VIZ 262** · Distrito 83 ·
+**Catalog** (snapshot Jun-2026)
+- ~1,814 works (`Work`) — **~1,031 visible** · ~714 hidden comics
+- ~1,941 editions (`PublisherEdition`) — by language: ES ~1,680, EN ~262
+- ~8,280 volumes (`Volume`)
+- By publisher: Ovni 629 · Ivrea 594 · Panini 284 · **VIZ 262** · Distrito 83 ·
   Utopía 50 · Kemuri 24 · Larp 14
 
 **Pipeline**
-- 5 sources (Ivrea, MU, MangaDex, Google Books, Whakoom)
-- Cron ingestion (Ivrea daily, VIZ/mangakas weekly); requests bounded per run
+- 6 sources (Ivrea, Whakoom, MU, MangaDex, Google Books, AniList)
+- Cron ingestion (Ivrea daily, VIZ/mangakas weekly); Whakoom runs local; requests
+  bounded per run
 
 **Quality**
 - VIZ: 262 series, **0 duplicates**, 38 unified with Ivrea
-- Discovery with MU verification: ~58% of new candidates confirmed and imported
+- Cross-language dedup + anti-over-merge guard (no collapsing spin-offs/sequels)
+- Manga/comic classification hand-validated per publisher (Panini/Utopía/Ovni)
 
 *(Fill in with real performance once measured: search <100ms, initial load <1s,
 etc.)*
@@ -307,11 +340,11 @@ etc.)*
 
 | Source / area | Risk | Mitigation |
 |---|---|---|
-| **Whakoom** | Cloudflare blocks the datacenter | **Optional** source (ES enrichment); runs local; the catalog doesn't depend on it |
+| **Whakoom** | Cloudflare blocks the datacenter | Runs **local**; it's the ingestion source for the other AR publishers' catalog, but the **runtime doesn't depend** on it (persisted resolved) |
 | **Google Books** | Quota / API changes | Used **for discovery only**, not canonical data (that comes from MU); degradation: the curated seed keeps working |
 | **Ivrea** | HTML change breaks the scrape | **Ingestion alerts** (an empty/anomalous parse should alert); `JobRun` records each run; the snapshot is a full replace (no incremental corruption) |
 | **MangaUpdates / MangaDex** | API change or rate-limit | Local catalog: an outage doesn't affect runtime, only delays ingestion; throttle + retries |
-| **External covers** | Host deletes/changes the image | **Owned storage** (Blob): once migrated, it's ours |
+| **External covers** | Host deletes/changes the image | **Owned storage** (R2): once migrated, it's ours |
 | **Browse scale** | Client-side filtering doesn't scale to 100k+ | Migration plan to server-side search (§10) |
 
 ---
@@ -335,6 +368,9 @@ etc.)*
 
 ## 17. Related documents
 
+- `docs/backlog.md` — prioritized backlog (source of truth for pending work).
+- `docs/analisis-sistema-datos.md` — identity/dedup redesign (Jun-2026).
+- `docs/auditoria-tomos-ivrea.md` — Ivrea vs Whakoom volume-count audit.
 - `docs/plan-catalogo-local.md` — migration to an owned catalog.
 - `docs/plan-viz-en.md` — research + international pipeline (VIZ).
 - `docs/plan-internacional.md` — JP/EN/ES editions over the same Work.
