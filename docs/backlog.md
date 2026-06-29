@@ -40,7 +40,7 @@ No se anuncia hasta tener Full QA. Detalle y estado fino en la memoria `pre-laun
 5. **Costo a escala** — estimar Neon (autosuspende, compute/hora) + Vercel a cientos/miles de usuarios.
 6. **Monitoreo de errores** — ✅ Sentry integrado (NO-OP sin DSN). *Pendiente config: `NEXT_PUBLIC_SENTRY_DSN` + `SENTRY_DSN` en Vercel.*
 7. **Backups** — confirmar retención point-in-time de Neon y saber restaurar.
-8. **Performance** — paginar server-side cuando el browse "All" crezca (hoy manda ~1800 obras al cliente).
+8. **Performance** — ⏳ **paginación server-side hecha (en staging, NECESITA QA)**: `browseWorks` filtra+pagina en la DB (region/pubs/géneros/demo/completado/az-za) y el catálogo sirve 1 página de 60 en vez de ~1800; `CatalogBrowser` ahora es URL-driven (navega por filtro, debounce en búsqueda). La búsqueda `q` también matchea autor/mangaka. **Diferido:** sort por tomos (necesita denormalizar `maxVolumes` = migración, gated por DB compartida) y conteos en chips de género/demo. QA: buscar/filtrar/paginar/deep-links/back-forward en staging antes del PR a prod.
 
 **Roll-out sugerido:** beta cerrada (amigos) + Full QA → resolver 🔴 → soft launch (link sin anuncio) con Sentry → anuncio público tras 1–2 semanas limpias.
 

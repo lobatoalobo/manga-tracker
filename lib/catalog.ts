@@ -602,6 +602,14 @@ export async function browseWorks(opts: {
   page?: number;
   /** Filtra por autor (nombre exacto por tokens, no substring). Para /autores. */
   author?: string;
+  // --- Filtros del browse (server-side; antes vivían en el cliente) ---
+  region?: "all" | "ar" | "int";
+  pubs?: string[];
+  genres?: string[];
+  gmode?: "any" | "all";
+  demographics?: string[];
+  completed?: boolean;
+  sort?: "az" | "za" | "none";
 }): Promise<{ items: WorkCard[]; total: number }> {
   const take = opts.take ?? 60;
   const page = Math.max(1, opts.page ?? 1);
@@ -609,11 +617,13 @@ export async function browseWorks(opts: {
   const q = opts.q?.trim();
 
   type WorkWhere = import("@prisma/client").Prisma.WorkWhereInput;
+  // Búsqueda: título (display + normalizado) Y TAMBIÉN autor/mangaka.
   const qFilter: WorkWhere | null = q
     ? {
         OR: [
           { title: { contains: q, mode: "insensitive" } },
           { normTitle: { contains: normalizeTitle(q) } },
+          { author: { contains: q, mode: "insensitive" } },
         ],
       }
     : null;
@@ -623,6 +633,37 @@ export async function browseWorks(opts: {
   // existen en otras editoriales (Panini/Ovni/españolas) hasta sumarlas bien.
   const conds: WorkWhere[] = [inCatalogWhere()];
   if (qFilter) conds.push(qFilter);
+
+  // Region: nacional (alguna edición de CATALOG_PUBLISHERS, o debut próximo sin
+  // edición) vs internacional (alguna edición VIZ). "all" no filtra.
+  if (opts.region === "int")
+    conds.push({ editions: { some: { publisher: { in: [...INTL_PUBLISHERS] } } } });
+  else if (opts.region === "ar")
+    conds.push({
+      OR: [
+        { editions: { some: { publisher: { in: [...CATALOG_PUBLISHERS] } } } },
+        { upcoming: true },
+      ],
+    });
+
+  // Editoriales concretas seleccionadas.
+  if (opts.pubs?.length)
+    conds.push({ editions: { some: { publisher: { in: opts.pubs } } } });
+
+  // Géneros: "any" = al menos uno; "all" = todos.
+  if (opts.genres?.length) {
+    if (opts.gmode === "all")
+      conds.push({ AND: opts.genres.map((g) => ({ genres: { has: g } })) });
+    else conds.push({ genres: { hasSome: opts.genres } });
+  }
+
+  // Demografía.
+  if (opts.demographics?.length) conds.push({ demographic: { in: opts.demographics } });
+
+  // Completada: alguna edición con status "completo/a".
+  if (opts.completed)
+    conds.push({ editions: { some: { status: { contains: "complet", mode: "insensitive" } } } });
+
   // Prefiltro por substring en DB; el match exacto por nombre se hace abajo.
   if (opts.author)
     conds.push({ author: { contains: opts.author, mode: "insensitive" } });
@@ -663,10 +704,15 @@ export async function browseWorks(opts: {
 
   const where: WorkWhere = conds.length === 1 ? conds[0] : { AND: conds };
 
+  // az/za por normTitle. (El sort por tomos —maxVolumes— necesita denormalizar y
+  // queda diferido; ver docs/backlog.) Default = alfabético.
+  const orderBy: import("@prisma/client").Prisma.WorkOrderByWithRelationInput =
+    opts.sort === "za" ? { normTitle: "desc" } : { normTitle: "asc" };
+
   const [worksRaw, totalRaw] = await Promise.all([
     prisma.work.findMany({
       where,
-      orderBy: { normTitle: "asc" },
+      orderBy,
       skip: (page - 1) * take,
       take,
       select: {

@@ -14,6 +14,7 @@ import { ovniSearchUrl } from "./ovni";
 import { getRejected, whakoomIdFromUrl } from "./rejectedSources";
 import { prisma } from "./prisma";
 import { storeCover } from "./coverStore";
+import { isCurated } from "@/lib/domain/work/curated";
 
 /**
  * Portada del TOMO 1 (anti-spoiler): el og:image de la edición de Whakoom suele
@@ -90,7 +91,7 @@ async function persistEditionIdentity(opts: {
     const w = await prisma.work
       .findUnique({ where: { id: workId }, select: { coverImage: true, curated: true } })
       .catch(() => null);
-    if (w && !w.coverImage && !w.curated.includes("coverImage")) {
+    if (w && !w.coverImage && !isCurated(w.curated, "coverImage")) {
       const t1 = (await tomo1CoverUrl(opts.volumesList).catch(() => null)) ?? opts.cover;
       const cover = t1 ? await storeCover(t1).catch(() => null) : null;
       if (cover)

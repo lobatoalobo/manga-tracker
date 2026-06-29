@@ -1,26 +1,26 @@
-import { normalizeGenres } from "@/lib/catalog/mutations/normalizeGenres";
-import { prismaGenreEnrichIO } from "@/lib/infra/work/genres";
+import { cleanRedundantEditions } from "@/lib/catalog/mutations/cleanRedundantEditions";
+import { prismaCleanEditionsIO } from "@/lib/infra/work/cleanupEditions";
 import { PrismaAuditSink } from "@/lib/infra/mutations";
 import { CompositeAuditSink, ConsoleAuditSink, runMutation } from "@/lib/mutations";
 
 /**
- * Normaliza géneros a la taxonomía canónica vía el Mutation Framework (familia
- * enrich). Dry-run por default; `--execute` aplica. Respeta campos curados.
+ * Limpia ediciones redundantes vía el Mutation Framework. Dry-run por default
+ * (muestra cuántas borraría); `--execute` aplica.
  *
- *   npx tsx scripts/normalize-genres.ts            # preview
- *   npx tsx scripts/normalize-genres.ts --execute  # aplica
+ *   npx tsx scripts/clean-redundant-editions.ts            # preview
+ *   npx tsx scripts/clean-redundant-editions.ts --execute  # aplica
  */
 async function main() {
   const execute = process.argv.includes("--execute");
   const r = await runMutation(
-    normalizeGenres,
+    cleanRedundantEditions,
     {},
     {
-      ...prismaGenreEnrichIO(),
-      actor: { type: "script", id: "normalize-genres" },
+      ...prismaCleanEditionsIO(),
+      actor: { type: "script", id: "clean-redundant-editions" },
       dryRun: !execute,
       audit: new CompositeAuditSink([new ConsoleAuditSink(), new PrismaAuditSink()]),
-      confirm: async () => true,
+      confirm: async () => true, // CLI: la confirmación la da el flag --execute
     },
   );
   console.log("\n" + (r.preview?.summary.human ?? ""));

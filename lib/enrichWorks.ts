@@ -7,7 +7,8 @@ import { proxiedCover } from "@/lib/coverProxy";
 import { storeCover } from "@/lib/coverStore";
 import { dbRetry } from "@/lib/dbRetry";
 import { mergeWorks } from "@/lib/mergeWorks";
-import { tightTitleKey, romajiKey } from "@/lib/catalog";
+import { titlesAgree } from "@/lib/domain/work/merge";
+import { isCurated } from "@/lib/domain/work/curated";
 
 export interface EnrichResult {
   scanned: number;
@@ -163,7 +164,7 @@ export async function enrichWorks(opts: {
     const newMdId = md?.id && !w.mdId ? md.id : null;
     const newMuId = mu?.seriesId && !w.muId ? String(mu.seriesId) : null;
     // Autor desde MU (fuente confiable). Solo si falta y no está curado a mano.
-    if (mu?.author && !w.author?.trim() && !w.curated.includes("author"))
+    if (mu?.author && !w.author?.trim() && !isCurated(w.curated, "author"))
       patch.author = mu.author;
     if (md?.titleEn && !w.titleEn) patch.titleEn = md.titleEn;
     if (md?.titleNative && !w.titleNative) patch.titleNative = md.titleNative;
@@ -220,17 +221,17 @@ export async function enrichWorks(opts: {
           }),
         ).catch(() => null);
         if (other) {
-          // GUARDA anti-over-merge: solo fusionamos si son la MISMA serie —
-          // mismo título normalizado o mismo romaji. Si el subtítulo difiere
-          // ("Attack on Titan" vs "…: Sin Remordimientos"), el matcher asignó el
-          // id de la serie base al spin-off por error → NO fusionar (queda sin ese
-          // id). Permite el dedup cross-idioma (Alley/El Callejón, mismo romaji).
-          const sameSeries =
-            tightTitleKey(w.title) === tightTitleKey(other.title) ||
-            (!!originalTitle &&
-              !!other.originalTitle &&
-              romajiKey(originalTitle) === romajiKey(other.originalTitle));
-          if (sameSeries) {
+          // GUARDA anti-over-merge: aunque compartan el id externo, solo fusionamos
+          // si coinciden por título/romaji. Si el subtítulo difiere ("Attack on
+          // Titan" vs "…: Sin Remordimientos"), el matcher asignó el id de la serie
+          // base al spin-off por error → NO fusionar (queda sin ese id). Acá NO se
+          // confía en el id (es el que está en disputa), por eso `titlesAgree` y no
+          // `sameSeries`. Permite el dedup cross-idioma (Alley/El Callejón, romaji).
+          const agree = titlesAgree(
+            { title: w.title, originalTitle },
+            { title: other.title, originalTitle: other.originalTitle },
+          );
+          if (agree) {
             await mergeWorks(w.id, other.id).catch(() => {});
             mergedAway = true;
             merged++;
