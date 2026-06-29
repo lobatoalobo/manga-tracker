@@ -1,6 +1,11 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { browseWorks, wishEditionsFor, INTL_PUBLISHERS } from "@/lib/catalog";
+import {
+  browseWorks,
+  wishEditionsFor,
+  INTL_PUBLISHERS,
+  CATALOG_PUBLISHERS,
+} from "@/lib/catalog";
 import CatalogBrowser, {
   type BrowseCard,
   type BrowseState,
@@ -50,7 +55,21 @@ export default async function CatalogoPage({
     page: Math.max(1, Number(sp.page) || 1),
   };
   const session = await auth();
-  const { items } = await browseWorks({ tab: "az", take: 10000 });
+  // Server-side: filtros + paginación en la query → se sirve UNA página (~60), no
+  // ~1800 obras al cliente. Los controles del browser navegan por URL (re-consulta).
+  const { items, total } = await browseWorks({
+    q: initial.q,
+    tab: initial.tab,
+    region: initial.region,
+    pubs: initial.pubs,
+    genres: initial.genres,
+    gmode: initial.gmode,
+    demographics: initial.demographics,
+    completed: initial.completed,
+    sort: initial.sort === "za" ? "za" : initial.sort === "az" ? "az" : "none",
+    page: initial.page,
+    take: 60,
+  });
   const cards: BrowseCard[] = items.map((w) => ({
     id: w.id,
     title: w.title,
@@ -99,12 +118,14 @@ export default async function CatalogoPage({
       <h1 className="mb-4 text-2xl font-bold">Catálogo</h1>
       <CatalogBrowser
         cards={cards}
+        total={total}
         collected={collected}
         wishedMap={wishedMap}
         canWish={!!session?.user?.id}
         initial={initial}
         showGenreFilters={await isEnabled("genre-filters")}
         intlPublishers={[...INTL_PUBLISHERS]}
+        nationalPublishers={[...CATALOG_PUBLISHERS]}
       />
     </main>
   );
