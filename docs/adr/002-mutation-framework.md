@@ -101,6 +101,31 @@ dependencias (ediciones, colección…) son cascade y se exponen en el `preview`
   `FOR UPDATE`).
 - ✔ `mergeWork` + `deleteWork` reales (dominio puro + puertos + orquestación sin
   Prisma), con scripts `merge-work`/`delete-work`. Invariantes testeados.
+- ✔ `cleanRedundantEditions` (saturation test: bulk, no simétrica).
+
+## Saturation test (`cleanRedundantEditions`)
+
+Tercera mutación de forma DISTINTA a las dos críticas: bulk, input vacío (descubre el
+set en runtime), plan = LISTA. Pregunta: ¿el modelo se sostiene cuando la operación
+no es simétrica? **Sí, sin casos especiales.** Hallazgos:
+
+- **Idempotencia real, no teórica**: no tiene clave natural → `idempotency()` se OMITE;
+  la idempotencia es inherente (re-correr re-detecta y no halla nada). El framework no
+  forzó una clave falsa: era opcional y eso fue lo correcto.
+- **Granularidad del preview**: el plan es una lista (`EditionDeletion[]`); el genérico
+  `MutationPlan<P>` lo absorbió sin tocar nada.
+- **El circuit-breaker recién acá gana el sueldo**: `maxDeletes: 200` es una red real
+  (merge/delete usaban `1`). Si la detección se descontrola, aborta ANTES de escribir.
+- **Fases opcionales = generalización**: sin `validate`, sin `lock`, sin idempotencia.
+  Que el framework permita omitirlas es lo que lo hizo encajar; un bulk deleteMany es
+  seguro bajo concurrencia (el 2º run borra menos) y no re-lee, así que el contrato de
+  snapshot (R1/`ctx.read`=tx) simplemente no se ejerce — y está bien.
+- **Mismatch preview↔execute más probable acá** (estado puede cambiar entre detección
+  y borrado) → warning, no abort: la decisión "pragmatic mode" (D1) ya lo cubre.
+
+**Veredicto**: tres formas distintas (integridad relacional / cascada+seguridad /
+robustez bulk) entran al mismo `validate?/preview?/execute` + plan sin hacks. El
+framework dejó de ser experimental.
 - ✔ `MutationLog`: schema + migración **como archivo**.
 - ⏳ **Pendiente**: aplicar la migración y un re-run en vivo (dry-run) con logs reales.
   Bloqueado a propósito: staging comparte DB con prod (memoria `test-environment`);

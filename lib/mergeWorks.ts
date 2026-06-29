@@ -6,6 +6,7 @@ import {
   type DeleteWorkImpact,
   type DeleteWorkPlan,
 } from "@/lib/domain/work/delete";
+import { canonicalEdition } from "@/lib/domain/work/cleanupEditions";
 
 export interface DupWork {
   id: number;
@@ -117,16 +118,6 @@ export async function getEditionDuplicateGroups(): Promise<EditionDupGroup[]> {
     });
   }
   return out;
-}
-
-/** Edición canónica de un grupo: con anilistId > más tomos > slug más corto. */
-function canonicalEdition(eds: EditionDupEdition[]): EditionDupEdition {
-  return [...eds].sort(
-    (a, b) =>
-      (b.anilistId ? 1 : 0) - (a.anilistId ? 1 : 0) ||
-      b.volumes - a.volumes ||
-      a.slug.length - b.slug.length,
-  )[0];
 }
 
 /**
