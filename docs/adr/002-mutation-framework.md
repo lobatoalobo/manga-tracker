@@ -1,6 +1,9 @@
 # ADR-002: Mutation Framework
 
-- **Estado**: Aceptado · **Implementado** (Fase 0, v1)
+- **Estado**: Aceptado · **Implementado y CERRADO** (v1) para mutaciones internas
+  deterministas (familias 1–4). La familia 5 (sync/reconciliación con fuente externa)
+  queda explícitamente FUERA del core: es un sistema de ingestión aparte. Ver el borde
+  formal en [`../mutation-taxonomy.md`](../mutation-taxonomy.md).
 - **Fecha**: 2026-06-29 · **Actualizado**: 2026-06-28 (as-built tras stress test)
 - **Spec**: [`../mutation-framework.md`](../mutation-framework.md)
 - **Código**: `lib/mutations/` (core, Prisma-free en todo el árbol) · `lib/infra/`

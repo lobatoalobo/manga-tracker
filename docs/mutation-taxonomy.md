@@ -82,3 +82,34 @@ El framework sigue siendo **operacional** (cuenta y limita), el dominio aporta e
 espacio queda **cerrado en 5 familias sobre un solo chasis**. El único "unknown
 unknown" que resta es la familia 5 (sync, 3-way diff vs fuente externa); si algo va a
 tensionar el preview determinista, es ahí.
+
+## Cierre del framework + el borde formal (decisión)
+
+**El Mutation Framework se cierra acá.** Cubre el espacio de **mutaciones internas
+deterministas** (familias 1–4 + variante reset): el sistema es la autoridad única, el
+input es explícito y el `preview` es **función pura del estado actual de la DB**. Eso
+ya está probado, consistente y generalizado. La familia 5 **NO se construye como
+extensión del core** — sería otro problema y degradaría la propiedad más valiosa
+lograda (previsibilidad total).
+
+El borde que mantiene esto finito:
+
+| | **Mutation system** (este framework) | **Ingestion / reconciliation system** (aparte, no construido) |
+|---|---|---|
+| Autoridad | la DB es la verdad única | una fuente EXTERNA es (parte) autoridad |
+| Input | explícito, determinista | no determinista (red, parcial, cambiante) |
+| `preview` | función pura del estado interno | no puede serlo (depende de la fuente externa) |
+| Identidad | dada | hay que RESOLVERLA ("existe pero no coincide") |
+| Familias | 1–4 (+reset) | 5 (sync/crawl/import) |
+
+**El contrato del borde**: una corrida de ingestión RESUELVE la verdad externa hasta
+un plan determinista y **emite mutaciones discretas que pasan por el framework** (ej.
+un crawl que decide "fusionar estas dos obras" → invoca `mergeWork`). La ingestión se
+sienta ARRIBA del core de mutaciones; **el framework nunca sale al mundo** y **la
+ingestión nunca bypassea la seguridad del framework** para lo que escribe. Ese
+contrato es lo que evita que la arquitectura se vuelva infinita: el no-determinismo
+queda confinado a la capa de ingestión y nunca entra al core.
+
+Hoy `crawl`/`import` mezclan reconciliación + escritura. Cuando se formalice la
+familia 5, se separa: *ingestión resuelve → emite mutaciones → framework ejecuta*.
+No ahora — esto es solo el borde, no código.
