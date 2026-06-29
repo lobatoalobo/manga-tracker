@@ -71,8 +71,9 @@ spec, "Decisiones registradas"):
   cero drift; lo comparten el `mergeWorks()` viejo y la mutación.
 - **Bug encontrado y corregido**: el gate de confirmación corría antes del early-return
   de dry-run (un preview no confirma). El control-flow ya importa críticamente.
-- **`ctx.read as PrismaClient`**: leak de abstracción conocido (🔴), el dominio aún
-  "sabe" de Prisma. Se difiere a la capa `lib/domain/*`.
+- **`ctx.read as PrismaClient`**: era un leak (🔴); **resuelto en Fase 2** con
+  `MutationContext<R,W>` genérico + puertos de dominio (sin cast). Capas
+  domain/infra/orquestación separadas.
 - **`AuditEntry` congelado v1**; `MutationLog` lo persiste 1:1.
 
 ## Estado de implementación

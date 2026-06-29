@@ -1,9 +1,6 @@
 import { mergeWork } from "@/lib/catalog/mutations/mergeWork";
-import {
-  PrismaAuditSink,
-  PrismaIdempotencyStore,
-  prismaMutationIO,
-} from "@/lib/mutations/adapters/prisma";
+import { prismaMergeIO } from "@/lib/infra/work/merge";
+import { PrismaAuditSink, PrismaIdempotencyStore } from "@/lib/mutations/adapters/prisma";
 import { CompositeAuditSink, ConsoleAuditSink, runMutation } from "@/lib/mutations";
 
 /**
@@ -26,7 +23,7 @@ async function main() {
     mergeWork,
     { sourceId, targetId },
     {
-      ...prismaMutationIO(),
+      ...prismaMergeIO(),
       actor: { type: "script", id: "merge-work" },
       dryRun: !execute,
       // Ve el evento en consola Y lo persiste en MutationLog.

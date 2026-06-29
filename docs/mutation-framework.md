@@ -184,10 +184,14 @@ Migrar la operación más peligrosa endureció el contrato. Decisiones **explíc
   encontrado en uso real: un `preview` no confirma nada; la confirmación gatea solo
   la ejecución real. (Señal de que el control-flow ya importa: el sistema cruzó el
   umbral de "toy".)
-- **D4 — `ctx.read as PrismaClient` en el dominio: 🔴 abstraction leak conocido.** El
-  dominio todavía "sabe" que existe Prisma al castear el handle opaco. La abstracción
-  está bien a nivel pipeline pero incompleta en el borde del dominio. **No se toca
-  ahora** — se deja marcado para cuando exista `lib/domain/*`.
+- **D4 — `ctx.read as PrismaClient`: ✅ RESUELTO en Fase 2.** Era un leak: el dominio
+  casteaba el handle opaco → "sabía" de Prisma. Se cerró con **tipado estructural
+  real**: `MutationContext<R, W>` es genérico sobre los PUERTOS de datos; la
+  operación usa `ctx.read.loadRow(id)` tipado, **sin cast**. Capas:
+  `lib/domain/work/merge.ts` (reglas puras + interfaces de puerto, sin Prisma) ·
+  `lib/infra/work/merge.ts` (impl de los puertos con Prisma, único que lo conoce) ·
+  `lib/catalog/mutations/mergeWork.ts` (orquestación, sin Prisma). Se eliminó el
+  adapter genérico v1 (`prismaMutationIO`/`DbWriter`) para no dejar dos patrones.
 - **D5 — `AuditEntry` CONGELADO v1.** Visto en uso real, se fija el shape;
   `MutationLog` lo persiste 1:1 (aplanado). Cambios futuros = campo opcional +
   bump de `AUDIT_SCHEMA_VERSION`.

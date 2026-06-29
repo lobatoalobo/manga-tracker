@@ -24,13 +24,13 @@ const fmt = (a: AffectedCounts) => `+${a.creates}/~${a.updates}/-${a.deletes}`;
  * Orquesta el pipeline: validate → preview? → policy → confirm → execute(+R1) →
  * audit. Dry-run por default. El core no conoce reglas de negocio ni Prisma.
  */
-export async function runMutation<I, P = void>(
-  definition: MutationDefinition<I, P>,
+export async function runMutation<I, P = void, R = unknown, W = unknown>(
+  definition: MutationDefinition<I, P, R, W>,
   input: I,
-  options: RunOptions,
+  options: RunOptions<R, W>,
 ): Promise<MutationResult<P>> {
   const dryRun = options.dryRun ?? true;
-  const ctx: MutationContext = Object.freeze({
+  const ctx: MutationContext<R, W> = Object.freeze({
     actor: options.actor,
     env: resolveEnv(),
     correlationId: options.correlationId ?? newCorrelationId(),
@@ -98,7 +98,8 @@ export async function runMutation<I, P = void>(
 
   // 4. CONFIRM (según operación + entorno) — solo antes de ejecutar de verdad.
   if (confirmationRequired(definition.policy, ctx.env)) {
-    const ok = options.confirm ? await options.confirm(ctx, definition, preview) : false;
+    const def = definition as MutationDefinition<I, P, unknown, unknown>;
+    const ok = options.confirm ? await options.confirm(ctx, def, preview) : false;
     if (!ok) throw new ConfirmationRequiredError();
   }
 
@@ -108,7 +109,11 @@ export async function runMutation<I, P = void>(
   try {
     const outcome = await options.transaction.run(async (io) => {
       // En execute, ctx.read APUNTA a la tx (misma snapshot que las escrituras).
-      const txCtx: MutationContext = Object.freeze({ ...ctx, read: io.read, write: io.write });
+      const txCtx: MutationContext<R, W> = Object.freeze({
+        ...ctx,
+        read: io.read,
+        write: io.write,
+      });
       await definition.validate?.(txCtx, input); // R1
       return definition.execute(txCtx, input, plan); // execute CONSUME el plan
     });

@@ -13,41 +13,30 @@ export interface Actor {
 
 export type Env = "production" | "staging" | "preview" | "development";
 
-/** Referencia a una entidad para lockear filas (SELECT … FOR UPDATE en el adapter). */
-export interface EntityRef {
-  readonly table: string;
-  readonly id: string | number;
-}
-
-/**
- * Handle de ESCRITURA (solo presente dentro de `execute`). `client` es opaco (la
- * operación lo castea a su cliente transaccional); `lock` es un primitive de
- * concurrencia que el adapter implementa (no es policy del framework).
- */
-export interface DbWriter {
-  readonly client: unknown;
-  lock(refs: readonly EntityRef[]): Promise<void>;
-}
-
 /**
  * Contexto INMUTABLE de una corrida. Nada lo modifica; los resultados viven en
  * `MutationResult`.
  *
+ * `R`/`W` son los PUERTOS de datos que la operación necesita (read-port y
+ * write-port), tipados — NO `unknown`. El adapter (infra) los construye desde
+ * Prisma; la operación (dominio) los usa sin castear. Default `unknown` para el
+ * core y los tests que no atan datos.
+ *
  * CONTRATO FUERTE de `read`: es **snapshot-consistente dentro de la fase actual**.
- * En `validate`/`preview` apunta a un cliente de lectura; en `execute` apunta a la
+ * En `validate`/`preview` lee del cliente base; en `execute` lee de la
  * **transacción activa** (misma snapshot que las escrituras). El código de lectura
  * compartido entre preview y execute usa `ctx.read` y se comporta consistente en
  * ambas. `write` solo existe en `execute`.
  */
-export interface MutationContext {
+export interface MutationContext<R = unknown, W = unknown> {
   readonly actor: Actor;
   readonly env: Env;
   readonly correlationId: string;
   readonly requestId?: string;
   readonly now: Date;
   readonly dryRun: boolean;
-  readonly read: unknown;
-  readonly write?: DbWriter;
+  readonly read: R;
+  readonly write?: W;
 }
 
 export interface AffectedCounts {
@@ -99,25 +88,25 @@ export interface ExecuteOutcome {
 
 /**
  * Definición tipada y versionada de UNA operación. `I` = input, `P` = forma del
- * plan que preview produce y execute consume.
+ * plan que preview produce y execute consume, `R`/`W` = puertos de datos.
  */
-export interface MutationDefinition<I, P = void> {
+export interface MutationDefinition<I, P = void, R = unknown, W = unknown> {
   readonly name: string;
   readonly definitionVersion: number;
   readonly kind: string;
   readonly policy?: Policy;
   /** Invariantes baratos (lecturas O(1)). NO cómputo de diff (eso es preview). */
-  validate?(ctx: MutationContext, input: I): Promise<void> | void;
+  validate?(ctx: MutationContext<R, W>, input: I): Promise<void> | void;
   /** Lee y arma el PLAN + el diff. Read-only. */
-  preview?(ctx: MutationContext, input: I): Promise<MutationPreview<P>>;
+  preview?(ctx: MutationContext<R, W>, input: I): Promise<MutationPreview<P>>;
   /** APLICA el plan (vía `ctx.write`). No re-deriva. */
-  execute(ctx: MutationContext, input: I, plan: P): Promise<ExecuteOutcome | void>;
+  execute(ctx: MutationContext<R, W>, input: I, plan: P): Promise<ExecuteOutcome | void>;
   idempotency?(input: I): Idempotency;
 }
 
-/** El adapter provee, dentro de la tx, los handles de lectura y escritura. */
-export interface TransactionRunner {
-  run<T>(fn: (io: { read: unknown; write: DbWriter }) => Promise<T>): Promise<T>;
+/** El adapter provee, dentro de la tx, los puertos de lectura y escritura. */
+export interface TransactionRunner<R = unknown, W = unknown> {
+  run<T>(fn: (io: { read: R; write: W }) => Promise<T>): Promise<T>;
 }
 
 export interface IdempotencyStore {
@@ -126,7 +115,7 @@ export interface IdempotencyStore {
 
 export type ConfirmFn = <I, P>(
   ctx: MutationContext,
-  definition: MutationDefinition<I, P>,
+  definition: MutationDefinition<I, P, unknown, unknown>,
   preview: MutationPreview<P> | undefined,
 ) => Promise<boolean>;
 
@@ -138,15 +127,15 @@ export interface MutationHooks {
   afterAudit?(ctx: MutationContext): void;
 }
 
-export interface RunOptions {
+export interface RunOptions<R = unknown, W = unknown> {
   readonly actor: Actor;
   /** Default: true (dry-run). */
   readonly dryRun?: boolean;
   readonly correlationId?: string;
   readonly requestId?: string;
-  /** Cliente de lectura para validate/preview (fuera de la tx). */
-  readonly read: unknown;
-  readonly transaction: TransactionRunner;
+  /** Puerto de lectura para validate/preview (fuera de la tx). */
+  readonly read: R;
+  readonly transaction: TransactionRunner<R, W>;
   readonly audit?: import("./audit/sink").AuditSink;
   readonly confirm?: ConfirmFn;
   readonly hooks?: MutationHooks;

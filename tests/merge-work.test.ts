@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sameSeries, type SeriesIdentity } from "@/lib/catalog/mutations/mergeWork";
+import { sameSeries, type SeriesIdentity } from "@/lib/domain/work/merge";
 
 const W = (o: Partial<SeriesIdentity>): SeriesIdentity => ({
   title: "", anilistId: null, muId: null, mdId: null, originalTitle: null, ...o,
