@@ -11,27 +11,18 @@
 import { prisma } from "../lib/prisma";
 import { mergeWorks } from "../lib/mergeWorks";
 
-// [source (se borra) , target (se conserva, el de anilistId)]
-const MERGES: [number, number][] = [
-  [2411, 2308], // Dead Dead Demon
-  [938, 185], // Saintia Sho
-  [967, 66], // Evangelion Iron Maiden
-  [959, 257], // MHA Vigilantes (Illegals, Ivrea)
-  [2387, 257], // MHA Vigilantes (VIZ)
-  [981, 25], // Sailor Moon
-  [982, 120], // Sailor Moon Short Stories
-  [2390, 2364], // Kaiju Nº 8 (VIZ → Ivrea)
-  [966, 101], // NGE Crianza de Shinji
-  [1008, 316], // Record of Ragnarök
-  [1009, 339], // Lü Bu Fengxian (spin-off)
-  [1003, 155], // Sekaiichi Hatsukoi (confirmado por el usuario)
-  [2576, 110], // Welcome to the NHK
-  [2389, 324], // Spy x Family (VIZ → Ivrea)
-  [799, 433], // Amor, devoraré tu corazón / Itoshii…
-];
-
+// Parejas source→target por argv: "src:tgt" (source se borra, target se conserva,
+// el de anilistId). Ej: npx tsx scripts/fix-dups.ts 2599:236 2607:1716 --execute
 async function main() {
   const execute = process.argv.includes("--execute");
+  const MERGES: [number, number][] = process.argv
+    .slice(2)
+    .filter((a) => a.includes(":"))
+    .map((a) => a.split(":").map(Number) as [number, number]);
+  if (!MERGES.length) {
+    console.error("uso: fix-dups <src:tgt…> [--execute]");
+    process.exit(1);
+  }
 
   for (const [src, tgt] of MERGES) {
     const [s, t] = await Promise.all([

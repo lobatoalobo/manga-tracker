@@ -10,10 +10,13 @@
 import { prisma } from "../lib/prisma";
 import { emptyDuplicateEditions, cleanRedundantEditionsForWork } from "../lib/mergeWorks";
 
-const TARGETS = [2308, 185, 66, 257, 25, 120, 2364, 101, 316, 339, 155, 110, 324, 433];
-
 async function main() {
   const execute = process.argv.includes("--execute");
+  const TARGETS = process.argv.slice(2).map(Number).filter(Boolean);
+  if (!TARGETS.length) {
+    console.error("uso: fix-dup-editions <workId…> [--execute]");
+    process.exit(1);
+  }
   let totalDel = 0;
   const manual: string[] = [];
 
