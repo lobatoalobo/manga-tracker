@@ -77,13 +77,30 @@ spec, "Decisiones registradas"):
   domain/infra/orquestación separadas.
 - **`AuditEntry` congelado v1**; `MutationLog` lo persiste 1:1.
 
+## Work lifecycle invariants (emergió al migrar `deleteWork`)
+
+Migrar `deleteWork` (2ª critical-path mutation) confirmó la hipótesis: **comparte un
+invariante con `mergeWork`** — la *clave de dominio* (`anilistId ?? -id`) bajo la que
+viven colección/deseados/notas. Estaba duplicada en `mergeWorks`/`deleteWork`; se
+extrajo a `lib/domain/work/identity.ts` (`workDomainKey`), reusada por ambos. NO se
+construyó un "sistema de invariantes": hoy hay UNO compartido; el módulo crece
+orgánicamente si aparecen más (anti gold-plating). Los invariantes son **explícitos**
+(funciones puras en `lib/domain/work/*`), no dispersos en queries.
+
+Decisión de policy del delete: `requiresConfirmation: "always"` (no solo prod — no
+hay undo salvo PITR) y `maxDeletes: 1` gobierna el borrado del **Work primario**; las
+dependencias (ediciones, colección…) son cascade y se exponen en el `preview`
+(magnitud + warnings), no se cuentan como deletes del circuit-breaker.
+
 ## Estado de implementación
 
-- ✔ Core (`types/define/run/policy/context/errors/audit`), Prisma-free, 100+ tests de
-  contrato.
-- ✔ Adapter Prisma (`TransactionRunner` + `lock` por `FOR UPDATE` + `PrismaAuditSink`
-  + `PrismaIdempotencyStore`).
-- ✔ `mergeWork` real + `sameSeries` (invariante puro, testeado) + script `merge-work`.
+- ✔ Core (`types/define/run/policy/context/errors/audit`), Prisma-free (fitness-test
+  lo enforce), 100+ tests de contrato.
+- ✔ Adapters Prisma transversales (`PrismaAuditSink` + `PrismaIdempotencyStore`) en
+  `lib/infra/`; IO por operación junto al dominio (`lib/infra/work/*`, `lock` por
+  `FOR UPDATE`).
+- ✔ `mergeWork` + `deleteWork` reales (dominio puro + puertos + orquestación sin
+  Prisma), con scripts `merge-work`/`delete-work`. Invariantes testeados.
 - ✔ `MutationLog`: schema + migración **como archivo**.
 - ⏳ **Pendiente**: aplicar la migración y un re-run en vivo (dry-run) con logs reales.
   Bloqueado a propósito: staging comparte DB con prod (memoria `test-environment`);

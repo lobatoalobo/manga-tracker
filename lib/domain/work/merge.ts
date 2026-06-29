@@ -8,6 +8,7 @@
  * puras; se reusan acá sin arrastrar dependencias de datos.
  */
 import { romajiKey, tightTitleKey } from "@/lib/catalog";
+import { workDomainKey } from "@/lib/domain/work/identity";
 
 /** Identidad mínima para decidir si dos Works son la MISMA serie. */
 export interface SeriesIdentity {
@@ -101,8 +102,8 @@ export function buildMergePlan(
   // target PUEDE adquirir el anilistId del source en el backfill; su clave final
   // es esa. Consolidamos la data de usuario de ambas claves viejas bajo la final.
   const finalKey = tgt.anilistId ?? src.anilistId ?? -targetId;
-  const srcOldKey = src.anilistId ?? -sourceId;
-  const tgtOldKey = tgt.anilistId ?? -targetId;
+  const srcOldKey = workDomainKey({ anilistId: src.anilistId, id: sourceId });
+  const tgtOldKey = workDomainKey({ anilistId: tgt.anilistId, id: targetId });
 
   const free: Record<string, null> = {};
   if (src.anilistId) free.anilistId = null;
