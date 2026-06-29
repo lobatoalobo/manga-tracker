@@ -130,23 +130,36 @@ cambios, inline), `diffHash`, `reason`, `metadata`, `mutationKey?`/`scope?`/
   DIFERIDO** — primero medimos cuánto pesa un diff promedio; no se construye infra
   para un problema que todavía no existe.
 
-## Estructura de archivos
+## Estructura de archivos (as-built)
+
+`lib/mutations/` es el **core puro** — cero imports de Prisma en todo el árbol:
 
 ```
-lib/mutations/
-  run.ts        → runMutation(definition, input)  (orquesta el pipeline)
-  define.ts     → defineMutation<Input>()  (tipado)
-  policy.ts     → límites + circuit-breaker
-  confirm.ts    → ConfirmationStrategy (por actor)
-  audit.ts      → AuditSink (interfaz) + ConsoleAuditSink
-  preview.ts    → PreviewProvider (interfaz) + helpers de diff
-  context.ts    → actor/source/env explícito + correlationId (Sentry)
-  errors.ts     → ValidationError, PolicyError, ...
-  types.ts
+lib/mutations/              CORE (Prisma-free)
+  run.ts        → runMutation(definition, input, options)  (orquesta el pipeline)
+  define.ts     → defineMutation<I,P,R,W>()  (tipado)
+  policy.ts     → límites + circuit-breaker (checkPolicy/confirmationRequired)
+  context.ts    → resolveEnv() explícito + correlationId
+  errors.ts     → ValidationError, PolicyError, ConfirmationRequiredError
+  types.ts      → MutationContext<R,W>, MutationDefinition, MutationPreview<P>, …
+  audit/        → AuditSink (interfaz) + Console/Composite + AuditEntry (congelado v1)
 ```
 
-Las **operaciones** viven fuera del framework (`lib/catalog/mutations/*` hoy;
-`lib/domain/*` cuando exista la capa de dominio).
+La **infra** (Prisma) vive afuera, en `lib/infra/`:
+
+```
+lib/infra/
+  mutations.ts       → PrismaAuditSink + PrismaIdempotencyStore (transversales)
+  work/merge.ts      → impl de los puertos de merge + prismaMergeIO
+```
+
+Capas por operación (ejemplo merge):
+
+- **Dominio puro**: `lib/domain/work/merge.ts` — reglas (`sameSeries`,
+  `mergeSafetyViolation`, `buildMergePlan`) + interfaces de puerto. Sin Prisma.
+- **Infra**: `lib/infra/work/merge.ts` — implementa los puertos con Prisma.
+- **Orquestación**: `lib/catalog/mutations/mergeWork.ts` — `defineMutation` que ata
+  dominio + puertos. Sin Prisma, sin casts.
 
 ## Orden de implementación (pasos chicos, sin big-bang)
 
@@ -201,6 +214,6 @@ Migrar la operación más peligrosa endureció el contrato. Decisiones **explíc
 Tabla append-only (una fila por fase; `correlationId` conecta la corrida). El core
 sigue Prisma-free: el default de `runMutation` es `ConsoleAuditSink`; los callers
 (scripts, server actions) inyectan `PrismaAuditSink` (y `PrismaIdempotencyStore`)
-desde `lib/mutations/adapters/prisma`. La migración existe como archivo; **aplicarla
+desde `lib/infra/mutations`. La migración existe como archivo; **aplicarla
 es un paso aparte y gated** (staging hoy comparte DB con prod — ver memoria
 test-environment).

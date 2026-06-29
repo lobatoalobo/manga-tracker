@@ -1,14 +1,14 @@
 import { type PrismaClient } from "@prisma/client";
 import { prisma as defaultClient } from "@/lib/prisma";
-import type { AuditSink } from "../audit/sink";
-import type { AuditEntry } from "../audit/types";
-import type { Idempotency, IdempotencyStore } from "../types";
+import type { AuditSink } from "@/lib/mutations";
+import type { AuditEntry, Idempotency, IdempotencyStore } from "@/lib/mutations";
 
 /**
  * Adapters Prisma transversales del Mutation Framework: persistencia de auditoría
- * e idempotencia (sirven a CUALQUIER mutación, no a una en particular). El IO de
- * datos por operación (read/write-ports + transacción) vive junto al dominio
- * (ej. lib/infra/work/merge.ts). El core (`run.ts`) sigue sin importar Prisma.
+ * e idempotencia (sirven a CUALQUIER mutación, no a una en particular). Vive FUERA
+ * de `lib/mutations/` para que el core quede Prisma-free de verdad (zero imports de
+ * Prisma en todo el árbol del core). El IO de datos por operación (read/write-ports
+ * + transacción) vive junto al dominio (ej. lib/infra/work/merge.ts).
  */
 
 /**

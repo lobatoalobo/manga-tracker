@@ -3,8 +3,9 @@
 - **Estado**: Aceptado · **Implementado** (Fase 0, v1)
 - **Fecha**: 2026-06-29 · **Actualizado**: 2026-06-28 (as-built tras stress test)
 - **Spec**: [`../mutation-framework.md`](../mutation-framework.md)
-- **Código**: `lib/mutations/` (core, Prisma-free) · `lib/mutations/adapters/prisma.ts`
-  (único que toca Prisma) · `lib/catalog/mutations/mergeWork.ts` (1ª mutación real)
+- **Código**: `lib/mutations/` (core, Prisma-free en todo el árbol) · `lib/infra/`
+  (adapters Prisma: `mutations.ts` transversal + `work/merge.ts`) · `lib/domain/work/`
+  (reglas puras) · `lib/catalog/mutations/mergeWork.ts` (orquestación)
 
 ## Contexto
 

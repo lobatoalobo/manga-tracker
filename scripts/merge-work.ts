@@ -1,6 +1,6 @@
 import { mergeWork } from "@/lib/catalog/mutations/mergeWork";
 import { prismaMergeIO } from "@/lib/infra/work/merge";
-import { PrismaAuditSink, PrismaIdempotencyStore } from "@/lib/mutations/adapters/prisma";
+import { PrismaAuditSink, PrismaIdempotencyStore } from "@/lib/infra/mutations";
 import { CompositeAuditSink, ConsoleAuditSink, runMutation } from "@/lib/mutations";
 
 /**

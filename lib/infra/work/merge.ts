@@ -7,11 +7,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { applyMergeInTx, mergeWorkSelect } from "@/lib/mergeWorks";
-import type {
-  MergeReadPort,
-  MergeWritePort,
-  SeriesIdentity,
-} from "@/lib/domain/work/merge";
+import type { MergeReadPort, MergeWritePort } from "@/lib/domain/work/merge";
 import type { RunOptions } from "@/lib/mutations";
 
 const identitySelect = {
@@ -23,8 +19,7 @@ type DbRead = Pick<Prisma.TransactionClient, "work" | "publisherEdition">;
 
 function mergeReadPort(db: DbRead): MergeReadPort {
   return {
-    loadIdentity: (id) =>
-      db.work.findUnique({ where: { id }, select: identitySelect }) as Promise<SeriesIdentity | null>,
+    loadIdentity: (id) => db.work.findUnique({ where: { id }, select: identitySelect }),
     loadRow: (id) => db.work.findUnique({ where: { id }, select: mergeWorkSelect }),
     countEditions: (workId) => db.publisherEdition.count({ where: { workId } }),
   };
