@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { workCardFlags, publisherKey, authorNameMatches, romajiKey } from "@/lib/catalog";
+import { workCardFlags, publisherKey, authorNameMatches, romajiKey, bridgeAuthorOk } from "@/lib/catalog";
 import { volumeCap, isPlausibleVolume, publishedVolumes } from "@/lib/volumes";
 import { looksLikeComic } from "@/lib/contentType";
 import { emptyDuplicateEditions, type EdLite as DupEd } from "@/lib/mergeWorks";
@@ -157,6 +157,22 @@ describe("authorNameMatches (autor por nombre, no substring)", () => {
     expect(authorNameMatches("Hiro", "HIRO MASHIMA")).toBe(false); // Fairy Tail
     expect(authorNameMatches("Hiro", "ARIKAWA Hiro")).toBe(false); // Library Wars
     expect(authorNameMatches("Hiro", "Hiro")).toBe(true); // Akebi's (autor real "Hiro")
+  });
+});
+
+describe("bridgeAuthorOk (puente romaji: el autor solo bloquea si ambos difieren)", () => {
+  it("ambos autores y coinciden → ok", () => {
+    expect(bridgeAuthorOk("Naoki Urasawa", "NAOKI URASAWA")).toBe(true);
+  });
+  it("ambos autores y DIFIEREN → bloquea (anti-homónimo)", () => {
+    expect(bridgeAuthorOk("Akira Toriyama", "Naoki Urasawa")).toBe(false);
+  });
+  it("candidato SIN autor → ok por romaji (el fix del split Reborn)", () => {
+    expect(bridgeAuthorOk("Akira Amano", null)).toBe(true);
+  });
+  it("entrante sin autor → ok por romaji", () => {
+    expect(bridgeAuthorOk(null, "Akira Amano")).toBe(true);
+    expect(bridgeAuthorOk(undefined, undefined)).toBe(true);
   });
 });
 
