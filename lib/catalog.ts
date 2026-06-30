@@ -35,6 +35,21 @@ export function authorNameMatches(
   return sameSet(field) || field.split(/,|&|\+| y /i).some(sameSet);
 }
 
+/**
+ * Decide si el puente ROMAJI puede linkear (asumiendo que el romaji YA coincide).
+ * El autor solo BLOQUEA cuando ambos lados lo tienen y no matchean (anti-homónimo);
+ * si a alguno le falta, el romaji exacto alcanza (señal fuerte, sin conflicto). Antes
+ * se exigía autor en ambos → un work existente sin autor rechazaba un romaji idéntico
+ * y la serie se partía (ej. Reborn). Puro y testeable.
+ */
+export function bridgeAuthorOk(
+  incoming: string | null | undefined,
+  candidate: string | null | undefined,
+): boolean {
+  if (incoming && candidate) return authorNameMatches(incoming, candidate);
+  return true;
+}
+
 export const PUBLISHERS = [
   "Ivrea Argentina",
   "Panini Argentina",
@@ -917,12 +932,14 @@ export async function findOrCreateWork(opts: {
     const cands = await prisma.work.findMany({ where: { normTitle }, select: { ...sel, title: true } });
     existing = cands.find((w) => tightTitleKey(w.title) === tight) ?? null;
   }
-  // Puente ROMAJI + AUTOR: si no matcheó por id ni por título (típico cuando una
-  // edición viene en otro idioma — VIZ en inglés vs Ivrea en español — y ningún
-  // lado tiene id externo), buscamos otra obra con el MISMO romaji (originalTitle
-  // normalizado, sin el sufijo "(Autor)") y autor compatible. Evita que se parta
-  // la misma serie en dos Works (ej. "Alley" VIZ vs "El Callejón" Ivrea = Rojiura).
-  if (!existing && originalTitle && author) {
+  // Puente ROMAJI: si no matcheó por id ni por título (típico cuando una edición
+  // viene en otro idioma — VIZ en inglés vs Ivrea en español — y los ids no se
+  // cruzan: Ivrea tiene anilistId, VIZ tiene muId), buscamos otra obra con el MISMO
+  // romaji (originalTitle normalizado, sin el sufijo "(Autor)"). El autor solo
+  // bloquea si AMBOS lo tienen y difieren (ver `bridgeAuthorOk`): un work existente
+  // SIN autor ya no rechaza un romaji idéntico → no se parte la serie (ej. Reborn,
+  // Neverland). Evita el split "Alley" VIZ vs "El Callejón" Ivrea = Rojiura.
+  if (!existing && originalTitle) {
     const core = originalTitle.replace(/\s*\([^)]*\)\s*$/, "").trim();
     const rk = romajiKey(originalTitle);
     if (rk.length >= 4) {
@@ -935,7 +952,7 @@ export async function findOrCreateWork(opts: {
           (w) =>
             w.originalTitle &&
             romajiKey(w.originalTitle) === rk &&
-            authorNameMatches(author, w.author),
+            bridgeAuthorOk(author, w.author),
         ) ?? null;
     }
   }
