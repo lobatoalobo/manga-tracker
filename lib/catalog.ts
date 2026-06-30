@@ -82,6 +82,12 @@ export const CATALOG_PUBLISHERS = [
  */
 export const INTL_PUBLISHERS = ["VIZ Media"] as const;
 
+/**
+ * Editoriales que publican CÓMICS (sección Cómics, separada del manga). Sus obras
+ * `type=COMIC` se muestran acá; el enrich de géneros/sinopsis llega con GCD.
+ */
+export const COMIC_PUBLISHERS = ["Ovni Press", "Panini Argentina", "Utopía Editorial"] as const;
+
 /** Filtro Prisma: obras con alguna edición internacional (VIZ). */
 export function intlCatalogWhere(): import("@prisma/client").Prisma.WorkWhereInput {
   return { editions: { some: { publisher: { in: [...INTL_PUBLISHERS] } } } };
@@ -102,12 +108,15 @@ export const VISIBLE_PUBLISHERS = [
  * editorial activa (CATALOG_PUBLISHERS) o es un debut próximo (upcoming, sin
  * edición aún). Fuente única para browse/búsqueda/autores/sitemap.
  */
-export function inCatalogWhere(): import("@prisma/client").Prisma.WorkWhereInput {
+export function inCatalogWhere(
+  content: "manga" | "comic" = "manga",
+): import("@prisma/client").Prisma.WorkWhereInput {
   return {
-    // Los cómics (Marvel/DC de Panini) se ocultan del catálogo hasta integrar GCD.
-    // Ver memoria panini-classify. El default es MANGA, así que no afecta a Ivrea.
+    // Manga = todo lo que NO es cómic (default, no afecta a Ivrea). Cómic = la
+    // sección propia (Ovni/Panini/Utopía); su enriquecimiento de géneros/sinopsis
+    // llega con GCD (ver memoria gcd-comics-source). El resto del filtro es común.
     AND: [
-      { type: { not: "COMIC" } },
+      content === "comic" ? { type: "COMIC" } : { type: { not: "COMIC" } },
       {
         OR: [
           // Tiene una edición visible (Ivrea/Panini/VIZ). NO exigimos volumes>0:
@@ -546,7 +555,6 @@ export interface WorkCard {
   reissue: { volume: number | null; date: Date } | null; // próxima reedición
 }
 
-const AR_PUBLISHERS = new Set<string>(PUBLISHERS);
 const INTL_SET = new Set<string>(INTL_PUBLISHERS);
 
 export interface WishEditionLite {
@@ -625,6 +633,7 @@ export async function browseWorks(opts: {
   demographics?: string[];
   completed?: boolean;
   sort?: "az" | "za" | "none";
+  content?: "manga" | "comic";
 }): Promise<{ items: WorkCard[]; total: number }> {
   const take = opts.take ?? 60;
   const page = Math.max(1, opts.page ?? 1);
@@ -646,7 +655,7 @@ export async function browseWorks(opts: {
   // MVP: el catálogo muestra SOLO obras de las editoriales activas (Ivrea) o
   // debuts próximos de Ivrea (que aún no tienen edición). Excluye obras que solo
   // existen en otras editoriales (Panini/Ovni/españolas) hasta sumarlas bien.
-  const conds: WorkWhere[] = [inCatalogWhere()];
+  const conds: WorkWhere[] = [inCatalogWhere(opts.content)];
   if (qFilter) conds.push(qFilter);
 
   // Region: nacional (alguna edición de CATALOG_PUBLISHERS, o debut próximo sin

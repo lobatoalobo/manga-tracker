@@ -75,6 +75,7 @@ export default async function AutorPage({
     gmode: "any",
     demographics: [],
     page: 1,
+    content: "manga",
   };
 
   return (
