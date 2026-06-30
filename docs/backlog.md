@@ -19,7 +19,7 @@ Con estos 4 pasos el usuario considera la app un MVP. Detalle en `docs/analisis-
 
 1. **Apagar AniList en prod (cutover).** `ANILIST_OFF=1` en Vercel Production + redeploy. Código y data ya en prod; géneros enriquecidos. → *verificar que el flag esté prendido en prod.*
 2. **Ivrea sin bugs.** Fuente nacional confiable: pasar smoke + regression (`docs/smoke-tests.md`, `docs/regression-tests.md`, `docs/qa-checklist.md`).
-3. **1 editorial extranjera sin fallas.** Ediciones JP+EN+ES sobre el mismo `Work` (ver §6 Internacional). Candidata operativa: VIZ (EN). Necesita flag de origen correcto (NO 🇦🇷).
+3. **1 editorial extranjera sin fallas.** Ediciones JP+EN+ES sobre el mismo `Work` (ver §6 Internacional). Candidata operativa: VIZ (EN). — ✅ **verificado (2026-06-29)**: flag de origen correcto (0 de 183 works VIZ-only mal-flageados, ninguno con `upcoming`), metadata al 100% (portada/autor/sinopsis/géneros), serie page renderiza bien (🇺🇸 "Edición en inglés", conteo de tomos). **Único gap diferido:** sin data por-tomo (`volumesList`) en los 183 — limitación conocida de internacional (memoria `viz-proximos`), no rompe nada.
 4. **Funko Pops (alcance limitado).** Modelo *waves* (ver §6 Funkos).
 
 Catálogo del MVP = **solo Ivrea** (`CATALOG_PUBLISHERS = ["Ivrea Argentina"]`). Para sumar editoriales se amplía esa lista. Post-MVP: resto de nacionales (Panini/Ovni) → resto de extranjeras.
