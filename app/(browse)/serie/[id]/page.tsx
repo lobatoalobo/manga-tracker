@@ -154,15 +154,25 @@ export default async function SeriePage({
     ? (work.credits as unknown as { name: string; role: string; order?: number }[])
     : [];
   const ROLE_LABEL: Record<string, string> = {
+    STORY_ART: "Historia y dibujo",
     STORY: "Historia", ART: "Dibujo", ASSISTANT: "Asistentes",
     SCRIPT: "Guion", PENCILS: "Dibujo", INK: "Tinta", COLOR: "Color", LETTER: "Letras",
     UNKNOWN: "Créditos",
   };
-  const ROLE_SORT = ["STORY", "SCRIPT", "ART", "PENCILS", "INK", "COLOR", "LETTER", "ASSISTANT", "UNKNOWN"];
-  const creditGroups = [...credits.reduce((m, c) => {
+  const ROLE_SORT = ["STORY_ART", "STORY", "SCRIPT", "ART", "PENCILS", "INK", "COLOR", "LETTER", "ASSISTANT", "UNKNOWN"];
+  const byRole = credits.reduce((m, c) => {
     (m.get(c.role) ?? m.set(c.role, []).get(c.role)!).push(c.name);
     return m;
-  }, new Map<string, string[]>())].sort(
+  }, new Map<string, string[]>());
+  // Autor solista: si Historia y Dibujo son exactamente la/s misma/s persona/s, se
+  // combinan en una línea ("Historia y dibujo: X") en vez de repetir el nombre.
+  const st = byRole.get("STORY"), ar = byRole.get("ART");
+  if (st && ar && st.length === ar.length && st.every((n) => ar.includes(n))) {
+    byRole.delete("STORY");
+    byRole.delete("ART");
+    byRole.set("STORY_ART", st);
+  }
+  const creditGroups = [...byRole].sort(
     (a, b) => (ROLE_SORT.indexOf(a[0]) + 1 || 99) - (ROLE_SORT.indexOf(b[0]) + 1 || 99),
   );
   // Un solo grupo STORY/UNKNOWN = un crédito simple → sin etiqueta (como antes).
