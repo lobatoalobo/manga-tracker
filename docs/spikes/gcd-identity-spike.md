@@ -165,6 +165,30 @@ débil para indie AR. Concretamente:
   edición** de Big-Two (título original, créditos, año) — metadata, no identidad; a
   evaluar cuando pese.
 
+## Aprendizajes permanentes (trascienden GCD)
+
+No son decisiones ni tareas — son conocimiento reutilizable. Si en un año se evalúa
+Comic Vine / League of Comic Geeks / ISBN / Wikidata, se empieza desde acá, no se
+repite el experimento:
+
+1. **Las bases bibliográficas de cómics modelan EDICIONES, no OBRAS.** (GCD, y
+   probablemente las demás.) No asumir un id de "obra".
+2. **No asumir que un proveedor externo define la identidad de dominio.** El proveedor
+   modela SU mundo, no el nuestro.
+3. **La identidad de un `Work` debe SURGIR DEL DOMINIO**, no del modelo de datos de un
+   proveedor. Para cómics eso implica que el dedup depende de señales de dominio
+   (título original, autores, personajes, continuidad, páginas, qué issues recopila),
+   NO de un id externo. Por eso nadie lo resuelve "conectando una API".
+4. **Evaluar un proveedor por el PROBLEMA que resuelve, no por la cantidad de datos que
+   ofrece.** GCD ofrece muchísimos datos y aun así no resuelve el nuestro.
+5. **El manga tuvo suerte:** AniList/MU dan una identidad a nivel obra casi gratis. Fue
+   la excepción, no la regla. No generalizar de ahí.
+
+**Conexión con lo ya construido:** cuando toque el dedup de cómics, va a ser una
+extensión del trabajo de dominio que ya existe (invariantes puros tipo `sameSeries`/
+`workDomainKey` en `lib/domain/work/`, ADR-002), NO un proveedor nuevo. Identidad de
+cómic = invariantes de dominio, no un `gcdId`.
+
 ## Fuera de alcance del spike
 
 Géneros, sinopsis, créditos (metadata — se suman después, no cambian el modelo). El
