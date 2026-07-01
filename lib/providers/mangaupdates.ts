@@ -87,10 +87,16 @@ function confidence(d: MangaUpdatesData, expected: number | null): number {
   return score;
 }
 
+export interface Credit {
+  name: string;
+  role: string; // STORY | ART | ASSISTANT | UNKNOWN (MU); comics suman SCRIPT/INK/COLOR
+}
+
 export interface MangaUpdatesEnrich {
   seriesId: number; // = muId (identidad externa estable)
   title: string;
   author: string | null;
+  credits: Credit[]; // todos los roles (STORY/ART/…), no solo el autor principal
   year: number | null;
   genres: string[];
   description: string | null;
@@ -105,6 +111,31 @@ function parseAuthor(d: { authors?: { name?: string; type?: string }[] }): strin
       .map((a) => stripHtml(a.name || ""))[0] ??
     (d.authors?.[0]?.name ? stripHtml(d.authors[0].name) : null)
   );
+}
+
+/** Mapea el `type` de MU a nuestro rol canónico. */
+function mapRole(type: string): string {
+  const t = type.toLowerCase();
+  if (/author|story|writer|script/.test(t)) return "STORY";
+  if (/art|illustrat|pencil/.test(t)) return "ART";
+  if (/assist/.test(t)) return "ASSISTANT";
+  return "UNKNOWN";
+}
+
+/** Todos los créditos de MU (nombre + rol), dedup por nombre+rol. */
+function parseCredits(d: { authors?: { name?: string; type?: string }[] }): Credit[] {
+  const seen = new Set<string>();
+  const out: Credit[] = [];
+  for (const a of d.authors || []) {
+    const name = stripHtml(a.name || "").trim();
+    if (!name) continue;
+    const role = mapRole(a.type || "");
+    const key = `${name.toLowerCase()}::${role}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name, role });
+  }
+  return out;
 }
 
 /**
@@ -214,7 +245,8 @@ async function fetchLicensed(id: number): Promise<MuLicensed | null> {
   };
 }
 
-async function getSeriesFull(id: number): Promise<MangaUpdatesEnrich | null> {
+/** Serie MU por id (muId). Fetch liviano por id — para re-enrich de créditos. */
+export async function getSeriesFull(id: number): Promise<MangaUpdatesEnrich | null> {
   const r = await fetch(`${BASE}/series/${id}`, { next: { revalidate: DAY } });
   if (!r.ok) return null;
   const d = await r.json();
@@ -222,6 +254,7 @@ async function getSeriesFull(id: number): Promise<MangaUpdatesEnrich | null> {
     seriesId: id,
     title: stripHtml(d.title || ""),
     author: parseAuthor(d),
+    credits: parseCredits(d),
     year: d.year ? Number(d.year) : null,
     genres: (d.genres || []).map((g: any) => g.genre).filter(Boolean),
     description: d.description ? stripHtml(d.description) : null,

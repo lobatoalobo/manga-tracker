@@ -413,8 +413,12 @@ model Work {
   titleEn       String? // título en inglés (VIZ / AniList english)
   titleNative   String? // título nativo japonés (kanji/kana; AniList native / MD ja)
   coverImage String?
-  author     String? // autor(es), editable; semilla de la ficha de la editorial
+  author     String? // autor PRINCIPAL (historia); semilla de la ficha + índice de autores
   assistants String? // asistentes/colaboradores (ayuda a desambiguar homónimos)
+  // Créditos por ROL (más allá del autor principal): [{name, role, order}].
+  // role = STORY | ART | ASSISTANT | SCRIPT | PENCILS | INK | COLOR | LETTER | UNKNOWN.
+  // Manga: STORY/ART desde MU. Cómics: script/ink/color cuando haya fuente (GCD dif.).
+  credits    Json?
   synopsis   String? // DEPRECADO: usar synopsisEs/synopsisEn. Se mantiene de transición.
   // Sinopsis por idioma (tabs ES/EN en la ficha). La nativa de la fuente manda
   // (ES de Ivrea/Whakoom, EN de MU/MD/AniList); si falta una, se traduce de la
