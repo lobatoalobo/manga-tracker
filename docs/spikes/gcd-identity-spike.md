@@ -53,12 +53,21 @@ En cualquiera de esos casos: los cómics **siguen mostrándose** (Fase 1 ya lo h
 identidad externa); el enrich/dedup de cómics queda manual/posterior. ADR-004 ya deja
 esto explícitamente abierto.
 
-## Estratificación de la muestra (empezar con 20: 10 fáciles + 10 difíciles)
+## Selección de la muestra (máximo aprendizaje, NO cupo)
 
-Los **casos difíciles son los que rompen el modelo** — incluir a propósito:
-recopilatorios · omnibus · deluxe/absolute · crossovers · one-shots · miniseries ·
-series largas · reediciones. Si el modelo sobrevive a esos 10, el resto es fácil.
-Iterativo: si los 20 muestran patrones nuevos, se agregan más.
+No son "10 fáciles + 10 difíciles" por cumplir un número: son los **~20 casos más
+INFORMATIVOS**. Si hay 8 Absolute, 5 Omnibus, 4 Deluxe, con **2-3 de cada tipo**
+alcanza para validar el patrón; mejor gastar un cupo en un **caso raro no previsto**
+(ej. un crossover publicado en AR como tomo único). Cubrir a propósito los tipos que
+rompen el modelo: recopilatorios · omnibus · deluxe/absolute · crossovers · one-shots
+· miniseries · series largas · reediciones.
+
+**Regla de saturación:** 20 es el punto de partida, no una cuota. Si antes de los 20
+todas las hipótesis quedan claramente confirmadas/refutadas → se concluye. Si siguen
+apareciendo patrones nuevos → se amplía hasta que dejen de aparecer casos relevantes.
+
+**Al elegir la muestra** se presenta la lista CON el motivo de cada caso (por qué es
+informativo) ANTES de analizar — para detectar a tiempo tipos de publicación olvidados.
 
 ## Campos a registrar por caso
 
@@ -87,6 +96,17 @@ Iterativo: si los 20 muestran patrones nuevos, se agregan más.
 | **N:M frecuente** | **RE-EVALUAR ROI antes de modelar N:M**: ¿vale que TODO el dominio pague esa complejidad por esos casos? Recién si la respuesta es sí → relación N:M. (No es salto automático.) |
 | Automatización baja pero identidad clara | Pipeline con **cola de revisión** fuerte; reevaluar si vale la pena ahora. |
 | Ambiguo / roto | **Diferir GCD**; cómics visibles sin identidad externa; enrich manual. |
+
+## Entregable del spike (NO una planilla)
+
+El spike no termina en una tabla de observaciones, sino en una **recomendación de
+arquitectura documentada**:
+
+1. **Estado de cada hipótesis** — H0/H1/H2/H3/H4: ✅ confirmada / ⚠️ parcial / ❌ refutada.
+2. **Patrones encontrados** — ej. "85% ancla a una Series de GCD; los recopilatorios
+   generan N:M; los one-shots son 1:1; los Omnibus requieren humano".
+3. **Decisión recomendada** — ej. "mantener 1:1; escape manual para recopilatorios; no
+   implementar N:M por ahora" → alimenta el diseño de `ExternalIdentity` (ADR-004).
 
 ## Fuera de alcance del spike
 
