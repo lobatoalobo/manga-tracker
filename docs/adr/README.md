@@ -27,3 +27,4 @@ un ADR que desde el código.
 | 001 | Fronteras de dominio (bounded contexts) | _pendiente (Fase 1)_ |
 | 002 | [Mutation Framework](002-mutation-framework.md) | Aceptado |
 | 003 | Dominio de catálogo | _pendiente (Fase 2)_ |
+| 004 | [Capa de Identidad Externa](004-external-identity.md) | Propuesto (gate: spike de granularidad) |
