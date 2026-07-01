@@ -12,10 +12,16 @@ abierta y que **cambia el schema**.
 
 ## Hipótesis a validar (si alguna es falsa, cambia el modelo)
 
-- **H1 — Identidad canónica clara:** cada `Work` AR tiene UN nivel bibliográfico
-  natural (serie / issue / TPB / arco) que lo representa.
-- **H2 — Cardinalidad 1:1:** `Work ↔ ExternalIdentity` es 1:1 (no `Work → N`
-  entidades de GCD).
+- **H0 — GCD tiene una entidad usable como ancla:** existe en GCD una entidad que
+  puede actuar como identidad canónica para la mayoría de los Works AR. **Se valida
+  ANTES que todo:** puede pasar algo peor que N:M — que GCD modele el mundo distinto
+  (p. ej. solo issues/series, nunca TPBs) y ni siquiera haya candidato correcto. Si
+  H0 falla, la cardinalidad es irrelevante.
+- **H1 — Identidad canónica clara (lado nuestro):** cada `Work` AR tiene UN nivel
+  bibliográfico natural (serie / issue / TPB / arco) que lo representa.
+- **H2 — Cardinalidad DOMINANTE (a descubrir, no asumir):** existe una cardinalidad
+  predominante entre `Work` y la identidad externa; **el resultado dirá cuál** (1:1 /
+  1:N / N:M). El spike descubre el modelo, no lo presupone.
 - **H3 — Match automatizable:** con señales baratas (título original + editorial de
   origen + año) se resuelve la mayoría sin humano.
 - **H4 — Confianza asignable:** se puede poner `CONFIRMED/HIGH/…` automático en la
@@ -23,11 +29,17 @@ abierta y que **cambia el schema**.
 
 ## Criterios de ÉXITO (el spike termina cuando podemos responder)
 
+0. **H0**: GCD tiene una entidad-ancla usable (si no, se aborta acá).
 1. **Nivel canónico** para ≥ **80%** de la muestra.
-2. **Cardinalidad**: sabemos si es 1:1 o N:M, con el **% de cada uno**.
+2. **Cardinalidad**: sabemos cuál domina (1:1 / 1:N / N:M) con el **% de cada una**.
 3. **% que requiere revisión manual** (y es tolerable: objetivo < ~30%).
 4. **Confianza automática**: podemos asignarla sin humano en la mayoría.
-5. **Catálogo de casos que rompen el modelo** (los que fuerzan N:M o ambigüedad).
+5. **Catálogo de casos que rompen el modelo**, con su **motivo** (los que fuerzan N:M
+   o ambigüedad).
+
+> **Por qué 80%** (y no 70/90): deja una cola manual tolerable para un catálogo
+> mantenido por una sola persona. No es un umbral sagrado; es la línea donde el ahorro
+> de trabajo justifica la integración.
 
 ## Criterios de FRACASO / abort (igual de importantes)
 
@@ -53,11 +65,14 @@ Iterativo: si los 20 muestran patrones nuevos, se agregan más.
 | Campo | Para qué decisión |
 |---|---|
 | `workId`, título AR, editorial AR | referencia |
-| **¿Qué representa?** (serie/issue/TPB/HC/absolute/arco/omnibus/otro) | nivel de identidad (H1) |
+| **¿GCD tiene entidad-ancla?** (sí / no) | H0 (se chequea primero) |
+| **Nivel del Work AR** (serie/issue/TPB/HC/absolute/arco/omnibus/otro) | qué es NUESTRO lado (H1) |
+| **Entidad GCD elegida** (Series / Issue / Story / Book / TPB / Volume / none) | qué es el lado GCD |
+| **↳ el gap entre ambos niveles** es lo que suele generar el N:M | cardinalidad (H2) |
 | **¿Una entidad de GCD alcanza?** (sí / N entidades) | cardinalidad (H2) |
-| **¿Mezcla material?** (¿es recopilatorio de varios issues?) | detecta el caso N |
 | **Señales disponibles**: ¿título original conocido? ¿editorial origen inferible? ¿año? ¿#issues? | ¿automatizable? (H3) |
 | **¿Correspondencia inequívoca?** (sí / ambigua / no encontrada) | automatización + confianza (H4) |
+| **Motivo de ambigüedad** (homónimo / recopilatorio / reedición / cambio de título / crossover / sin datos / no encontrado) | AGRUPAR: quizá el 80% de la ambigüedad es 1 causa |
 | **Confianza estimada** (CONFIRMED/HIGH/MEDIUM/LOW/NONE) | calibra el enum del modelo |
 | **¿Requiere humano?** (sí/no) | costo operativo |
 | Notas | casos raros |
@@ -66,8 +81,10 @@ Iterativo: si los 20 muestran patrones nuevos, se agregan más.
 
 | Resultado | Decisión |
 |---|---|
-| H1+H2 se sostienen (1:1, nivel claro ≥80%) | Diseñar `ExternalIdentity` **1:1**, integrar GCD (dump + matcher). |
-| Nivel claro pero **N:M** frecuente | Modelo con relación **N:M** (Work ↔ identidad ↔ entidades); reconsiderar el ancla. |
+| **H0 falla** (GCD no tiene entidad-ancla usable) | **Diferir GCD**; no es la fuente de identidad para AR ahora. Se aborta antes de la cardinalidad. |
+| **1:1 domina**, nivel claro ≥80% | Diseñar `ExternalIdentity` **1:1**, integrar GCD (dump + matcher). |
+| **N:M minoritario** (< ~15%) y concentrado (ej. recopilatorios) | **Mantener 1:1** como modelo principal; los casos especiales, a mano o extensión futura. **NO se rediseña el dominio por una minoría.** |
+| **N:M frecuente** | **RE-EVALUAR ROI antes de modelar N:M**: ¿vale que TODO el dominio pague esa complejidad por esos casos? Recién si la respuesta es sí → relación N:M. (No es salto automático.) |
 | Automatización baja pero identidad clara | Pipeline con **cola de revisión** fuerte; reevaluar si vale la pena ahora. |
 | Ambiguo / roto | **Diferir GCD**; cómics visibles sin identidad externa; enrich manual. |
 
