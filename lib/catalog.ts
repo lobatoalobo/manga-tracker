@@ -688,9 +688,20 @@ export async function browseWorks(opts: {
   if (opts.completed)
     conds.push({ editions: { some: { status: { contains: "complet", mode: "insensitive" } } } });
 
-  // Prefiltro por substring en DB; el match exacto por nombre se hace abajo.
-  if (opts.author)
-    conds.push({ author: { contains: opts.author, mode: "insensitive" } });
+  // Prefiltro (el match exacto por nombre se hace abajo). El nombre puede venir del
+  // campo `author` O de un CRÉDITO: los créditos usan otro formato ("ITOU Junji" vs
+  // "Junji Ito"), así que un link de crédito tiene que encontrar sus obras igual —
+  // si no, /autores/<crédito> daba 404 (ver credits en la serie page).
+  if (opts.author) {
+    const credRows = await prisma.$queryRaw<{ id: number }[]>`
+      SELECT id FROM "Work" WHERE credits @> ${JSON.stringify([{ name: opts.author }])}::jsonb`;
+    conds.push({
+      OR: [
+        { author: { contains: opts.author, mode: "insensitive" } },
+        { id: { in: credRows.map((r) => r.id) } },
+      ],
+    });
+  }
 
   // A-Z combina nacional + internacional. Las pestañas series/tomos son del
   // catálogo nacional (debuts y releases de Ivrea): naturalmente solo traen
@@ -748,14 +759,22 @@ export async function browseWorks(opts: {
         genres: true,
         demographic: true,
         author: true,
+        credits: true,
         editions: { select: { id: true, publisher: true, volumes: true, status: true } },
       },
     }),
     prisma.work.count({ where }),
   ]);
-  // Match exacto por nombre de autor (el `contains` de DB es laxo: "ONE"⊂"BONES").
+  // Match exacto por nombre (el `contains` de DB es laxo: "ONE"⊂"BONES"). Matchea el
+  // campo `author` O cualquier nombre de CRÉDITO (así el link de un crédito resuelve).
+  const creditNames = (c: (typeof worksRaw)[number]["credits"]) =>
+    Array.isArray(c) ? (c as { name?: string }[]).map((x) => x.name ?? "").filter(Boolean) : [];
   const works = opts.author
-    ? worksRaw.filter((w) => authorNameMatches(opts.author!, w.author))
+    ? worksRaw.filter(
+        (w) =>
+          authorNameMatches(opts.author!, w.author) ||
+          creditNames(w.credits).some((n) => authorNameMatches(opts.author!, n)),
+      )
     : worksRaw;
   const total = opts.author ? works.length : totalRaw;
 
