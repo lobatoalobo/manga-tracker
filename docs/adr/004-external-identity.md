@@ -1,7 +1,10 @@
 # ADR-004: Capa de Identidad Externa
 
-- **Estado**: Propuesto — **pendiente de un spike** que resuelva la granularidad de
-  cómics ANTES de fijar el modelo/schema (ver "Decisión" → pregunta central).
+- **Estado**: Propuesto → **EN PAUSA** (2026-06-29). El spike de granularidad
+  ([../spikes/gcd-identity-spike.md](../spikes/gcd-identity-spike.md)) **refutó GCD
+  como ancla**: es edition-centric (no colapsa nuestras ediciones duplicadas) y débil
+  para indie AR. No se construye la capa sobre GCD ahora. El concepto sigue válido
+  para cuando aparezca un proveedor con identidad a nivel obra.
 - **Fecha**: 2026-06-29
 - **Relacionado**: memoria `data-architecture-redesign` (identidad por id externo),
   ADR-002 (Mutation Framework → auto-merge), `gcd-comics-source`.

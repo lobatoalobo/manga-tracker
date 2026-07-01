@@ -108,6 +108,63 @@ arquitectura documentada**:
 3. **Decisión recomendada** — ej. "mantener 1:1; escape manual para recopilatorios; no
    implementar N:M por ahora" → alimenta el diseño de `ExternalIdentity` (ADR-004).
 
+## RESULTADO (2026-06-29) — muestra decisiva, patrón saturado
+
+Se corrieron casos decisivos (Batman: Year One, Amazing Spider-Man Omnibus de
+McFarlane, Absolute Batman 2024, Enrique Alcatena/Utopía) contra GCD (comics.org). El
+patrón saturó rápido porque el hallazgo clave es **estructural** (cómo modela GCD),
+no de muestreo.
+
+### Hallazgo que rompe el modelo
+
+**GCD modela a nivel EDICIÓN/IMPRESIÓN, no a nivel OBRA.** Cada edición/printing/
+formato es su **propia Series** de GCD. Ej. "Batman: Year One" son ~6 series
+distintas: `DC 1988`, `Deluxe DC 2005`, `DC 2007`, `Deluxe DC 2017`, `Absolute`, etc.
+**GCD no tiene una entidad "obra" que las unifique** (lo más cercano es la *Story*, un
+nivel más abajo y mucho más difícil de matchear).
+
+### Estado de las hipótesis
+
+- **H0 — ⚠️ PARCIAL.** GCD es rico para Big-Two/US (Marvel/DC/Image) e incluso cataloga
+  ediciones internacionales (Panini France/Deutschland). Pero para **indie argentino
+  (Utopía/Alcatena) FALLA**: indexa al *creador*, no la colección local. H0 depende del
+  origen.
+- **H1 — ❌ REFUTADA** al nivel que esperábamos: **no existe una identidad canónica
+  única** por obra en GCD; es edition-centric.
+- **H2 — descubierta:** la relación dominante es `Work(edición AR) ↔ GCD Series` ~**1:1
+  a nivel edición**. PERO eso **NO deduplica** nuestras ediciones repetidas: las 4
+  "Batman: Año uno" AR mapearían a **4 series GCD distintas** — GCD las parte igual que
+  nosotros. Un `gcdId` de series **no colapsa** los duplicados.
+- **H3/H4 — debilitadas:** matchear a nivel edición (¿cuál de 6 printings?) es más
+  ambiguo que a nivel serie → menos automatizable, menos confianza automática.
+
+### Patrones
+
+1. GCD **edition-centric**: no hay id de "obra"; cada edición es una serie.
+2. Cataloga **ediciones internacionales** (incl. Panini) → posible match exacto de
+   nuestra edición AR, pero más ruido de desambiguación.
+3. **Indie/local (Utopía) mal cubierto** — GCD es US-mainstream.
+4. **"Absolute" sobrecargado**: imprint 2024 vs formato "Absolute Edition" histórico.
+5. **Insight de fondo:** los cómics **no tienen** un concepto de "obra" limpio en las
+   bases externas como sí lo tiene el manga (AniList = una serie). Portar el modelo de
+   identidad del manga **no funciona** para cómics.
+
+### Decisión recomendada
+
+**Diferir GCD como capa de identidad/dedup.** La hipótesis "Work → 1 gcdId →
+auto-dedup" es **falsa**: GCD es edition-centric (no colapsa nuestras ediciones) y
+débil para indie AR. Concretamente:
+
+- **NO** construir `ExternalIdentity`-sobre-GCD-para-dedup ahora (ADR-004 queda
+  Propuesto/en pausa; su apertura "GCD podría no ser el ancla" se confirmó).
+- El **dedup de cómics sigue siendo un problema de dominio nuestro** (clustering de
+  ediciones, como hicimos a mano con el manga) — una fuente que parte las ediciones
+  igual que nosotros no las une.
+- Los **cómics quedan visibles** (Fase 1, ya hecho) **sin identidad externa**.
+- Uso más angosto que SÍ podría valer *después*: GCD como **enriquecimiento por
+  edición** de Big-Two (título original, créditos, año) — metadata, no identidad; a
+  evaluar cuando pese.
+
 ## Fuera de alcance del spike
 
 Géneros, sinopsis, créditos (metadata — se suman después, no cambian el modelo). El
