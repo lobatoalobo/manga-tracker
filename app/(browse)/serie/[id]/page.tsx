@@ -175,6 +175,14 @@ export default async function SeriePage({
   const creditGroups = [...byRole].sort(
     (a, b) => (ROLE_SORT.indexOf(a[0]) + 1 || 99) - (ROLE_SORT.indexOf(b[0]) + 1 || 99),
   );
+  // El crédito PRINCIPAL (Historia / Historia y dibujo) ES el `author` curado por
+  // definición. Si es una sola persona y el `author` es un solo nombre, mostramos el
+  // nombre CURADO — evita surfacear otra grafía del mismo autor (ej. "Junji Itou" del
+  // crédito MU vs "Junji Ito" del campo author) y su página /autores duplicada.
+  const primary = creditGroups.find(([r]) => r === "STORY_ART" || r === "STORY");
+  if (author?.trim() && !/[,&]| y /i.test(author) && primary && primary[1].length === 1) {
+    primary[1][0] = author.trim();
+  }
   // Un solo grupo STORY/UNKNOWN = un crédito simple → sin etiqueta (como antes).
   const labelCredits = creditGroups.length > 1 || !["STORY", "UNKNOWN"].includes(creditGroups[0]?.[0]);
   const personLink = (n: string) => (
