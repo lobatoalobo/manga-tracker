@@ -113,6 +113,25 @@ function parseAuthor(d: { authors?: { name?: string; type?: string }[] }): strin
   );
 }
 
+/**
+ * Pasa un nombre de MU ("SURNAME Given", apellido en MAYÚSCULAS) a orden natural
+ * ("Given Surname", title-case) — la convención de nuestro campo `author`. Así los
+ * créditos de solo-orden ("KURUMADA Masami" → "Masami Kurumada") coinciden con el
+ * autor y no generan una identidad/página aparte. Si no hay UN solo token en
+ * mayúsculas (pen-name, occidental), se deja igual. (No arregla romanizaciones
+ * distintas: "ITOU Junji" vs "Junji Ito" — eso es aliasing, otro problema.)
+ */
+export function naturalizeName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name.trim();
+  const isCaps = (p: string) => p.length > 1 && /^[A-ZÀ-Þ.'-]+$/.test(p) && p === p.toUpperCase();
+  const capsIdx = parts.findIndex(isCaps);
+  if (parts.filter(isCaps).length !== 1 || capsIdx === -1) return name.trim();
+  const title = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
+  const rest = parts.filter((_, i) => i !== capsIdx);
+  return [...rest, title(parts[capsIdx])].join(" ");
+}
+
 /** Mapea el `type` de MU a nuestro rol canónico. */
 function mapRole(type: string): string {
   const t = type.toLowerCase();
@@ -127,7 +146,7 @@ function parseCredits(d: { authors?: { name?: string; type?: string }[] }): Cred
   const seen = new Set<string>();
   const out: Credit[] = [];
   for (const a of d.authors || []) {
-    const name = stripHtml(a.name || "").trim();
+    const name = naturalizeName(stripHtml(a.name || "").trim());
     if (!name) continue;
     const role = mapRole(a.type || "");
     const key = `${name.toLowerCase()}::${role}`;
