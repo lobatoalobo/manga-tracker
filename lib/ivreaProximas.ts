@@ -202,6 +202,7 @@ export async function reconcileIvreaProximas(
         title: d.title,
         coverImage: d.cover,
         author: d.author,
+        incomingType: "MANGA", // Ivrea es fuente manga (guard cross-type)
       }).catch(() => null);
       if (workId == null) continue;
       // "Próxima serie" = anunciada pero TODAVÍA NO PUBLICADA. Ya salió si:
