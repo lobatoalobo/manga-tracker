@@ -384,8 +384,11 @@ export async function workMetaByAnilist(
 
 /** Índice de autores derivado de `Work.author` (sin tabla aparte). */
 export async function getLocalAuthors(): Promise<{ name: string; count: number }[]> {
+  // `all` = manga + cómic: el índice de autores debe incluir a los de cómic (ej.
+  // Tom Taylor), coherente con la página de detalle /autores/[name]. Lee solo
+  // `Work.author` (no credits), igual que antes.
   const works = await prisma.work.findMany({
-    where: { author: { not: null }, ...inCatalogWhere() },
+    where: { author: { not: null }, ...inCatalogWhere("all") },
     select: { author: true },
   });
   const byKey = new Map<string, { name: string; count: number }>();
