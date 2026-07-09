@@ -22,7 +22,9 @@ export default async function AutorPage({
 }) {
   const { name } = await params;
   const author = decodeURIComponent(name);
-  const { items } = await browseWorks({ tab: "az", take: 10000, author });
+  // Página de autor = TODAS sus obras (manga y cómic). Sin `content:"all"` los
+  // autores solo-cómic daban 404 (el default `manga` filtra `type != COMIC`).
+  const { items } = await browseWorks({ tab: "az", take: 10000, author, content: "all" });
   if (items.length === 0) notFound();
 
   const cards: BrowseCard[] = items.map((w) => ({

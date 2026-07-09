@@ -109,14 +109,19 @@ export const VISIBLE_PUBLISHERS = [
  * edición aún). Fuente única para browse/búsqueda/autores/sitemap.
  */
 export function inCatalogWhere(
-  content: "manga" | "comic" = "manga",
+  content: "manga" | "comic" | "all" = "manga",
 ): import("@prisma/client").Prisma.WorkWhereInput {
   return {
     // Manga = todo lo que NO es cómic (default, no afecta a Ivrea). Cómic = la
     // sección propia (Ovni/Panini/Utopía); su enriquecimiento de géneros/sinopsis
-    // llega con GCD (ver memoria gcd-comics-source). El resto del filtro es común.
+    // llega con GCD (ver memoria gcd-comics-source). `all` = sin filtro de tipo
+    // (una página de autor muestra TODAS sus obras, manga y cómic). Resto común.
     AND: [
-      content === "comic" ? { type: "COMIC" } : { type: { not: "COMIC" } },
+      content === "comic"
+        ? { type: "COMIC" }
+        : content === "all"
+          ? {}
+          : { type: { not: "COMIC" } },
       {
         OR: [
           // Tiene una edición visible (Ivrea/Panini/VIZ). NO exigimos volumes>0:
@@ -633,7 +638,7 @@ export async function browseWorks(opts: {
   demographics?: string[];
   completed?: boolean;
   sort?: "az" | "za" | "none";
-  content?: "manga" | "comic";
+  content?: "manga" | "comic" | "all";
 }): Promise<{ items: WorkCard[]; total: number }> {
   const take = opts.take ?? 60;
   const page = Math.max(1, opts.page ?? 1);
