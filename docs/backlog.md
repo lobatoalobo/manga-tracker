@@ -77,6 +77,7 @@ Núcleo ✅ (push agrupado anti-spam, Deseados "Salió en Argentina", silenciar 
 - **Editoriales nuevas** — IDs de Whakoom para Kemuri/Utopía/Larp/etc. (memoria `editoriales-nuevas`).
 - **Portadas en R2** — falta setup del bucket Cloudflare R2 (memoria `covers-r2`).
 - **Mangaka index** — cron semanal Vercel ya existe; índice propio de autores (memoria `mangaka-index`).
+- **Unificación de autores (aliasing)** — el mismo autor aparece con 2 grafías por fuente: `author` (romaji inglés "Junji Ito") vs créditos MU ("Junji Itou") → 2 páginas /autores. Lo SEGURO ya está (crash 404 fijado; orden natural; el crédito principal usa el nombre curado). Lo que falta es **aliasing real** (Ito≡Itou, pen-names) — NO auto-mergear (riesgo de unir personas distintas). Enfoque propuesto: construir alias por **co-ocurrencia** (dentro de un work, author-field ≡ story-credit = misma persona) y canonizar. Es parte del mangaka-index. Residual: ~264 nombres de crédito no coinciden con author (mezcla de dupes reales + gente nueva legítima como dibujantes).
 - **Community editing** — herramientas de edición de catálogo pensadas para uso comunitario futuro (modelo Whakoom).
 
 ---

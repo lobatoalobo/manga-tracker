@@ -123,6 +123,7 @@ export async function crawlIvreaCatalog(): Promise<IvreaCatalogResult> {
         author: d.author,
         synopsis: d.synopsis,
         originalTitle: d.originalTitle,
+        incomingType: "MANGA", // Ivrea es fuente manga (guard cross-type)
       }).catch(() => null);
       if (workId && row.workId !== workId)
         await prisma.publisherEdition

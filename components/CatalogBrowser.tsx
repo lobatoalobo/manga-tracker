@@ -39,6 +39,7 @@ export interface BrowseState {
   gmode: GMode;
   demographics: string[];
   page: number;
+  content: "manga" | "comic";
 }
 
 const PER_PAGE = 60;
@@ -174,7 +175,8 @@ export default function CatalogBrowser({
   // Filtros: el server es la fuente de verdad (props.initial). Cambiar cualquiera
   // NAVEGA (router.push) → re-consulta server-side y vuelve UNA página. Solo el
   // texto de búsqueda es estado local (responsivo) y navega con debounce.
-  const { tab, region, pubs, sort, completed, genres, gmode, demographics, page } = initial;
+  const { tab, region, pubs, sort, completed, genres, gmode, demographics, page, content } = initial;
+  const isComic = content === "comic";
   const [q, setQ] = useState(initial.q);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
@@ -189,6 +191,7 @@ export default function CatalogBrowser({
     if (next.genres.length) params.set("genres", next.genres.join(","));
     if (next.genres.length > 1 && next.gmode === "all") params.set("gmode", "all");
     if (next.demographics.length) params.set("demo", next.demographics.join(","));
+    if (next.content === "comic") params.set("content", "comic");
     if (next.page > 1) params.set("page", String(next.page));
     const qs = params.toString();
     return `${basePath}${qs ? `?${qs}` : ""}`;
@@ -199,9 +202,11 @@ export default function CatalogBrowser({
   // aplican todavía (no hay próximos de VIZ): no se muestran.
   const nationalCtx = region !== "int";
 
-  // Editoriales para los chips, scopeadas a la región (sin conteo: server-side).
-  const pubOptions =
-    region === "int"
+  // Editoriales para los chips (sin conteo: server-side). En Cómics, las de cómic;
+  // en manga, scopeadas a la región.
+  const pubOptions = isComic
+    ? nationalPublishers
+    : region === "int"
       ? intlPublishers
       : region === "ar"
         ? nationalPublishers
@@ -213,7 +218,7 @@ export default function CatalogBrowser({
   // Aplica un patch y NAVEGA (server re-consulta). Resetea a página 1 salvo que sea
   // paginación (keepPage). El texto `q` vivo se preserva en la base.
   function update(patch: Partial<BrowseState>, keepPage = false) {
-    const base: BrowseState = { q, tab, region, pubs, sort, completed, genres, gmode, demographics, page };
+    const base: BrowseState = { q, tab, region, pubs, sort, completed, genres, gmode, demographics, page, content };
     const next: BrowseState = { ...base, ...(keepPage ? {} : { page: 1 }), ...patch };
     startNav(() => router.push(urlFor(next), { scroll: false }));
   }
@@ -264,37 +269,63 @@ export default function CatalogBrowser({
 
       {showTabs && (
         <>
-          {/* Región: split primario (Todo / Nacional / Internacional). */}
+          {/* Contenido: split de primer nivel Manga / Cómics. Cambiarlo resetea los
+              filtros (son dominios distintos). Cómics no tiene región/lentes/género. */}
           <div className="mb-2 inline-flex rounded-xl border border-border bg-surface-2 p-1 text-sm">
-            {REGIONS.map(({ r, label }) => (
+            {(["manga", "comic"] as const).map((c) => (
               <button
-                key={r}
+                key={c}
                 type="button"
-                onClick={() => setRegionTo(r)}
+                onClick={() =>
+                  update({
+                    content: c, region: "all", pubs: [], tab: "az",
+                    genres: [], demographics: [], completed: false,
+                  })
+                }
                 className={`rounded-lg px-3 py-1 font-medium transition ${
-                  region === r ? "bg-accent text-white" : "text-muted hover:text-foreground"
+                  content === c ? "bg-accent text-white" : "text-muted hover:text-foreground"
                 }`}
               >
-                {label}
+                {c === "manga" ? "Manga" : "Cómics"}
               </button>
             ))}
           </div>
 
-          {/* Lentes: misma barra segmentada que Región (Todo / Series / Próximos). */}
-          <div className="mb-2 inline-flex rounded-xl border border-border bg-surface-2 p-1 text-sm">
-            {TABS.map(({ t, label }) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => update({ tab: t })}
-                className={`rounded-lg px-3 py-1 font-medium transition ${
-                  activeTab === t ? "bg-accent text-white" : "text-muted hover:text-foreground"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {!isComic && (
+            <>
+              {/* Región: split primario (Todo / Nacional / Internacional). */}
+              <div className="mb-2 inline-flex rounded-xl border border-border bg-surface-2 p-1 text-sm">
+                {REGIONS.map(({ r, label }) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRegionTo(r)}
+                    className={`rounded-lg px-3 py-1 font-medium transition ${
+                      region === r ? "bg-accent text-white" : "text-muted hover:text-foreground"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Lentes: misma barra segmentada que Región (Todo / Series / Próximos). */}
+              <div className="mb-2 inline-flex rounded-xl border border-border bg-surface-2 p-1 text-sm">
+                {TABS.map(({ t, label }) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => update({ tab: t })}
+                    className={`rounded-lg px-3 py-1 font-medium transition ${
+                      activeTab === t ? "bg-accent text-white" : "text-muted hover:text-foreground"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           {/* Orden: dos botones que CICLAN (fuera del dropdown). A-Z: A-Z→Z-A→off.
               Tomos: ↑ (más)→↓ (menos)→off. Solo uno activo a la vez. */}
@@ -365,7 +396,7 @@ export default function CatalogBrowser({
             </div>
           )}
 
-          {showTabs && (
+          {showTabs && !isComic && (
             <div>
               <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
                 Estado

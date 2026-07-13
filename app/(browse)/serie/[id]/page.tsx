@@ -147,6 +147,49 @@ export default async function SeriePage({
 
   const { title, coverImage, author, genres } = work;
   const synopsis = work.synopsisEs; // el editor admin edita la ES (oficial)
+
+  // Créditos por rol (si los tenemos). Agrupamos por rol en orden de relevancia;
+  // si falta, la sección queda en blanco (fallback al `author` principal).
+  const credits = Array.isArray(work.credits)
+    ? (work.credits as unknown as { name: string; role: string; order?: number }[])
+    : [];
+  const ROLE_LABEL: Record<string, string> = {
+    STORY_ART: "Historia y dibujo",
+    STORY: "Historia", ART: "Dibujo", ASSISTANT: "Asistentes",
+    SCRIPT: "Guion", PENCILS: "Dibujo", INK: "Tinta", COLOR: "Color", LETTER: "Letras",
+    UNKNOWN: "Créditos",
+  };
+  const ROLE_SORT = ["STORY_ART", "STORY", "SCRIPT", "ART", "PENCILS", "INK", "COLOR", "LETTER", "ASSISTANT", "UNKNOWN"];
+  const byRole = credits.reduce((m, c) => {
+    (m.get(c.role) ?? m.set(c.role, []).get(c.role)!).push(c.name);
+    return m;
+  }, new Map<string, string[]>());
+  // Autor solista: si Historia y Dibujo son exactamente la/s misma/s persona/s, se
+  // combinan en una línea ("Historia y dibujo: X") en vez de repetir el nombre.
+  const st = byRole.get("STORY"), ar = byRole.get("ART");
+  if (st && ar && st.length === ar.length && st.every((n) => ar.includes(n))) {
+    byRole.delete("STORY");
+    byRole.delete("ART");
+    byRole.set("STORY_ART", st);
+  }
+  const creditGroups = [...byRole].sort(
+    (a, b) => (ROLE_SORT.indexOf(a[0]) + 1 || 99) - (ROLE_SORT.indexOf(b[0]) + 1 || 99),
+  );
+  // El crédito PRINCIPAL (Historia / Historia y dibujo) ES el `author` curado por
+  // definición. Si es una sola persona y el `author` es un solo nombre, mostramos el
+  // nombre CURADO — evita surfacear otra grafía del mismo autor (ej. "Junji Itou" del
+  // crédito MU vs "Junji Ito" del campo author) y su página /autores duplicada.
+  const primary = creditGroups.find(([r]) => r === "STORY_ART" || r === "STORY");
+  if (author?.trim() && !/[,&]| y /i.test(author) && primary && primary[1].length === 1) {
+    primary[1][0] = author.trim();
+  }
+  // Un solo grupo STORY/UNKNOWN = un crédito simple → sin etiqueta (como antes).
+  const labelCredits = creditGroups.length > 1 || !["STORY", "UNKNOWN"].includes(creditGroups[0]?.[0]);
+  const personLink = (n: string) => (
+    <Link href={`/autores/${encodeURIComponent(n)}`} className="transition hover:text-accent hover:underline">
+      {n}
+    </Link>
+  );
   // Los chips de género llevan al catálogo filtrado; si la feature está apagada,
   // ese filtro no aplica → los ocultamos para no dejar links muertos.
   const genresEnabled = await isEnabled("genre-filters");
@@ -245,7 +288,25 @@ export default async function SeriePage({
             )}
           </div>
 
-          {author && (
+          {creditGroups.length > 0 ? (
+            <div className="mt-1 space-y-0.5 text-sm text-muted">
+              {creditGroups.map(([role, names]) => (
+                <p key={role}>
+                  {labelCredits && (
+                    <span className="mr-1 text-xs uppercase tracking-wide text-muted/70">
+                      {ROLE_LABEL[role] ?? role}:
+                    </span>
+                  )}
+                  {names.map((n, i) => (
+                    <span key={n}>
+                      {i > 0 && ", "}
+                      {personLink(n)}
+                    </span>
+                  ))}
+                </p>
+              ))}
+            </div>
+          ) : author ? (
             <p className="mt-1 text-sm text-muted">
               {author
                 .split(/,|&| y /i)
@@ -254,16 +315,11 @@ export default async function SeriePage({
                 .map((a, i) => (
                   <span key={a}>
                     {i > 0 && ", "}
-                    <Link
-                      href={`/autores/${encodeURIComponent(a)}`}
-                      className="transition hover:text-accent hover:underline"
-                    >
-                      {a}
-                    </Link>
+                    {personLink(a)}
                   </span>
                 ))}
             </p>
-          )}
+          ) : null}
 
           {genresEnabled && genres.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">

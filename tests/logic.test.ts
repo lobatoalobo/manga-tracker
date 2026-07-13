@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { workCardFlags, publisherKey, authorNameMatches, romajiKey, bridgeAuthorOk } from "@/lib/catalog";
+import { workCardFlags, publisherKey, authorNameMatches, romajiKey, bridgeAuthorOk, sameContentClass } from "@/lib/catalog";
 import { volumeCap, isPlausibleVolume, publishedVolumes } from "@/lib/volumes";
 import { looksLikeComic } from "@/lib/contentType";
 import { emptyDuplicateEditions, type EdLite as DupEd } from "@/lib/mergeWorks";
@@ -173,6 +173,29 @@ describe("bridgeAuthorOk (puente romaji: el autor solo bloquea si ambos difieren
   it("entrante sin autor → ok por romaji", () => {
     expect(bridgeAuthorOk(null, "Akira Amano")).toBe(true);
     expect(bridgeAuthorOk(undefined, undefined)).toBe(true);
+  });
+});
+
+describe("sameContentClass (guard cross-type del dedup débil manga/cómic)", () => {
+  it("mismo tipo → matchea (manga↔manga, cómic↔cómic)", () => {
+    expect(sameContentClass("MANGA", "MANGA")).toBe(true);
+    expect(sameContentClass("COMIC", "COMIC")).toBe(true);
+  });
+  it("manga entrante vs Work COMIC → NO matchea", () => {
+    expect(sameContentClass("MANGA", "COMIC")).toBe(false);
+  });
+  it("cómic entrante vs Work manga → NO matchea", () => {
+    expect(sameContentClass("COMIC", "MANGA")).toBe(false);
+  });
+  it("tipo entrante desconocido (null/undefined) = no-cómic: matchea manga, NO cómic", () => {
+    expect(sameContentClass(null, "MANGA")).toBe(true);
+    expect(sameContentClass(undefined, "MANGA")).toBe(true);
+    expect(sameContentClass(null, "COMIC")).toBe(false);
+    expect(sameContentClass(undefined, "COMIC")).toBe(false);
+  });
+  it("otros tipos (LIGHT_NOVEL/ARTBOOK) cuentan como no-cómic → no bloquean manga", () => {
+    expect(sameContentClass("MANGA", "LIGHT_NOVEL")).toBe(true);
+    expect(sameContentClass("COMIC", "LIGHT_NOVEL")).toBe(false);
   });
 });
 

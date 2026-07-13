@@ -80,6 +80,7 @@ confiable, además de géneros/sinopsis. Match por romaji + prefijo "Romaji: ES"
 
 | Comando | Qué hace |
 |---|---|
+| `npx tsx scripts/scan-crosstype.ts [--dump id,id]` | **Read-only.** Detecta Works que fusionaron un manga con un cómic (lo que el guard de `findOrCreateWork`→`sameContentClass` ya evita para imports nuevos). Bucket **MERGE** = ≥2 ediciones con señal manga y cómic a la vez → **hay que partir el Work** (split manual). Bucket **RECLASIF** = 1 sola edición con señal contradictoria → NO es un merge (cómic mal tipeado o falso positivo del clasificador), no se parte. Re-correr tras cada import como guardrail. |
 | `npx tsx scripts/fix-volume-overcounts.ts [--apply]` | Capa el **sobre-conteo** de tomos: si una edición tiene un tomo NUEVO con fecha futura (en `IvreaRelease`), los publicados son `N-1`. **No re-fetchea Ivrea** (usa el snapshot) → seguro local. Misma lógica que corre el cron de /proximas/ (`capOvercountedIvreaEditions`). |
 | `npx tsx scripts/recrawl-ivrea.ts --contradictions [--dry]` | Re-crawlea fichas de Ivrea con conteo contradictorio (próximo tomo #N con ≥N tomos) y trae el conteo AR real. **Correr solo con Ivrea arriba** (a veces banea la IP local). |
 | `npx tsx scripts/fix-ivrea-urls.ts [--limit N] [--apply]` | Arregla links de Ivrea que quedaron a Whakoom + sincroniza tomos. |

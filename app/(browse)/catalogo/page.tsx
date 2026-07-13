@@ -5,6 +5,7 @@ import {
   wishEditionsFor,
   INTL_PUBLISHERS,
   CATALOG_PUBLISHERS,
+  COMIC_PUBLISHERS,
 } from "@/lib/catalog";
 import CatalogBrowser, {
   type BrowseCard,
@@ -35,11 +36,13 @@ export default async function CatalogoPage({
     gmode?: string;
     demo?: string;
     page?: string;
+    content?: string;
   }>;
 }) {
   const sp = await searchParams;
   const split = (v?: string) =>
     (v ?? "").split(",").map((g) => g.trim()).filter(Boolean);
+  const content: "manga" | "comic" = sp.content === "comic" ? "comic" : "manga";
   const initial: BrowseState = {
     q: sp.q ?? "",
     tab: sp.tab === "series" || sp.tab === "tomos" ? sp.tab : "az",
@@ -53,6 +56,7 @@ export default async function CatalogoPage({
     gmode: sp.gmode === "all" ? "all" : "any",
     demographics: split(sp.demo),
     page: Math.max(1, Number(sp.page) || 1),
+    content,
   };
   const session = await auth();
   // Server-side: filtros + paginación en la query → se sirve UNA página (~60), no
@@ -69,6 +73,7 @@ export default async function CatalogoPage({
     sort: initial.sort === "za" ? "za" : initial.sort === "az" ? "az" : "none",
     page: initial.page,
     take: 60,
+    content,
   });
   const cards: BrowseCard[] = items.map((w) => ({
     id: w.id,
@@ -123,9 +128,11 @@ export default async function CatalogoPage({
         wishedMap={wishedMap}
         canWish={!!session?.user?.id}
         initial={initial}
-        showGenreFilters={await isEnabled("genre-filters")}
+        showGenreFilters={content === "manga" && (await isEnabled("genre-filters"))}
         intlPublishers={[...INTL_PUBLISHERS]}
-        nationalPublishers={[...CATALOG_PUBLISHERS]}
+        nationalPublishers={
+          content === "comic" ? [...COMIC_PUBLISHERS] : [...CATALOG_PUBLISHERS]
+        }
       />
     </main>
   );
