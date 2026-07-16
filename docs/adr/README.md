@@ -28,3 +28,5 @@ un ADR que desde el código.
 | 002 | [Mutation Framework](002-mutation-framework.md) | Aceptado |
 | 003 | Dominio de catálogo | _pendiente (Fase 2)_ |
 | 004 | [Capa de Identidad Externa](004-external-identity.md) | Propuesto (gate: spike de granularidad) |
+| 005 | Identidad de creadores | _en rama de identidad (staging), congelado_ |
+| 006 | [Contribuciones comunitarias al catálogo](006-community-contributions.md) | Aceptado (dominio) |
