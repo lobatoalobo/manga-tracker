@@ -16,6 +16,8 @@ import {
   type AddProposalContributionResult,
 } from "@/lib/contributions/addContribution";
 import type { AddProposalContributionInput } from "@/lib/domain/proposal/addContribution";
+import { getCatalogProposalDetail } from "@/lib/contributions/readProposal";
+import type { CatalogProposalDetail } from "@/lib/domain/proposal/readModel";
 
 export type CreateProposalActionResult =
   | ({ ok: true } & CreateCatalogProposalResult)
@@ -88,4 +90,16 @@ export async function addContributionAction(
     console.error("[addContributionAction]", e);
     return { ok: false, error: "No se pudo agregar la contribución." };
   }
+}
+
+/**
+ * Lectura admin/moderador del detalle de una propuesta (Community Contributions).
+ * Detrás del flag `community-contributions`. Devuelve `null` si el flag está apagado,
+ * el actor no es admin, el id es inválido o la propuesta no existe (indistinguibles:
+ * no revela existencia). El caller mapea `null` a notFound().
+ */
+export async function getProposalDetailAction(
+  proposalId: number,
+): Promise<CatalogProposalDetail | null> {
+  return getCatalogProposalDetail(proposalId);
 }
