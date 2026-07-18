@@ -72,6 +72,7 @@ model NotificationPref {
   wishlist  Boolean @default(true) // novedades de tus deseados (salió en AR)
   social    Boolean @default(true) // reacciones y comentarios en tu actividad
   friends   Boolean @default(true) // solicitudes / aceptaciones de amistad
+  contributions Boolean @default(true) // novedades de tus contribuciones al catálogo
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -667,4 +668,207 @@ model MutationLog {
   @@index([correlationId])
   @@index([name, at])
   @@index([mutationKey])
+}
+
+// ============================================================================
+// Community Contributions — bounded context ADITIVO (ADR-006).
+// NO toca Work/Edition/Volume/User/MutationLog/Notification (salvo la columna
+// NotificationPref.contributions). Refs cross-BC (Work/Edition/Volume/User/
+// MutationLog/assets) = BLANDAS (Int?/String?, sin FK). FKs SOLO internas al BC.
+// Enum-like = String (convención del repo, sin enums Prisma). Los CHECKs y las
+// invariantes complejas van fuera del schema (SQL manual / application). Ver
+// docs/community-contributions-first-migration-plan.md.
+// ============================================================================
+
+// Aggregate root: identidad opaca del sujeto propuesto + estado de moderación.
+// NO es una obra del catálogo; una propuesta pendiente no existe como Work.
+model CatalogProposal {
+  id                   Int      @id @default(autoincrement())
+  family               String // ALTA | CORRECCION | REPORTE
+  targetKind           String // NEW_WORK|NEW_EDITION|NEW_VOLUME|WORK|EDITION|VOLUME|STRUCTURAL
+  refWorkId            Int? // soft ref catálogo (target/parent/reporte-A)
+  refEditionId         Int? // soft ref catálogo
+  refVolumeId          Int? // soft ref catálogo
+  refWorkBId           Int? // soft ref catálogo (DUPLICATE contraparte)
+  relationKind         String? // DUPLICATE | BAD_MERGE (solo STRUCTURAL)
+  contentClass         String // MANGA | COMIC — autoritativo estructural, INMUTABLE
+  status               String   @default("SUBMITTED")
+  version              Int      @default(0) // optimistic locking
+  relatedProposalId    Int? // soft ref a otra Proposal (advisory; CHECK != id manual)
+  originatorUserId     String? // soft ref User (denorm; null p/ anonimización)
+  createIdempotencyKey String?  @unique
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  contributions ProposalContribution[]
+  infoRequests  ProposalInfoRequest[]
+  subscriptions ProposalSubscription[]
+  preflightKeys ProposalPreflightKey[]
+  resolution    ResolutionRecord?
+
+  @@index([status])
+  @@index([originatorUserId])
+  @@index([contentClass])
+  @@index([refWorkId])
+  @@index([refEditionId])
+  @@index([refVolumeId])
+}
+
+// Envío append-only atribuido. La primera contribución origina la Proposal.
+// Contenido inmutable; solo mutan visibility y withdrawnAt (metadata). La
+// disposición (aceptada/parcial/…) es DERIVADA, no se persiste.
+model ProposalContribution {
+  id                   Int       @id @default(autoincrement())
+  proposalId           Int
+  authorId             String? // soft ref User; null p/ anonimización → "Otra persona"
+  visibility           String    @default("VISIBLE") // VISIBLE | OCULTA | EN_CUARENTENA
+  withdrawnAt          DateTime? // retiro autoritativo (null = ABIERTA)
+  answersInfoRequestId Int? // FK interna (dirección autoritativa), onDelete: SetNull
+  idempotencyKey       String?   @unique
+  createdAt            DateTime  @default(now())
+
+  proposal           CatalogProposal      @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  answersInfoRequest ProposalInfoRequest? @relation(fields: [answersInfoRequestId], references: [id], onDelete: SetNull)
+  claims             ProposalClaim[]
+
+  @@index([proposalId, createdAt])
+  @@index([authorId])
+  @@index([answersInfoRequestId])
+}
+
+// Afirmación (attributeKind, value) — unidad de conocimiento y de resolución.
+// attributeKind/contractVersion/claimOperation/value INMUTABLES; result y su
+// metadata de resolución son mutables.
+model ProposalClaim {
+  id               Int       @id @default(autoincrement())
+  contributionId   Int
+  attributeKind    String
+  contractVersion  Int
+  claimOperation   String // SET|ADD|REMOVE|MARK_UNKNOWN|MARK_NOT_APPLICABLE
+  value            Json? // tipado por (attributeKind, contractVersion); null si MARK_*
+  result           String    @default("PROPUESTA") // PROPUESTA|ACEPTADA|NO_USADA|RETIRADA
+  resultReason     String? // procedencia|corroboracion | desplazada|descartada|rechazada
+  resolvedAt       DateTime?
+  resolvedByUserId String? // soft ref User
+  promotedAssetRef String? // soft ref a asset oficial (URL R2) p/ portada aceptada
+  createdAt        DateTime  @default(now())
+
+  contribution       ProposalContribution     @relation(fields: [contributionId], references: [id], onDelete: Cascade)
+  evidenceReferences ClaimEvidenceReference[]
+  evidenceArtifacts  ClaimEvidenceArtifact[]
+
+  @@index([contributionId, result])
+}
+
+// Evidencia por referencia (VO inmutable): URL / ISBN / fuente estructurada.
+model ClaimEvidenceReference {
+  id        Int      @id @default(autoincrement())
+  claimId   Int
+  type      String // URL | ISBN | SOURCE_REF
+  value     String
+  strength  String // STRONG | MEDIUM | WEAK
+  createdAt DateTime @default(now())
+
+  claim ProposalClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@unique([claimId, type, value])
+}
+
+// Evidencia por artefacto (imagen subida). LATENTE en MVP-A: la tabla existe pero
+// NO se crean filas desde producción hasta habilitar el pipeline de uploads (MVP-B).
+// Contenido inmutable; estado de moderación mutable. CHECKs de lifecycle → MVP-B.
+model ClaimEvidenceArtifact {
+  id                Int       @id @default(autoincrement())
+  claimId           Int
+  status            String    @default("EN_CUARENTENA") // EN_CUARENTENA|DISPONIBLE|BLOQUEADA
+  storageKey        String // opaca (key de R2); NO URL firmada
+  hash              String // content hash (tombstone/audit)
+  detectedMime      String?
+  sizeBytes         Int?
+  scanResult        String?
+  blockedReason     String?
+  scheduledDeleteAt DateTime?
+  bytesDeletedAt    DateTime?
+  promotedAssetRef  String? // soft ref a asset oficial (URL R2)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  claim ProposalClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([scheduledDeleteAt])
+}
+
+// Pedido de información del moderador. answersInfoRequestId (en Contribution) es la
+// dirección autoritativa; targetContributionId acá es una ref BLANDA (rompe el ciclo).
+model ProposalInfoRequest {
+  id                   Int       @id @default(autoincrement())
+  proposalId           Int
+  scope                String // PROPOSAL | CONTRIBUTION
+  targetUserId         String? // soft ref User
+  targetContributionId Int? // soft ref interna (sin FK; app valida misma Proposal)
+  prompt               String
+  privateNote          String? // solo moderador
+  status               String    @default("ABIERTO") // ABIERTO | ANSWERED
+  openedByUserId       String // soft ref User
+  answeredAt           DateTime?
+  createdAt            DateTime  @default(now())
+
+  proposal               CatalogProposal        @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  answeringContributions ProposalContribution[] // back-relation de answersInfoRequestId
+
+  @@index([proposalId, status])
+}
+
+// Interés/aviso en una propuesta. Aggregate aparte; no aporta datos.
+model ProposalSubscription {
+  id         Int      @id @default(autoincrement())
+  proposalId Int
+  userId     String // soft ref User
+  status     String   @default("ACTIVE") // ACTIVE | CANCELLED
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  proposal CatalogProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, proposalId])
+  @@index([proposalId, status])
+}
+
+// Registro inmutable del acto de resolución (1 por Proposal). publicReason y
+// privateNote viven SOLO acá. Refs de applied/superseding/mutation/primaryTitle = blandas.
+model ResolutionRecord {
+  id                    Int      @id @default(autoincrement())
+  proposalId            Int      @unique
+  outcome               String // ACEPTADA|RECHAZADA|SUPERSEDED|ABANDONADA
+  actorType             String // HUMAN | SYSTEM | RECONCILE
+  moderatorUserId       String? // soft ref User
+  resolvedAt            DateTime @default(now())
+  publicReason          String?
+  privateNote           String? // solo moderador
+  appliedWorkId         Int? // soft ref catálogo
+  appliedEditionId      Int? // soft ref catálogo
+  appliedVolumeId       Int? // soft ref catálogo
+  supersedingProposalId Int? // soft ref a otra Proposal
+  supersededReason      String? // IMPORT | MODERATION | ANOTHER_PROPOSAL
+  mutationCorrelationId String? // soft ref MutationLog.correlationId
+  overrideSummary       Json?
+  primaryTitleClaimId   Int? // soft ref interna (sin FK; app valida misma Proposal + ACEPTADA)
+  reconcileMeta         Json?
+
+  proposal CatalogProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+}
+
+// Índice derivado y recomputable de preflight (NO verdad del dominio). Se recomputa
+// desde las claims ACTIVAS; el preflight filtra por status de la Proposal.
+model ProposalPreflightKey {
+  id         Int    @id @default(autoincrement())
+  proposalId Int
+  keyType    String // NORM_TITLE | ROMAJI | ISBN | EXTERNAL
+  keyValue   String
+
+  proposal CatalogProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@unique([proposalId, keyType, keyValue])
+  @@index([keyType, keyValue])
 }
