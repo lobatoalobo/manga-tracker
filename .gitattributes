@@ -1,0 +1,4 @@
+# Prisma migration SQL must always be LF so the file bytes (and therefore the
+# Prisma migration checksum stored in _prisma_migrations) are identical across
+# every checkout/OS. Prevents CRLF drift between environments (prod vs staging).
+prisma/migrations/**/*.sql text eol=lf
