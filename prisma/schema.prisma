@@ -812,6 +812,7 @@ model ProposalInfoRequest {
   status               String    @default("ABIERTO") // ABIERTO | ANSWERED
   openedByUserId       String // soft ref User
   answeredAt           DateTime?
+  idempotencyKey       String?   @unique // idempotencia fuerte de RequestProposalInfo (nullable p/ filas históricas)
   createdAt            DateTime  @default(now())
 
   proposal               CatalogProposal        @relation(fields: [proposalId], references: [id], onDelete: Cascade)
