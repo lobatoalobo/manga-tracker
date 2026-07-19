@@ -36,6 +36,13 @@ import {
   type AnswerProposalInfoRequestResult,
 } from "@/lib/contributions/answerProposalInfoRequest";
 import type { AnswerProposalInfoRequestCommand } from "@/lib/domain/proposal/answerInfo";
+import {
+  resolveCatalogProposalUseCase,
+  ProposalNotResolvableError,
+  ClaimOutcomesInvalidError,
+  type ResolveCatalogProposalResult,
+} from "@/lib/contributions/resolveCatalogProposal";
+import type { ResolveCatalogProposalCommand } from "@/lib/domain/proposal/resolve";
 
 export type CreateProposalActionResult =
   | ({ ok: true } & CreateCatalogProposalResult)
@@ -203,6 +210,41 @@ export async function answerProposalInfoRequestAction(
     if (e instanceof InfoRequestNotAnswerableError) return { ok: false, error: e.message };
     if (e instanceof IdempotencyConflictError) return { ok: false, error: e.message };
     console.error("[answerProposalInfoRequestAction]", e);
+    return { ok: false, error: GENERIC };
+  }
+}
+
+export type ResolveCatalogProposalActionResult =
+  | ({ ok: true } & ResolveCatalogProposalResult)
+  | { ok: false; error: string };
+
+/**
+ * Moderación: resuelve una propuesta (decide + registra ResolutionRecord + outcomes de
+ * claims + transición terminal + version++). NO aplica al catálogo. Solo admin, detrás
+ * del flag `community-contributions`. Anti-enumeración: flag off / anónimo / no-admin /
+ * propuesta inexistente → misma respuesta genérica. No devuelve privateNote.
+ */
+export async function resolveCatalogProposalAction(
+  command: ResolveCatalogProposalCommand,
+): Promise<ResolveCatalogProposalActionResult> {
+  const GENERIC = "No se pudo procesar la resolución.";
+
+  if (!(await isEnabled("community-contributions"))) return { ok: false, error: GENERIC };
+
+  const session = await auth();
+  if (!session?.user?.id || !isAdmin(session.user.email))
+    return { ok: false, error: GENERIC };
+
+  try {
+    const result = await resolveCatalogProposalUseCase(command, session.user.id);
+    return { ok: true, ...result };
+  } catch (e) {
+    if (e instanceof ProposalNotFoundError) return { ok: false, error: GENERIC }; // anti-enum
+    if (e instanceof ValidationError) return { ok: false, error: e.message };
+    if (e instanceof ClaimOutcomesInvalidError) return { ok: false, error: e.message };
+    if (e instanceof ProposalNotResolvableError) return { ok: false, error: e.message };
+    if (e instanceof IdempotencyConflictError) return { ok: false, error: e.message };
+    console.error("[resolveCatalogProposalAction]", e);
     return { ok: false, error: GENERIC };
   }
 }
