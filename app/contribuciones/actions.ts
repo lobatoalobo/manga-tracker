@@ -29,6 +29,13 @@ import {
 } from "@/lib/contributions/requestProposalInfo";
 import type { RequestProposalInfoCommand } from "@/lib/domain/proposal/requestInfo";
 import { isAdmin } from "@/lib/admin";
+import {
+  answerProposalInfoRequestUseCase,
+  NotProposalOriginatorError,
+  InfoRequestNotAnswerableError,
+  type AnswerProposalInfoRequestResult,
+} from "@/lib/contributions/answerProposalInfoRequest";
+import type { AnswerProposalInfoRequestCommand } from "@/lib/domain/proposal/answerInfo";
 
 export type CreateProposalActionResult =
   | ({ ok: true } & CreateCatalogProposalResult)
@@ -158,6 +165,44 @@ export async function requestProposalInfoAction(
     if (e instanceof OpenRequestExistsError) return { ok: false, error: e.message };
     if (e instanceof IdempotencyConflictError) return { ok: false, error: e.message };
     console.error("[requestProposalInfoAction]", e);
+    return { ok: false, error: GENERIC };
+  }
+}
+
+export type AnswerProposalInfoRequestActionResult =
+  | ({ ok: true } & AnswerProposalInfoRequestResult)
+  | { ok: false; error: string };
+
+/**
+ * El originador responde una solicitud de información (→ vuelve a SUBMITTED cuando no
+ * queda ninguna abierta). Detrás del flag; requiere sesión. El chequeo de originador
+ * ocurre bajo el lock (write-port), ANTES de la idempotencia. Anti-enumeración:
+ * flag off / anónimo / no-originador / propuesta inexistente → respuesta genérica.
+ */
+export async function answerProposalInfoRequestAction(
+  command: AnswerProposalInfoRequestCommand,
+): Promise<AnswerProposalInfoRequestActionResult> {
+  const GENERIC = "No se pudo procesar la respuesta.";
+
+  if (!(await isEnabled("community-contributions"))) return { ok: false, error: GENERIC };
+
+  let userId: string;
+  try {
+    userId = await requireUserId();
+  } catch {
+    return { ok: false, error: GENERIC };
+  }
+
+  try {
+    const result = await answerProposalInfoRequestUseCase(command, userId);
+    return { ok: true, ...result };
+  } catch (e) {
+    if (e instanceof NotProposalOriginatorError) return { ok: false, error: GENERIC }; // anti-enum
+    if (e instanceof ProposalNotFoundError) return { ok: false, error: GENERIC }; // anti-enum
+    if (e instanceof ValidationError) return { ok: false, error: e.message };
+    if (e instanceof InfoRequestNotAnswerableError) return { ok: false, error: e.message };
+    if (e instanceof IdempotencyConflictError) return { ok: false, error: e.message };
+    console.error("[answerProposalInfoRequestAction]", e);
     return { ok: false, error: GENERIC };
   }
 }
