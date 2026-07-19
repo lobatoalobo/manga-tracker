@@ -18,6 +18,8 @@ import {
 import type { AddProposalContributionInput } from "@/lib/domain/proposal/addContribution";
 import { getCatalogProposalDetail } from "@/lib/contributions/readProposal";
 import type { CatalogProposalDetail } from "@/lib/domain/proposal/readModel";
+import { getOwnCatalogProposalDetail } from "@/lib/contributions/readOwnProposal";
+import type { OwnCatalogProposalDetail } from "@/lib/domain/proposal/ownReadModel";
 
 export type CreateProposalActionResult =
   | ({ ok: true } & CreateCatalogProposalResult)
@@ -102,4 +104,17 @@ export async function getProposalDetailAction(
   proposalId: number,
 ): Promise<CatalogProposalDetail | null> {
   return getCatalogProposalDetail(proposalId);
+}
+
+/**
+ * Lectura de una propuesta para el usuario común relacionado (originador o aportante),
+ * detrás del flag `community-contributions`. Expone SOLO las contribuciones del viewer.
+ * Devuelve `null` si el flag está apagado, no hay sesión, el id es inválido, la
+ * propuesta no existe o el viewer no está relacionado (indistinguibles). El caller
+ * mapea `null` a notFound().
+ */
+export async function getOwnProposalDetailAction(
+  proposalId: number,
+): Promise<OwnCatalogProposalDetail | null> {
+  return getOwnCatalogProposalDetail(proposalId);
 }
