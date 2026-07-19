@@ -43,6 +43,21 @@ import {
   type ResolveCatalogProposalResult,
 } from "@/lib/contributions/resolveCatalogProposal";
 import type { ResolveCatalogProposalCommand } from "@/lib/domain/proposal/resolve";
+import {
+  applyCatalogProposalUseCase,
+  ProposalNotApplicableError,
+  ResolutionNotFoundError,
+  ResolutionNotPositiveError,
+  NoApplicableClaimsError,
+  ClaimSetInvalidError,
+  TargetKindNotSupportedError,
+  InsufficientCatalogDataError,
+  CatalogConflictError,
+  InconsistentApplyStateError,
+  UnsupportedClaimForApplyError,
+  type ApplyCatalogProposalResult,
+} from "@/lib/contributions/applyCatalogProposal";
+import type { ApplyCatalogProposalCommand } from "@/lib/domain/proposal/apply";
 
 export type CreateProposalActionResult =
   | ({ ok: true } & CreateCatalogProposalResult)
@@ -245,6 +260,49 @@ export async function resolveCatalogProposalAction(
     if (e instanceof ProposalNotResolvableError) return { ok: false, error: e.message };
     if (e instanceof IdempotencyConflictError) return { ok: false, error: e.message };
     console.error("[resolveCatalogProposalAction]", e);
+    return { ok: false, error: GENERIC };
+  }
+}
+
+export type ApplyCatalogProposalActionResult =
+  | ({ ok: true } & ApplyCatalogProposalResult)
+  | { ok: false; error: string };
+
+/**
+ * Moderación: aplica una propuesta ACEPTADA al catálogo (vertical NEW_WORK). Crea un
+ * Work y rellena las refs de aplicación del ResolutionRecord; NO cambia la propuesta.
+ * Solo admin, detrás del flag `community-contributions`. Anti-enumeración: flag off /
+ * anónimo / no-admin / propuesta inexistente → misma respuesta genérica. No expone
+ * títulos/valores.
+ */
+export async function applyCatalogProposalAction(
+  command: ApplyCatalogProposalCommand,
+): Promise<ApplyCatalogProposalActionResult> {
+  const GENERIC = "No se pudo aplicar la propuesta.";
+
+  if (!(await isEnabled("community-contributions"))) return { ok: false, error: GENERIC };
+
+  const session = await auth();
+  if (!session?.user?.id || !isAdmin(session.user.email))
+    return { ok: false, error: GENERIC };
+
+  try {
+    const result = await applyCatalogProposalUseCase(command, session.user.id);
+    return { ok: true, ...result };
+  } catch (e) {
+    if (e instanceof ProposalNotFoundError) return { ok: false, error: GENERIC }; // anti-enum
+    if (e instanceof ValidationError) return { ok: false, error: e.message };
+    if (e instanceof TargetKindNotSupportedError) return { ok: false, error: e.message };
+    if (e instanceof ProposalNotApplicableError) return { ok: false, error: e.message };
+    if (e instanceof ResolutionNotFoundError) return { ok: false, error: e.message };
+    if (e instanceof ResolutionNotPositiveError) return { ok: false, error: e.message };
+    if (e instanceof NoApplicableClaimsError) return { ok: false, error: e.message };
+    if (e instanceof ClaimSetInvalidError) return { ok: false, error: e.message };
+    if (e instanceof UnsupportedClaimForApplyError) return { ok: false, error: e.message };
+    if (e instanceof InsufficientCatalogDataError) return { ok: false, error: e.message };
+    if (e instanceof CatalogConflictError) return { ok: false, error: e.message };
+    if (e instanceof InconsistentApplyStateError) return { ok: false, error: e.message };
+    console.error("[applyCatalogProposalAction]", e);
     return { ok: false, error: GENERIC };
   }
 }
