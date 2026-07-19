@@ -12,6 +12,8 @@ import {
   buildApplySeed,
   buildWorkDraft,
   classifyApplyState,
+  WORK_MATERIALIZED_KINDS,
+  WORK_ACCEPTED_NOT_MATERIALIZED_KINDS,
   NoApplicableClaimsError,
   ClaimSetInvalidError,
   UnsupportedClaimForApplyError,
@@ -22,11 +24,16 @@ import {
   ResolutionNotPositiveError,
   CatalogConflictError,
   InconsistentApplyStateError,
+  type AppliedRef,
   type ApplyClaimRow,
   type ApplyReadPort,
   type ApplyWritePort,
   type ExistingResolutionForApply,
 } from "@/lib/domain/proposal/apply";
+import { ATTRIBUTE_KIND_LEVEL } from "@/lib/domain/proposal/addContribution";
+
+/** Refs esperadas del vertical NEW_WORK (equivalencia del gate previo). */
+const WORK_REFS: ReadonlySet<AppliedRef> = new Set<AppliedRef>(["work"]);
 import { applyWritePort } from "@/lib/infra/proposal/apply";
 import { applyCatalogProposal } from "@/lib/contributions/mutations/applyCatalogProposal";
 import { applyCatalogProposalAction } from "@/app/contribuciones/actions";
@@ -62,13 +69,36 @@ describe("dominio — buildApplySeed + gate", () => {
   const rr = (o: Partial<ExistingResolutionForApply> = {}): ExistingResolutionForApply =>
     ({ id: 42, outcome: "ACEPTADA", mutationCorrelationId: null, appliedWorkId: null, appliedEditionId: null, appliedVolumeId: null, ...o });
 
-  it("classifyApplyState: NOT_APPLIED / APPLIED / INCONSISTENT", () => {
-    expect(classifyApplyState(rr())).toBe("NOT_APPLIED");
-    expect(classifyApplyState(rr({ mutationCorrelationId: "c", appliedWorkId: 7 }))).toBe("APPLIED");
-    expect(classifyApplyState(rr({ mutationCorrelationId: "c" }))).toBe("INCONSISTENT"); // corr sin work
-    expect(classifyApplyState(rr({ appliedWorkId: 7 }))).toBe("INCONSISTENT"); // work sin corr
-    expect(classifyApplyState(rr({ mutationCorrelationId: "c", appliedWorkId: 7, appliedEditionId: 9 }))).toBe("INCONSISTENT");
-    expect(classifyApplyState(rr({ mutationCorrelationId: "c", appliedWorkId: 7, appliedVolumeId: 9 }))).toBe("INCONSISTENT");
+  // Equivalencia EXACTA del gate previo de NEW_WORK usando refs esperadas {work}.
+  it("classifyApplyState (expected={work}): NOT_APPLIED / APPLIED / INCONSISTENT", () => {
+    expect(classifyApplyState(rr(), WORK_REFS)).toBe("NOT_APPLIED"); // todos null
+    expect(classifyApplyState(rr({ mutationCorrelationId: "c", appliedWorkId: 7 }), WORK_REFS)).toBe("APPLIED"); // corr + work
+    expect(classifyApplyState(rr({ mutationCorrelationId: "c" }), WORK_REFS)).toBe("INCONSISTENT"); // corr sin work
+    expect(classifyApplyState(rr({ appliedWorkId: 7 }), WORK_REFS)).toBe("INCONSISTENT"); // work sin corr
+    expect(classifyApplyState(rr({ mutationCorrelationId: "c", appliedWorkId: 7, appliedEditionId: 9 }), WORK_REFS)).toBe("INCONSISTENT"); // edition inesperada
+    expect(classifyApplyState(rr({ mutationCorrelationId: "c", appliedWorkId: 7, appliedVolumeId: 9 }), WORK_REFS)).toBe("INCONSISTENT"); // volume inesperado
+  });
+
+  it("classifyApplyState: ref esperada faltante y ref inesperada sola → INCONSISTENT", () => {
+    // esperaba work pero solo hay edition (inesperada, y falta la esperada)
+    expect(classifyApplyState(rr({ mutationCorrelationId: "c", appliedEditionId: 9 }), WORK_REFS)).toBe("INCONSISTENT");
+    // correlation + solo volume
+    expect(classifyApplyState(rr({ mutationCorrelationId: "c", appliedVolumeId: 9 }), WORK_REFS)).toBe("INCONSISTENT");
+  });
+
+  it("política de proyección WORK: exhaustiva y disjunta sobre todos los kinds WORK-level", () => {
+    const workKinds = Object.entries(ATTRIBUTE_KIND_LEVEL)
+      .filter(([, lvl]) => lvl === "WORK")
+      .map(([k]) => k);
+    // cada kind WORK-level está en EXACTAMENTE uno de los dos conjuntos
+    for (const k of workKinds) {
+      const inMat = WORK_MATERIALIZED_KINDS.has(k);
+      const inNot = WORK_ACCEPTED_NOT_MATERIALIZED_KINDS.has(k);
+      expect(inMat !== inNot).toBe(true);
+    }
+    // los conjuntos no contienen kinds ajenos a WORK-level
+    const union = new Set([...WORK_MATERIALIZED_KINDS, ...WORK_ACCEPTED_NOT_MATERIALIZED_KINDS]);
+    expect(union).toEqual(new Set(workKinds));
   });
 });
 
@@ -157,9 +187,33 @@ describe("dominio — buildWorkDraft (mapping cerrado NEW_WORK)", () => {
     expect(() => buildWorkDraft([claim("TITLE_LOCALIZED", { language: "es", text: "A" }, 1), claim("TITLE_LOCALIZED", { language: "es", text: "B" }, 2)], "MANGA")).toThrow(ClaimSetInvalidError);
   });
 
-  it("claim no soportada (WORK) y claim de nivel inválido (EDITION) → UnsupportedClaimForApplyError", () => {
-    expect(() => buildWorkDraft([titleEs(), claim("ORIGINAL_LANGUAGE", "ja", 2)], "MANGA")).toThrow(UnsupportedClaimForApplyError);
+  it("claim de nivel EDITION en NEW_WORK falla (incompatibilidad de nivel)", () => {
     expect(() => buildWorkDraft([titleEs(), claim("EDITION_PUBLISHER", "Ivrea", 2)], "MANGA")).toThrow(UnsupportedClaimForApplyError);
+  });
+
+  it("kind desconocido no se ignora en silencio → error duro", () => {
+    expect(() => buildWorkDraft([titleEs(), claim("TOTALLY_UNKNOWN_KIND", "x", 2)], "MANGA")).toThrow(UnsupportedClaimForApplyError);
+  });
+
+  it("claim WORK válida NO materializada (ORIGINAL_LANGUAGE) no bloquea, no se proyecta ni entra a curated", () => {
+    const d = buildWorkDraft([titleEs("Naruto", 1), claim("ORIGINAL_LANGUAGE", "ja", 2)], "MANGA");
+    expect(d.title).toBe("Naruto");
+    // no hay campo original_language en el draft; curated solo trae lo materializado
+    expect(d.curated).toEqual(["title"]);
+    expect(d.curated).not.toContain("originalLanguage");
+  });
+
+  it("otras claims WORK no materializadas tampoco bloquean (COUNTRY_OF_ORIGIN, WORK_STATUS, START_DATE, END_DATE, TITLE_ALTERNATIVE)", () => {
+    const d = buildWorkDraft([
+      titleEs("Naruto", 1),
+      claim("COUNTRY_OF_ORIGIN", "JP", 2),
+      claim("WORK_STATUS", "COMPLETED", 3),
+      claim("START_DATE", { year: 1999 }, 4),
+      claim("END_DATE", { year: 2014 }, 5),
+      claim("TITLE_ALTERNATIVE", { text: "ナルト" }, 6),
+    ], "MANGA");
+    expect(d.title).toBe("Naruto");
+    expect(d.curated).toEqual(["title"]);
   });
 });
 
@@ -228,6 +282,19 @@ describe("infra write-port — persistencia, gate, dedup, atomicidad", () => {
     ] });
     await runApply(tx);
     expect(tx.work.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ originalTitle: undefined }) }));
+  });
+
+  it("una claim WORK aceptada NO materializada (ORIGINAL_LANGUAGE) no bloquea: crea el Work igual", async () => {
+    const tx = fakeTx({ claims: [
+      { id: 11, attributeKind: "TITLE_LOCALIZED", value: { language: "es", text: "Naruto" }, result: "ACEPTADA" },
+      { id: 12, attributeKind: "ORIGINAL_LANGUAGE", value: "ja", result: "ACEPTADA" },
+    ] });
+    const out = await runApply(tx, vi.fn(), "corr-nm");
+    expect(tx.work.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ title: "Naruto", curated: ["title"] }),
+    }));
+    expect(tx.resolutionRecord.update).toHaveBeenCalledTimes(1);
+    expect(out.recovered).toBe(false);
   });
 
   it("rechaza si queda alguna claim PROPUESTA", async () => {

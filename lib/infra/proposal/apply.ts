@@ -18,6 +18,7 @@ import { normalizeTitle, tightTitleKey, romajiKey, sameContentClass } from "@/li
 import {
   buildWorkDraft,
   classifyApplyState,
+  APPLY_TARGET_REFS,
   CatalogConflictError,
   InconsistentApplyStateError,
   ClaimSetInvalidError,
@@ -30,7 +31,6 @@ import {
   CLAIM_RESULT_PROPOSED,
   PROPOSAL_STATUS_ACEPTADA,
   RESOLUTION_OUTCOME_ACEPTADA,
-  TARGET_KIND_NEW_WORK,
   type ApplyClaimRow,
   type ApplyOutcome,
   type ApplyReadPort,
@@ -97,16 +97,18 @@ export function applyWritePort(
       const proposal = locked[0];
       if (!proposal) throw new ProposalNotFoundError();
 
-      // 2. Elegibilidad de la propuesta.
-      if (proposal.targetKind !== TARGET_KIND_NEW_WORK) throw new TargetKindNotSupportedError(proposal.targetKind);
+      // 2. Elegibilidad de la propuesta. Las refs esperadas salen de la tabla-dato
+      //    (targetKind sin entrada → no soportado); este vertical solo cubre NEW_WORK.
+      const expectedRefs = APPLY_TARGET_REFS[proposal.targetKind];
+      if (!expectedRefs) throw new TargetKindNotSupportedError(proposal.targetKind);
       if (proposal.status !== PROPOSAL_STATUS_ACEPTADA) throw new ProposalNotApplicableError(proposal.status);
 
-      // 3. ResolutionRecord + gate de idempotencia.
+      // 3. ResolutionRecord + gate de idempotencia (parametrizado por refs esperadas).
       const resolution = await loadResolution(tx, seed.proposalId);
       if (!resolution) throw new ResolutionNotFoundError();
       if (resolution.outcome !== RESOLUTION_OUTCOME_ACEPTADA) throw new ResolutionNotPositiveError(resolution.outcome);
 
-      const state = classifyApplyState(resolution);
+      const state = classifyApplyState(resolution, expectedRefs);
       if (state === "INCONSISTENT") throw new InconsistentApplyStateError();
       if (state === "APPLIED") {
         const out: ApplyOutcome = {

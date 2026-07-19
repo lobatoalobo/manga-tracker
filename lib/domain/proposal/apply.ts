@@ -24,11 +24,34 @@ export const RESOLUTION_OUTCOME_ACEPTADA = "ACEPTADA" as const;
 export const CLAIM_RESULT_ACCEPTED = "ACEPTADA" as const;
 export const CLAIM_RESULT_PROPOSED = "PROPUESTA" as const;
 
-/** attributeKinds que Apply sabe consumir en este vertical (mapping cerrado). */
-export const SUPPORTED_APPLY_KINDS: ReadonlySet<string> = new Set([
+/**
+ * Política CERRADA de proyección de claims WORK-level para NEW_WORK (Decisión A): cada
+ * kind WORK válido está EXACTAMENTE en uno de estos dos conjuntos. La unión debe cubrir
+ * todos los kinds WORK-level de `ATTRIBUTE_KIND_LEVEL` (comprobado en tests). Una claim
+ * WORK de un kind no clasificado es un error duro (no se descarta en silencio).
+ */
+// Se proyectan hoy a columnas de `Work`.
+export const WORK_MATERIALIZED_KINDS: ReadonlySet<string> = new Set([
   "TITLE_LOCALIZED", "TITLE_ROMAJI", "TITLE_NATIVE", "WORK_TYPE",
   "CREATOR_CREDIT", "SYNOPSIS_LOCALIZED", "EXTERNAL_WORK_ID",
 ]);
+// Válidas WORK-level pero sin columna en `Work` hoy: quedan íntegras en `ProposalClaim`
+// (evidencia de la resolución). Aceptadas, no materializadas; NO bloquean Apply.
+export const WORK_ACCEPTED_NOT_MATERIALIZED_KINDS: ReadonlySet<string> = new Set([
+  "TITLE_ALTERNATIVE", "ORIGINAL_LANGUAGE", "COUNTRY_OF_ORIGIN",
+  "WORK_STATUS", "START_DATE", "END_DATE",
+]);
+
+/** Refs de catálogo que una aplicación puede producir (para el gate genérico). */
+export type AppliedRef = "work" | "edition" | "volume";
+
+/**
+ * Refs esperadas por `targetKind` (tabla-dato; el clasificador NO ramifica por tipo).
+ * Poblada SOLO con lo implementado hoy; un `targetKind` ausente → no soportado.
+ */
+export const APPLY_TARGET_REFS: Readonly<Record<string, ReadonlySet<AppliedRef>>> = {
+  [TARGET_KIND_NEW_WORK]: new Set<AppliedRef>(["work"]),
+};
 
 /** Prioridad del título primario (menor gana). TITLE_ROMAJI=4, TITLE_NATIVE=5. */
 const TITLE_LOCALE_PRIORITY: Readonly<Record<string, number>> = { "es-AR": 1, "es": 2, "en": 3 };
@@ -218,14 +241,32 @@ export function buildApplySeed(command: ApplyCatalogProposalCommand): ApplySeed 
 // ---------------------------------------------------------------------------
 export type ApplyState = "NOT_APPLIED" | "APPLIED" | "INCONSISTENT";
 
-export function classifyApplyState(r: ExistingResolutionForApply): ApplyState {
+const ALL_REFS: readonly AppliedRef[] = ["work", "edition", "volume"];
+
+/**
+ * Gate genérico parametrizado por el conjunto de refs esperadas (sin ramas por target).
+ * `mutationCorrelationId` es la autoridad de idempotencia; las refs corroboran coherencia.
+ * NOT_APPLIED: sin correlation y sin ninguna ref. APPLIED: con correlation, todas las
+ * esperadas presentes y ninguna inesperada. Cualquier otra combinación: INCONSISTENT.
+ */
+export function classifyApplyState(
+  r: ExistingResolutionForApply,
+  expected: ReadonlySet<AppliedRef>,
+): ApplyState {
+  const present: Record<AppliedRef, boolean> = {
+    work: r.appliedWorkId !== null,
+    edition: r.appliedEditionId !== null,
+    volume: r.appliedVolumeId !== null,
+  };
   const hasCorr = r.mutationCorrelationId !== null;
-  const hasWork = r.appliedWorkId !== null;
-  const hasEdition = r.appliedEditionId !== null;
-  const hasVolume = r.appliedVolumeId !== null;
-  if (!hasCorr && !hasWork && !hasEdition && !hasVolume) return "NOT_APPLIED";
-  // NEW_WORK aplicada: correlation + appliedWorkId, sin edition/volume.
-  if (hasCorr && hasWork && !hasEdition && !hasVolume) return "APPLIED";
+  const anyPresent = ALL_REFS.some((k) => present[k]);
+  const allExpected = ALL_REFS.every((k) => !expected.has(k) || present[k]);
+  const anyUnexpected = ALL_REFS.some((k) => !expected.has(k) && present[k]);
+  if (!hasCorr && !anyPresent) return "NOT_APPLIED";
+  // `anyPresent` endurece el caso degenerado `expected` vacío: correlation sola (sin
+  // ninguna ref) nunca es APPLIED. Redundante para targets con ≥1 ref esperada
+  // (allExpected ya implica presencia), pero evita un falso positivo por construcción.
+  if (hasCorr && anyPresent && allExpected && !anyUnexpected) return "APPLIED";
   return "INCONSISTENT";
 }
 
@@ -261,18 +302,26 @@ export function buildWorkDraft(accepted: ApplyClaimRow[], contentClass: string):
     throw new ClaimSetInvalidError(`contentClass inválido: ${contentClass}.`);
   if (accepted.length < 1) throw new NoApplicableClaimsError("La resolución no tiene claims aceptadas.");
 
-  // 1. Validar soporte + nivel + cardinalidad (toda claim aceptada debe consumirse).
+  // 1. Política cerrada de proyección + cardinalidad de los materializados:
+  //    - nivel ≠ WORK / kind desconocido → error duro (incompatibilidad de nivel);
+  //    - WORK aceptada-no-materializada (política) → se OMITE (queda en el ledger);
+  //    - WORK no clasificada por la política → error duro (no se descarta en silencio);
+  //    - WORK materializada → valida cardinalidad/sub-clave y se proyecta.
   const seenSingular = new Set<string>(); // WORK_TYPE, TITLE_ROMAJI, TITLE_NATIVE
   const seenSubkey = new Set<string>(); // kind|subclave (set kinds)
   for (const c of accepted) {
-    if (!SUPPORTED_APPLY_KINDS.has(c.attributeKind)) {
-      const level = ATTRIBUTE_KIND_LEVEL[c.attributeKind];
+    const level = ATTRIBUTE_KIND_LEVEL[c.attributeKind];
+    if (level !== "WORK")
       throw new UnsupportedClaimForApplyError(
-        level && level !== "WORK"
+        level
           ? `La claim ${c.attributeKind} (nivel ${level}) no aplica a un NEW_WORK.`
-          : `Apply no sabe aplicar la claim ${c.attributeKind}.`,
+          : `Apply no reconoce el kind de claim ${c.attributeKind}.`,
       );
-    }
+    if (WORK_ACCEPTED_NOT_MATERIALIZED_KINDS.has(c.attributeKind)) continue; // evidencia; no se proyecta
+    if (!WORK_MATERIALIZED_KINDS.has(c.attributeKind))
+      throw new UnsupportedClaimForApplyError(
+        `La claim WORK ${c.attributeKind} no está clasificada por la política de Apply.`,
+      );
     if (c.attributeKind === "WORK_TYPE" || c.attributeKind === "TITLE_ROMAJI" || c.attributeKind === "TITLE_NATIVE") {
       if (seenSingular.has(c.attributeKind))
         throw new ClaimSetInvalidError(`Más de una claim aceptada para el atributo singular ${c.attributeKind}.`);
