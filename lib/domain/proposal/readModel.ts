@@ -1,24 +1,27 @@
 /**
- * Read model del detalle de un CatalogProposal (Community Contributions, ADR-006).
- * Prisma-free: define el contrato EXTERNO estable, los tipos MÍNIMOS de entrada del
- * mapper (subconjunto de columnas — los campos internos ni se leen) y el mapper PURO
- * (serialización + `isOriginating` + orden determinista). No expone entidades Prisma,
- * `Date`, `Decimal`, `BigInt` ni campos internos. Vista admin/moderador: incluye TODO
- * (retiradas, OCULTA, EN_CUARENTENA); no filtra por visibility.
+ * Read model del detalle de un CatalogProposal — vista ADMIN/MODERADOR (Community
+ * Contributions, ADR-006). Prisma-free: contrato EXTERNO estable + tipos MÍNIMOS de
+ * entrada + mapper PURO. Incluye TODO (retiradas, OCULTA, EN_CUARENTENA; abiertas y
+ * terminales); no filtra por visibility. Serialización/target/claim se comparten con
+ * la vista propia vía `readSerialize.ts` (piezas puras idénticas).
  */
+import {
+  byCreatedThenId,
+  isoOrNull,
+  toDetailTarget,
+  toSortedDetailClaims,
+  type ClaimDetailRow,
+  type DetailClaim,
+  type DetailTarget,
+  type DetailTargetRow,
+} from "./readSerialize";
+
+export type { ClaimDetailRow } from "./readSerialize";
 
 // ---------------------------------------------------------------------------
 // Contrato externo (serializable y estable)
 // ---------------------------------------------------------------------------
-export interface CatalogProposalDetailClaim {
-  id: string;
-  attributeKind: string;
-  contractVersion: number;
-  claimOperation: string;
-  value: unknown | null;
-  result: string;
-  resultReason: string | null;
-}
+export type CatalogProposalDetailClaim = DetailClaim;
 
 export interface CatalogProposalDetailContribution {
   id: string;
@@ -36,30 +39,13 @@ export interface CatalogProposalDetail {
   family: string;
   contentClass: string;
   createdAt: string; // ISO 8601
-  target: {
-    kind: string;
-    refWorkId: string | null;
-    refEditionId: string | null;
-    refVolumeId: string | null;
-    refWorkBId: string | null;
-    relationKind: string | null;
-  };
+  target: DetailTarget;
   contributions: CatalogProposalDetailContribution[];
 }
 
 // ---------------------------------------------------------------------------
 // Tipos MÍNIMOS de entrada del mapper (lo que la query selecciona; nada más)
 // ---------------------------------------------------------------------------
-export interface ClaimDetailRow {
-  id: number;
-  attributeKind: string;
-  contractVersion: number;
-  claimOperation: string;
-  value: unknown | null;
-  result: string;
-  resultReason: string | null;
-}
-
 export interface ContributionDetailRow {
   id: number;
   createdAt: Date;
@@ -69,35 +55,18 @@ export interface ContributionDetailRow {
   claims: ClaimDetailRow[];
 }
 
-export interface ProposalDetailRow {
+export interface ProposalDetailRow extends DetailTargetRow {
   id: number;
   status: string;
   family: string;
   contentClass: string;
   createdAt: Date;
-  targetKind: string;
-  refWorkId: number | null;
-  refEditionId: number | null;
-  refVolumeId: number | null;
-  refWorkBId: number | null;
-  relationKind: string | null;
   contributions: ContributionDetailRow[];
 }
 
-// ---------------------------------------------------------------------------
-// Helpers de serialización / orden
-// ---------------------------------------------------------------------------
-const idOrNull = (n: number | null): string | null => (n === null ? null : String(n));
-
-/** Orden estable de contribuciones: createdAt ASC, id ASC. */
-function byCreatedThenId(a: ContributionDetailRow, b: ContributionDetailRow): number {
-  return a.createdAt.getTime() - b.createdAt.getTime() || a.id - b.id;
-}
-
 /**
- * Mapea la fila del agregado al read model. Determinista: ordena contribuciones
- * (createdAt, id) y claims (id), y deriva `isOriginating` = la más antigua por ese
- * mismo criterio (sin columna dedicada). No depende del orden de entrada.
+ * Mapea la fila del agregado al read model admin. Determinista: ordena contribuciones
+ * (createdAt, id) y claims (id), y deriva `isOriginating` = la más antigua.
  */
 export function toCatalogProposalDetail(p: ProposalDetailRow): CatalogProposalDetail {
   const contributions = [...p.contributions].sort(byCreatedThenId);
@@ -109,32 +78,15 @@ export function toCatalogProposalDetail(p: ProposalDetailRow): CatalogProposalDe
     family: p.family,
     contentClass: p.contentClass,
     createdAt: p.createdAt.toISOString(),
-    target: {
-      kind: p.targetKind,
-      refWorkId: idOrNull(p.refWorkId),
-      refEditionId: idOrNull(p.refEditionId),
-      refVolumeId: idOrNull(p.refVolumeId),
-      refWorkBId: idOrNull(p.refWorkBId),
-      relationKind: p.relationKind,
-    },
+    target: toDetailTarget(p),
     contributions: contributions.map((c) => ({
       id: String(c.id),
       isOriginating: c.id === originatingId,
       createdAt: c.createdAt.toISOString(),
       visibility: c.visibility,
-      withdrawnAt: c.withdrawnAt ? c.withdrawnAt.toISOString() : null,
+      withdrawnAt: isoOrNull(c.withdrawnAt),
       authorId: c.authorId ?? null,
-      claims: [...c.claims]
-        .sort((a, b) => a.id - b.id)
-        .map((cl) => ({
-          id: String(cl.id),
-          attributeKind: cl.attributeKind,
-          contractVersion: cl.contractVersion,
-          claimOperation: cl.claimOperation,
-          value: cl.value ?? null,
-          result: cl.result,
-          resultReason: cl.resultReason ?? null,
-        })),
+      claims: toSortedDetailClaims(c.claims),
     })),
   };
 }
