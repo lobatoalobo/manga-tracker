@@ -1,14 +1,14 @@
 /**
  * Infra: implementa el puerto de "aplicar propuesta" (lib/domain/proposal/apply) con
- * Prisma, vertical NEW_WORK. Escritura INDIVISIBLE bajo el lock de la propuesta (mismo
- * orden que Resolve/RequestInfo/AnswerInfo): lock → leer ResolutionRecord → gate
- * (mutationCorrelationId) → [APPLIED: replay] → validar elegibilidad → leer claims →
- * build draft (dominio) → dedup tx-bound (reusa normalizeTitle/tightTitleKey/romajiKey/
- * sameContentClass de lib/catalog, SIN modificarlo, SIN prisma global) → create Work →
- * update único del ResolutionRecord (appliedWorkId + mutationCorrelationId +
- * primaryTitleClaimId) EN LA MISMA TX. NO crea Edition/Volume. NO cambia la propuesta.
- * P2002 por identidad externa → CatalogConflictError. Reusa el error de captura de
- * CreateProposal.
+ * Prisma. Un solo write-port/mutación; despacha por `targetKind` tras el gate:
+ * - NEW_WORK: build WorkDraft → dedup (id/título/romaji) → create Work → RR
+ *   (appliedWorkId + primaryTitleClaimId).
+ * - NEW_EDITION: valida Work padre (refWorkId) → build EditionDraft → deriva slug
+ *   (`communityEditionSlug`) y normTitle → dedup (whakoomId, (publisher, slug)) →
+ *   create PublisherEdition (url="") → RR (appliedEditionId).
+ * Escritura INDIVISIBLE bajo el lock de la propuesta (mismo orden que los demás slices);
+ * gate por `mutationCorrelationId`; create-only; NO cambia la propuesta; reusa helpers
+ * puros de lib/catalog SIN modificarlo ni usar prisma global. P2002 → CatalogConflictError.
  */
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -17,11 +17,14 @@ import { CommittedResultUnavailableError } from "@/lib/infra/proposal/create";
 import { normalizeTitle, tightTitleKey, romajiKey, sameContentClass } from "@/lib/catalog";
 import {
   buildWorkDraft,
+  buildEditionDraft,
+  communityEditionSlug,
   classifyApplyState,
   APPLY_TARGET_REFS,
   CatalogConflictError,
   InconsistentApplyStateError,
   ClaimSetInvalidError,
+  ParentWorkNotFoundError,
   ProposalNotApplicableError,
   ProposalNotFoundError,
   ResolutionNotFoundError,
@@ -31,16 +34,19 @@ import {
   CLAIM_RESULT_PROPOSED,
   PROPOSAL_STATUS_ACEPTADA,
   RESOLUTION_OUTCOME_ACEPTADA,
+  TARGET_KIND_NEW_WORK,
+  TARGET_KIND_NEW_EDITION,
   type ApplyClaimRow,
   type ApplyOutcome,
   type ApplyReadPort,
   type ApplyWritePort,
+  type EditionDraft,
   type ExistingResolutionForApply,
   type LockedProposalForApply,
   type WorkDraft,
 } from "@/lib/domain/proposal/apply";
 
-type Db = Pick<Prisma.TransactionClient, "resolutionRecord" | "proposalClaim" | "work">;
+type Db = Pick<Prisma.TransactionClient, "resolutionRecord" | "proposalClaim" | "work" | "publisherEdition">;
 
 async function loadResolution(db: Db, proposalId: number): Promise<ExistingResolutionForApply | null> {
   const r = await db.resolutionRecord.findUnique({
@@ -84,6 +90,18 @@ async function assertNoConflict(db: Db, draft: WorkDraft): Promise<void> {
   }
 }
 
+/**
+ * Dedup de edición (create-only): (1) `whakoomId` unique, (2) `(publisher, slug)` — que
+ * representa la identidad de dominio `(publisher, workId, language)` porque el slug la
+ * codifica. Conflicto → throw. Usa el MISMO `slug` que el `create`.
+ */
+async function assertNoEditionConflict(db: Db, draft: EditionDraft, slug: string): Promise<void> {
+  if (draft.whakoomId && (await db.publisherEdition.findUnique({ where: { whakoomId: draft.whakoomId }, select: { id: true } })))
+    throw new CatalogConflictError("Ya existe una edición con ese whakoomId.");
+  if (await db.publisherEdition.findUnique({ where: { publisher_slug: { publisher: draft.publisher, slug } }, select: { id: true } }))
+    throw new CatalogConflictError("Ya existe una edición de comunidad para (publisher, work, language).");
+}
+
 export function applyWritePort(
   tx: Prisma.TransactionClient,
   onCommitted: (r: ApplyOutcome) => void,
@@ -92,13 +110,13 @@ export function applyWritePort(
     async apply(seed, correlationId) {
       // 1. Lock de la propuesta (mismo orden que los demás slices).
       const locked = await tx.$queryRaw<LockedProposalForApply[]>(
-        Prisma.sql`SELECT id, status, "targetKind", "contentClass", version FROM "CatalogProposal" WHERE id = ${seed.proposalId} FOR UPDATE`,
+        Prisma.sql`SELECT id, status, "targetKind", "contentClass", version, "refWorkId" FROM "CatalogProposal" WHERE id = ${seed.proposalId} FOR UPDATE`,
       );
       const proposal = locked[0];
       if (!proposal) throw new ProposalNotFoundError();
 
-      // 2. Elegibilidad de la propuesta. Las refs esperadas salen de la tabla-dato
-      //    (targetKind sin entrada → no soportado); este vertical solo cubre NEW_WORK.
+      // 2. Elegibilidad. Las refs esperadas salen de la tabla-dato (targetKind sin
+      //    entrada → no soportado).
       const expectedRefs = APPLY_TARGET_REFS[proposal.targetKind];
       if (!expectedRefs) throw new TargetKindNotSupportedError(proposal.targetKind);
       if (proposal.status !== PROPOSAL_STATUS_ACEPTADA) throw new ProposalNotApplicableError(proposal.status);
@@ -111,10 +129,14 @@ export function applyWritePort(
       const state = classifyApplyState(resolution, expectedRefs);
       if (state === "INCONSISTENT") throw new InconsistentApplyStateError();
       if (state === "APPLIED") {
+        // Replay: echo genérico de las refs persistidas (target-agnóstico).
         const out: ApplyOutcome = {
           proposalId: seed.proposalId,
           resolutionRecordId: resolution.id,
-          appliedWorkId: resolution.appliedWorkId!,
+          targetKind: proposal.targetKind,
+          appliedWorkId: resolution.appliedWorkId,
+          appliedEditionId: resolution.appliedEditionId,
+          appliedVolumeId: resolution.appliedVolumeId,
           mutationCorrelationId: resolution.mutationCorrelationId!,
           recovered: true,
         };
@@ -131,13 +153,16 @@ export function applyWritePort(
         throw new ClaimSetInvalidError("Quedan claims sin resolver (PROPUESTA).");
       const accepted = claims.filter((c) => c.result === CLAIM_RESULT_ACCEPTED);
 
-      // 5. Draft determinista (dominio; valida soporte/cardinalidad/título).
+      // 5. Dispatch por targetKind (una sola mutación; create-only).
+      if (proposal.targetKind === TARGET_KIND_NEW_EDITION) {
+        const out = await applyNewEdition(tx, seed.proposalId, resolution.id, proposal.refWorkId, accepted, correlationId);
+        onCommitted(out);
+        return out;
+      }
+
+      // NEW_WORK (comportamiento existente, con outcome generalizado).
       const draft = buildWorkDraft(accepted, proposal.contentClass);
-
-      // 6. Dedup tx-bound → conflicto = error (create-only, sin fusión ni update).
-      await assertNoConflict(tx, draft);
-
-      // 7. Crear exactamente un Work.
+      await assertNoConflict(tx, draft); // create-only, sin fusión ni update
       let appliedWorkId: number;
       try {
         const created = await tx.work.create({
@@ -165,27 +190,84 @@ export function applyWritePort(
           throw new CatalogConflictError("Colisión de identidad externa al crear el Work.");
         throw err;
       }
-
-      // 8. Update único del ResolutionRecord (misma tx). NO toca la propuesta.
       await tx.resolutionRecord.update({
         where: { proposalId: seed.proposalId },
-        data: {
-          appliedWorkId,
-          mutationCorrelationId: correlationId,
-          primaryTitleClaimId: draft.primaryTitleClaimId,
-        },
+        data: { appliedWorkId, mutationCorrelationId: correlationId, primaryTitleClaimId: draft.primaryTitleClaimId },
       });
-
       const out: ApplyOutcome = {
         proposalId: seed.proposalId,
         resolutionRecordId: resolution.id,
+        targetKind: TARGET_KIND_NEW_WORK,
         appliedWorkId,
+        appliedEditionId: null,
+        appliedVolumeId: null,
         mutationCorrelationId: correlationId,
         recovered: false,
       };
       onCommitted(out);
       return out;
     },
+  };
+}
+
+/** Camino NEW_EDITION: valida Work padre, arma el draft, dedup, crea PublisherEdition y
+ * actualiza el ResolutionRecord (appliedEditionId). NO toca la propuesta ni el Work padre. */
+async function applyNewEdition(
+  tx: Prisma.TransactionClient,
+  proposalId: number,
+  resolutionRecordId: number,
+  refWorkId: number | null,
+  accepted: ApplyClaimRow[],
+  correlationId: string,
+): Promise<ApplyOutcome> {
+  if (refWorkId === null) throw new ParentWorkNotFoundError();
+  const parent = await tx.work.findUnique({ where: { id: refWorkId }, select: { id: true, title: true } });
+  if (!parent) throw new ParentWorkNotFoundError();
+
+  const draft = buildEditionDraft(accepted, parent.title, parent.id);
+  const slug = communityEditionSlug(draft.workId, draft.language);
+  await assertNoEditionConflict(tx, draft, slug); // create-only, sin fusión ni update
+
+  let appliedEditionId: number;
+  try {
+    const created = await tx.publisherEdition.create({
+      data: {
+        publisher: draft.publisher,
+        slug,
+        title: draft.title,
+        normTitle: normalizeTitle(draft.title),
+        volumes: draft.volumes,
+        volumesLocked: draft.volumesLocked,
+        url: "",
+        language: draft.language,
+        country: draft.country ?? undefined,
+        status: draft.status ?? undefined,
+        whakoomId: draft.whakoomId ?? undefined,
+        workId: draft.workId,
+      },
+      select: { id: true },
+    });
+    appliedEditionId = created.id;
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002")
+      throw new CatalogConflictError("Colisión de identidad de edición al crear.");
+    throw err;
+  }
+
+  await tx.resolutionRecord.update({
+    where: { proposalId },
+    data: { appliedEditionId, mutationCorrelationId: correlationId },
+  });
+
+  return {
+    proposalId,
+    resolutionRecordId,
+    targetKind: TARGET_KIND_NEW_EDITION,
+    appliedWorkId: null,
+    appliedEditionId,
+    appliedVolumeId: null,
+    mutationCorrelationId: correlationId,
+    recovered: false,
   };
 }
 

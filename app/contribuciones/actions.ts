@@ -55,6 +55,7 @@ import {
   CatalogConflictError,
   InconsistentApplyStateError,
   UnsupportedClaimForApplyError,
+  ParentWorkNotFoundError,
   type ApplyCatalogProposalResult,
 } from "@/lib/contributions/applyCatalogProposal";
 import type { ApplyCatalogProposalCommand } from "@/lib/domain/proposal/apply";
@@ -302,6 +303,7 @@ export async function applyCatalogProposalAction(
     if (e instanceof InsufficientCatalogDataError) return { ok: false, error: e.message };
     if (e instanceof CatalogConflictError) return { ok: false, error: e.message };
     if (e instanceof InconsistentApplyStateError) return { ok: false, error: e.message };
+    if (e instanceof ParentWorkNotFoundError) return { ok: false, error: e.message };
     console.error("[applyCatalogProposalAction]", e);
     return { ok: false, error: GENERIC };
   }

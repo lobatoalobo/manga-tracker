@@ -19,6 +19,7 @@ import { ProposalNotFoundError } from "@/lib/domain/proposal/requestInfo";
 export { ProposalNotFoundError } from "@/lib/domain/proposal/requestInfo";
 
 export const TARGET_KIND_NEW_WORK = "NEW_WORK" as const;
+export const TARGET_KIND_NEW_EDITION = "NEW_EDITION" as const;
 export const PROPOSAL_STATUS_ACEPTADA = "ACEPTADA" as const;
 export const RESOLUTION_OUTCOME_ACEPTADA = "ACEPTADA" as const;
 export const CLAIM_RESULT_ACCEPTED = "ACEPTADA" as const;
@@ -51,6 +52,27 @@ export type AppliedRef = "work" | "edition" | "volume";
  */
 export const APPLY_TARGET_REFS: Readonly<Record<string, ReadonlySet<AppliedRef>>> = {
   [TARGET_KIND_NEW_WORK]: new Set<AppliedRef>(["work"]),
+  [TARGET_KIND_NEW_EDITION]: new Set<AppliedRef>(["edition"]),
+};
+
+/**
+ * Política CERRADA de proyección de claims EDITION-level para NEW_EDITION (mismo patrón
+ * que WORK): partición exhaustiva y disjunta sobre los kinds EDITION de
+ * `ATTRIBUTE_KIND_LEVEL` (comprobado en tests). Kind EDITION no clasificado → error duro.
+ */
+// Se proyectan hoy a columnas de `PublisherEdition`.
+export const EDITION_MATERIALIZED_KINDS: ReadonlySet<string> = new Set([
+  "EDITION_PUBLISHER", "EDITION_COUNTRY", "EDITION_LANGUAGE", "EDITION_STATUS",
+  "EDITION_ANNOUNCED_TOTAL_VOLUMES", "EXTERNAL_EDITION_ID",
+]);
+// Válidas EDITION-level pero sin columna en `PublisherEdition` hoy: quedan en el ledger.
+export const EDITION_ACCEPTED_NOT_MATERIALIZED_KINDS: ReadonlySet<string> = new Set([
+  "EDITION_FORMAT", "EDITION_LABEL_OR_IMPRINT", "EDITION_RELEASE_DATE", "EDITION_IS_UPCOMING",
+]);
+
+/** Provider (EXTERNAL_EDITION_ID) admitido en MVP → columna de identidad externa. */
+const EDITION_PROVIDER_FIELD: Readonly<Record<string, "whakoomId">> = {
+  whakoom: "whakoomId",
 };
 
 /** Prioridad del título primario (menor gana). TITLE_ROMAJI=4, TITLE_NATIVE=5. */
@@ -85,18 +107,22 @@ export interface ApplySeed {
 export interface ApplyOutcome {
   proposalId: number;
   resolutionRecordId: number;
-  appliedWorkId: number;
+  targetKind: string; // "NEW_WORK" | "NEW_EDITION"
+  appliedWorkId: number | null;
+  appliedEditionId: number | null;
+  appliedVolumeId: number | null;
   mutationCorrelationId: string;
   recovered: boolean;
 }
 
-/** Propuesta bajo lock (para elegibilidad + dedup). */
+/** Propuesta bajo lock (para elegibilidad + dedup). `refWorkId` = Work padre (NEW_EDITION). */
 export interface LockedProposalForApply {
   id: number;
   status: string;
   targetKind: string;
   contentClass: string;
   version: number;
+  refWorkId: number | null;
 }
 
 /** ResolutionRecord existente (gate de idempotencia + outcome). */
@@ -138,6 +164,33 @@ export interface WorkDraft {
   primaryTitleClaimId: number;
 }
 
+/**
+ * Borrador de edición (Prisma-free). `slug` y `normTitle` NO van acá: los deriva la
+ * infra justo antes del `create` (`communityEditionSlug` / `normalizeTitle`), por
+ * simetría con `WorkDraft` (que tampoco carga `normTitle`). `title` viene del Work padre.
+ */
+export interface EditionDraft {
+  publisher: string;
+  language: string;
+  country: string | null;
+  status: string | null;
+  volumes: number;
+  volumesLocked: boolean;
+  whakoomId: string | null;
+  title: string; // Work padre
+  workId: number; // refWorkId
+}
+
+/**
+ * Algoritmo PURO del slug de edición de comunidad. Codifica `(workId, language)`; el
+ * `publisher` completa la identidad de dominio dentro de `@@unique([publisher, slug])`.
+ * Namespace `cc:` reservado; `:` no pertenece al alfabeto de `slugifyTitle` → nunca
+ * colisiona con un slug del crawler. Determinista y estable frente a replays.
+ */
+export function communityEditionSlug(workId: number, language: string): string {
+  return `cc:w${workId}:${language}`;
+}
+
 // ---------------------------------------------------------------------------
 // Puertos
 // ---------------------------------------------------------------------------
@@ -165,6 +218,13 @@ export class ProposalNotApplicableError extends Error {
   constructor(readonly status: string) {
     super(`La propuesta no es aplicable (estado ${status}).`);
     this.name = "ProposalNotApplicableError";
+  }
+}
+export class ParentWorkNotFoundError extends Error {
+  readonly code = "PARENT_WORK_NOT_FOUND" as const;
+  constructor() {
+    super("La obra padre de la edición no existe.");
+    this.name = "ParentWorkNotFoundError";
   }
 }
 export class ResolutionNotFoundError extends Error {
@@ -476,4 +536,91 @@ function resolveExternalIds(accepted: ApplyClaimRow[]): { anilistId: number | nu
     }
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Construcción del EditionDraft (NEW_EDITION; mapping cerrado, paralelo a WorkDraft)
+// ---------------------------------------------------------------------------
+function scalarNumber(v: unknown): number | null {
+  if (typeof v === "number") return v;
+  const r = asRecord(v);
+  return r && typeof r.value === "number" ? r.value : null;
+}
+
+function resolveEditionExternalId(accepted: ApplyClaimRow[]): string | null {
+  for (const c of accepted) {
+    if (c.attributeKind !== "EXTERNAL_EDITION_ID") continue;
+    const r = asRecord(c.value);
+    const provider = r && typeof r.provider === "string" ? r.provider.toLowerCase() : null;
+    const externalId = r && (typeof r.externalId === "string" || typeof r.externalId === "number") ? String(r.externalId).trim() : null;
+    if (!provider || !externalId || !(provider in EDITION_PROVIDER_FIELD))
+      throw new ClaimSetInvalidError("EXTERNAL_EDITION_ID con provider/externalId inválido.");
+    return externalId; // whakoomId
+  }
+  return null;
+}
+
+/**
+ * Arma el `EditionDraft` desde las claims ACEPTADA (misma mecánica cerrada que
+ * `buildWorkDraft`): política EDITION (materializada / aceptada-no-materializada / error
+ * de nivel / no clasificada), cardinalidad, y set materializado hard
+ * (publisher+language+country). `title`/`workId` vienen del Work padre. `slug`/`normTitle`
+ * los deriva la infra. Sin extraer `ProjectionPolicy` (deuda diferida).
+ */
+export function buildEditionDraft(
+  accepted: ApplyClaimRow[],
+  parentTitle: string,
+  parentWorkId: number,
+): EditionDraft {
+  if (accepted.length < 1) throw new NoApplicableClaimsError("La resolución no tiene claims aceptadas.");
+
+  const seenSingular = new Set<string>();
+  const seenSubkey = new Set<string>();
+  for (const c of accepted) {
+    const level = ATTRIBUTE_KIND_LEVEL[c.attributeKind];
+    if (level !== "EDITION")
+      throw new UnsupportedClaimForApplyError(
+        level
+          ? `La claim ${c.attributeKind} (nivel ${level}) no aplica a un NEW_EDITION.`
+          : `Apply no reconoce el kind de claim ${c.attributeKind}.`,
+      );
+    if (EDITION_ACCEPTED_NOT_MATERIALIZED_KINDS.has(c.attributeKind)) continue; // evidencia; no se proyecta
+    if (!EDITION_MATERIALIZED_KINDS.has(c.attributeKind))
+      throw new UnsupportedClaimForApplyError(
+        `La claim EDITION ${c.attributeKind} no está clasificada por la política de Apply.`,
+      );
+    if (c.attributeKind === "EXTERNAL_EDITION_ID") {
+      const r = asRecord(c.value);
+      const provider = r && typeof r.provider === "string" ? r.provider.toLowerCase() : "?";
+      const k = `EXTERNAL_EDITION_ID|${provider}`;
+      if (seenSubkey.has(k)) throw new ClaimSetInvalidError(`Colisión de sub-clave en EXTERNAL_EDITION_ID (${provider}).`);
+      seenSubkey.add(k);
+    } else {
+      if (seenSingular.has(c.attributeKind))
+        throw new ClaimSetInvalidError(`Más de una claim aceptada para el atributo singular ${c.attributeKind}.`);
+      seenSingular.add(c.attributeKind);
+    }
+  }
+
+  const publisher = pickText(accepted, "EDITION_PUBLISHER", enumText);
+  const language = pickText(accepted, "EDITION_LANGUAGE", enumText);
+  const country = pickText(accepted, "EDITION_COUNTRY", enumText);
+  const status = pickText(accepted, "EDITION_STATUS", enumText);
+  if (!publisher || !language || !country)
+    throw new InsufficientCatalogDataError("Faltan datos mínimos de edición (publisher, language, country).");
+
+  const volClaim = accepted.find((x) => x.attributeKind === "EDITION_ANNOUNCED_TOTAL_VOLUMES");
+  let volumes = 0;
+  let volumesLocked = false;
+  if (volClaim) {
+    const n = scalarNumber(volClaim.value);
+    if (n === null || !Number.isInteger(n) || n < 0)
+      throw new ClaimSetInvalidError("EDITION_ANNOUNCED_TOTAL_VOLUMES inválido (int ≥ 0).");
+    volumes = n;
+    volumesLocked = true;
+  }
+
+  const whakoomId = resolveEditionExternalId(accepted);
+
+  return { publisher, language, country, status, volumes, volumesLocked, whakoomId, title: parentTitle, workId: parentWorkId };
 }

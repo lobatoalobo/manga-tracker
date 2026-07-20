@@ -24,7 +24,8 @@ function harness(opts: { write: "created" | "recovered" | "conflict" | "boom" })
     if (opts.write === "conflict") throw new CatalogConflictError();
     if (opts.write === "boom") throw new Error("boom");
     committed = {
-      proposalId: seed.proposalId, resolutionRecordId: 42, appliedWorkId: 777,
+      proposalId: seed.proposalId, resolutionRecordId: 42, targetKind: "NEW_WORK",
+      appliedWorkId: 777, appliedEditionId: null, appliedVolumeId: null,
       mutationCorrelationId: correlationId, recovered: opts.write === "recovered",
     };
     return committed;
