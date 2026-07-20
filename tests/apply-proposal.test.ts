@@ -40,6 +40,8 @@ import { ATTRIBUTE_KIND_LEVEL } from "@/lib/domain/proposal/addContribution";
 
 /** Refs esperadas del vertical NEW_WORK (equivalencia del gate previo). */
 const WORK_REFS: ReadonlySet<AppliedRef> = new Set<AppliedRef>(["work"]);
+/** Refs esperadas del vertical NEW_EDITION (gate específico). */
+const EDITION_REFS: ReadonlySet<AppliedRef> = new Set<AppliedRef>(["edition"]);
 import { applyWritePort } from "@/lib/infra/proposal/apply";
 import { applyCatalogProposal } from "@/lib/contributions/mutations/applyCatalogProposal";
 import { applyCatalogProposalAction } from "@/app/contribuciones/actions";
@@ -105,6 +107,23 @@ describe("dominio — buildApplySeed + gate", () => {
     // los conjuntos no contienen kinds ajenos a WORK-level
     const union = new Set([...WORK_MATERIALIZED_KINDS, ...WORK_ACCEPTED_NOT_MATERIALIZED_KINDS]);
     expect(union).toEqual(new Set(workKinds));
+  });
+
+  // Gate NEW_EDITION explícito (expected={edition}), sin reusar los casos de NEW_WORK.
+  it("gate NEW_EDITION: correlation + appliedEditionId (resto null) ⇒ APPLIED", () => {
+    expect(classifyApplyState(rr({ mutationCorrelationId: "c", appliedEditionId: 9 }), EDITION_REFS)).toBe("APPLIED");
+  });
+
+  it("gate NEW_EDITION: correlation presente + appliedEditionId ausente ⇒ INCONSISTENT", () => {
+    expect(classifyApplyState(rr({ mutationCorrelationId: "c" }), EDITION_REFS)).toBe("INCONSISTENT");
+  });
+
+  it("gate NEW_EDITION: appliedEditionId presente + correlation ausente ⇒ INCONSISTENT", () => {
+    expect(classifyApplyState(rr({ appliedEditionId: 9 }), EDITION_REFS)).toBe("INCONSISTENT");
+  });
+
+  it("gate NEW_EDITION: appliedVolumeId presente ⇒ INCONSISTENT", () => {
+    expect(classifyApplyState(rr({ mutationCorrelationId: "c", appliedEditionId: 9, appliedVolumeId: 7 }), EDITION_REFS)).toBe("INCONSISTENT");
   });
 });
 
@@ -258,6 +277,12 @@ describe("dominio — buildEditionDraft (mapping cerrado NEW_EDITION)", () => {
     const d1 = buildEditionDraft([...edBase(), claim("EDITION_ANNOUNCED_TOTAL_VOLUMES", 12, 24)], "Naruto", 123);
     expect(d1.volumes).toBe(12);
     expect(d1.volumesLocked).toBe(true);
+  });
+
+  it("EDITION_ANNOUNCED_TOTAL_VOLUMES = 0 (claim presente) → volumes 0 pero volumesLocked true (la presencia importa, no el valor)", () => {
+    const d = buildEditionDraft([...edBase(), claim("EDITION_ANNOUNCED_TOTAL_VOLUMES", 0, 24)], "Naruto", 123);
+    expect(d.volumes).toBe(0);
+    expect(d.volumesLocked).toBe(true);
   });
 
   it("claims EDITION no materializadas no bloquean (FORMAT/LABEL/RELEASE_DATE/IS_UPCOMING)", () => {
@@ -541,6 +566,17 @@ describe("infra write-port — NEW_EDITION", () => {
     expect(out).toEqual({ proposalId: 5, resolutionRecordId: 42, targetKind: "NEW_EDITION", appliedWorkId: null, appliedEditionId: 555, appliedVolumeId: null, mutationCorrelationId: "corr-old", recovered: true });
     expect(tx.publisherEdition.create).not.toHaveBeenCalled();
     expect(tx.resolutionRecord.update).not.toHaveBeenCalled();
+  });
+
+  it("replay: retorna ANTES de cualquier lógica específica del target (no lee padre/claims, no dedup, no draft, no create, no update)", async () => {
+    const tx = editionFakeTx({ resolution: { id: 42, outcome: "ACEPTADA", mutationCorrelationId: "corr-old", appliedWorkId: null, appliedEditionId: 555, appliedVolumeId: null } });
+    const out = await runApplyEdition(tx);
+    expect(out.recovered).toBe(true);
+    expect(tx.work.findUnique).not.toHaveBeenCalled(); // no lee Work padre
+    expect(tx.proposalClaim.findMany).not.toHaveBeenCalled(); // no lee claims ⇒ no construye EditionDraft
+    expect(tx.publisherEdition.findUnique).not.toHaveBeenCalled(); // no ejecuta deduplicación
+    expect(tx.publisherEdition.create).not.toHaveBeenCalled(); // no crea
+    expect(tx.resolutionRecord.update).not.toHaveBeenCalled(); // no actualiza ResolutionRecord
   });
 
   it("gate inconsistente para edición (appliedWorkId inesperado) → InconsistentApplyStateError", async () => {
