@@ -12,12 +12,15 @@ import {
   buildApplySeed,
   buildWorkDraft,
   buildEditionDraft,
+  buildVolumeDraft,
   communityEditionSlug,
   classifyApplyState,
   WORK_MATERIALIZED_KINDS,
   WORK_ACCEPTED_NOT_MATERIALIZED_KINDS,
   EDITION_MATERIALIZED_KINDS,
   EDITION_ACCEPTED_NOT_MATERIALIZED_KINDS,
+  VOLUME_MATERIALIZED_KINDS,
+  VOLUME_ACCEPTED_NOT_MATERIALIZED_KINDS,
   NoApplicableClaimsError,
   ClaimSetInvalidError,
   UnsupportedClaimForApplyError,
@@ -30,6 +33,7 @@ import {
   InconsistentApplyStateError,
   InsufficientCatalogDataError,
   ParentWorkNotFoundError,
+  ParentEditionNotFoundError,
   type AppliedRef,
   type ApplyClaimRow,
   type ApplyReadPort,
@@ -42,6 +46,8 @@ import { ATTRIBUTE_KIND_LEVEL } from "@/lib/domain/proposal/addContribution";
 const WORK_REFS: ReadonlySet<AppliedRef> = new Set<AppliedRef>(["work"]);
 /** Refs esperadas del vertical NEW_EDITION (gate específico). */
 const EDITION_REFS: ReadonlySet<AppliedRef> = new Set<AppliedRef>(["edition"]);
+/** Refs esperadas del vertical NEW_VOLUME (gate específico). */
+const VOLUME_REFS: ReadonlySet<AppliedRef> = new Set<AppliedRef>(["volume"]);
 import { applyWritePort } from "@/lib/infra/proposal/apply";
 import { applyCatalogProposal } from "@/lib/contributions/mutations/applyCatalogProposal";
 import { applyCatalogProposalAction } from "@/app/contribuciones/actions";
@@ -124,6 +130,27 @@ describe("dominio — buildApplySeed + gate", () => {
 
   it("gate NEW_EDITION: appliedVolumeId presente ⇒ INCONSISTENT", () => {
     expect(classifyApplyState(rr({ mutationCorrelationId: "c", appliedEditionId: 9, appliedVolumeId: 7 }), EDITION_REFS)).toBe("INCONSISTENT");
+  });
+
+  // Gate NEW_VOLUME explícito (expected={volume}).
+  it("gate NEW_VOLUME: correlation + appliedVolumeId (resto null) ⇒ APPLIED", () => {
+    expect(classifyApplyState(rr({ mutationCorrelationId: "c", appliedVolumeId: 9 }), VOLUME_REFS)).toBe("APPLIED");
+  });
+
+  it("gate NEW_VOLUME: correlation sin appliedVolumeId ⇒ INCONSISTENT", () => {
+    expect(classifyApplyState(rr({ mutationCorrelationId: "c" }), VOLUME_REFS)).toBe("INCONSISTENT");
+  });
+
+  it("gate NEW_VOLUME: appliedVolumeId sin correlation ⇒ INCONSISTENT", () => {
+    expect(classifyApplyState(rr({ appliedVolumeId: 9 }), VOLUME_REFS)).toBe("INCONSISTENT");
+  });
+
+  it("gate NEW_VOLUME: appliedWorkId inesperado ⇒ INCONSISTENT", () => {
+    expect(classifyApplyState(rr({ mutationCorrelationId: "c", appliedVolumeId: 9, appliedWorkId: 1 }), VOLUME_REFS)).toBe("INCONSISTENT");
+  });
+
+  it("gate NEW_VOLUME: appliedEditionId inesperado ⇒ INCONSISTENT", () => {
+    expect(classifyApplyState(rr({ mutationCorrelationId: "c", appliedVolumeId: 9, appliedEditionId: 1 }), VOLUME_REFS)).toBe("INCONSISTENT");
   });
 });
 
@@ -333,6 +360,96 @@ describe("dominio — buildEditionDraft (mapping cerrado NEW_EDITION)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Dominio — buildVolumeDraft + política VOLUME (NEW_VOLUME)
+// ---------------------------------------------------------------------------
+describe("dominio — buildVolumeDraft (mapping cerrado NEW_VOLUME)", () => {
+  const num = (n: unknown, id = 31) => claim("VOLUME_NUMBER", n, id);
+
+  it("política de proyección VOLUME: exhaustiva y disjunta sobre todos los kinds VOLUME-level", () => {
+    const volumeKinds = Object.entries(ATTRIBUTE_KIND_LEVEL)
+      .filter(([, lvl]) => lvl === "VOLUME")
+      .map(([k]) => k);
+    for (const k of volumeKinds) {
+      const inMat = VOLUME_MATERIALIZED_KINDS.has(k);
+      const inNot = VOLUME_ACCEPTED_NOT_MATERIALIZED_KINDS.has(k);
+      expect(inMat !== inNot).toBe(true);
+    }
+    const union = new Set([...VOLUME_MATERIALIZED_KINDS, ...VOLUME_ACCEPTED_NOT_MATERIALIZED_KINDS]);
+    expect(union).toEqual(new Set(volumeKinds));
+  });
+
+  it("happy mínimo: solo VOLUME_NUMBER", () => {
+    expect(buildVolumeDraft([num(3)], 42)).toEqual({ editionId: 42, number: 3, isbn: null, whakoomComicId: null });
+  });
+
+  it("happy completo: número + ISBN + external (Whakoom)", () => {
+    const d = buildVolumeDraft([
+      num(3),
+      claim("VOLUME_ISBN", "978-987-1234-56-7", 32),
+      claim("EXTERNAL_VOLUME_ID", { provider: "Whakoom", externalId: "wc-9" }, 33),
+    ], 42);
+    expect(d).toEqual({ editionId: 42, number: 3, isbn: "978-987-1234-56-7", whakoomComicId: "wc-9" });
+  });
+
+  it("claims VOLUME no materializadas no bloquean (TITLE/RELEASE_DATE/PAGE_COUNT/STATUS/COVER)", () => {
+    const d = buildVolumeDraft([
+      num(1),
+      claim("VOLUME_TITLE", { text: "Tomo 1" }, 32),
+      claim("VOLUME_RELEASE_DATE", { year: 2020 }, 33),
+      claim("VOLUME_PAGE_COUNT", 200, 34),
+      claim("VOLUME_STATUS", "PUBLISHED", 35),
+      claim("VOLUME_COVER", { face: "front", imageRef: "x" }, 36),
+    ], 42);
+    expect(d).toEqual({ editionId: 42, number: 1, isbn: null, whakoomComicId: null });
+  });
+
+  it("VOLUME_NUMBER: 0 y 1 válidos; negativo/decimal/NaN/Infinity/no-numérico fallan", () => {
+    expect(buildVolumeDraft([num(0)], 42).number).toBe(0);
+    expect(buildVolumeDraft([num(1)], 42).number).toBe(1);
+    expect(() => buildVolumeDraft([num(-1)], 42)).toThrow(ClaimSetInvalidError);
+    expect(() => buildVolumeDraft([num(0.5)], 42)).toThrow(ClaimSetInvalidError);
+    expect(() => buildVolumeDraft([num(1.5)], 42)).toThrow(ClaimSetInvalidError);
+    expect(() => buildVolumeDraft([num(NaN)], 42)).toThrow(ClaimSetInvalidError);
+    expect(() => buildVolumeDraft([num(Infinity)], 42)).toThrow(ClaimSetInvalidError);
+    expect(() => buildVolumeDraft([num("3")], 42)).toThrow(ClaimSetInvalidError);
+    expect(() => buildVolumeDraft([num({ foo: 1 })], 42)).toThrow(ClaimSetInvalidError);
+  });
+
+  it("VOLUME_NUMBER duplicado → ClaimSetInvalidError", () => {
+    expect(() => buildVolumeDraft([num(1, 31), num(2, 32)], 42)).toThrow(ClaimSetInvalidError);
+  });
+
+  it("VOLUME_ISBN: ausente→null; trim; vacío/solo-espacios→error; duplicado→error", () => {
+    expect(buildVolumeDraft([num(1)], 42).isbn).toBeNull();
+    expect(buildVolumeDraft([num(1), claim("VOLUME_ISBN", "  978-1  ", 32)], 42).isbn).toBe("978-1");
+    expect(() => buildVolumeDraft([num(1), claim("VOLUME_ISBN", "", 32)], 42)).toThrow(ClaimSetInvalidError);
+    expect(() => buildVolumeDraft([num(1), claim("VOLUME_ISBN", "   ", 32)], 42)).toThrow(ClaimSetInvalidError);
+    expect(() => buildVolumeDraft([num(1), claim("VOLUME_ISBN", "a", 32), claim("VOLUME_ISBN", "b", 33)], 42)).toThrow(ClaimSetInvalidError);
+  });
+
+  it("EXTERNAL_VOLUME_ID: Whakoom válido/trim; vacío→error; provider no soportado→error; duplicado→error", () => {
+    expect(buildVolumeDraft([num(1), claim("EXTERNAL_VOLUME_ID", { provider: "Whakoom", externalId: "  wc-1  " }, 32)], 42).whakoomComicId).toBe("wc-1");
+    expect(() => buildVolumeDraft([num(1), claim("EXTERNAL_VOLUME_ID", { provider: "Whakoom", externalId: "   " }, 32)], 42)).toThrow(ClaimSetInvalidError);
+    expect(() => buildVolumeDraft([num(1), claim("EXTERNAL_VOLUME_ID", { provider: "MangaDex", externalId: "x" }, 32)], 42)).toThrow(ClaimSetInvalidError);
+    expect(() => buildVolumeDraft([num(1), claim("EXTERNAL_VOLUME_ID", { provider: "Whakoom", externalId: "a" }, 32), claim("EXTERNAL_VOLUME_ID", { provider: "Whakoom", externalId: "b" }, 33)], 42)).toThrow(ClaimSetInvalidError);
+  });
+
+  it("nivel WORK/EDITION en NEW_VOLUME falla; kind desconocido también", () => {
+    expect(() => buildVolumeDraft([num(1), claim("TITLE_LOCALIZED", { language: "es", text: "x" }, 32)], 42)).toThrow(UnsupportedClaimForApplyError);
+    expect(() => buildVolumeDraft([num(1), claim("EDITION_PUBLISHER", "Ivrea", 32)], 42)).toThrow(UnsupportedClaimForApplyError);
+    expect(() => buildVolumeDraft([num(1), claim("TOTALLY_UNKNOWN", 1, 32)], 42)).toThrow(UnsupportedClaimForApplyError);
+  });
+
+  it("precedencia: 0 claims → NoApplicableClaimsError; claims sin VOLUME_NUMBER → InsufficientCatalogDataError", () => {
+    expect(() => buildVolumeDraft([], 42)).toThrow(NoApplicableClaimsError);
+    // solo VOLUME_TITLE (aceptada, no materializada) → hay claim VOLUME pero falta el número
+    expect(() => buildVolumeDraft([claim("VOLUME_TITLE", { text: "Tomo 1" }, 31)], 42)).toThrow(InsufficientCatalogDataError);
+    // ISBN presente pero sin número
+    expect(() => buildVolumeDraft([claim("VOLUME_ISBN", "978-1", 31)], 42)).toThrow(InsufficientCatalogDataError);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Infra write-port (tx falsa)
 // ---------------------------------------------------------------------------
 type FakeTx = {
@@ -423,7 +540,7 @@ describe("infra write-port — persistencia, gate, dedup, atomicidad", () => {
 
   it("propuesta inexistente / targetKind no soportado / estado no ACEPTADA", async () => {
     await expect(runApply(fakeTx({ locked: [] }))).rejects.toThrow(ProposalNotFoundError);
-    await expect(runApply(fakeTx({ locked: [{ id: 5, status: "ACEPTADA", targetKind: "NEW_VOLUME", contentClass: "MANGA", version: 2 }] }))).rejects.toThrow(TargetKindNotSupportedError);
+    await expect(runApply(fakeTx({ locked: [{ id: 5, status: "ACEPTADA", targetKind: "STRUCTURAL", contentClass: "MANGA", version: 2 }] }))).rejects.toThrow(TargetKindNotSupportedError);
     await expect(runApply(fakeTx({ locked: [{ id: 5, status: "SUBMITTED", targetKind: "NEW_WORK", contentClass: "MANGA", version: 2 }] }))).rejects.toThrow(ProposalNotApplicableError);
   });
 
@@ -640,6 +757,146 @@ describe("infra write-port — NEW_EDITION", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Infra write-port — NEW_VOLUME (tx falsa volumen-shaped)
+// ---------------------------------------------------------------------------
+type VolumeFakeTx = {
+  $queryRaw: ReturnType<typeof vi.fn>;
+  resolutionRecord: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+  proposalClaim: { findMany: ReturnType<typeof vi.fn> };
+  publisherEdition: { findUnique: ReturnType<typeof vi.fn> };
+  volume: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
+};
+function volumeFakeTx(over: Partial<{
+  locked: unknown[]; resolution: unknown; claims: unknown[]; parent: unknown; volUnique: unknown; create: ReturnType<typeof vi.fn>;
+}> = {}): VolumeFakeTx {
+  return {
+    $queryRaw: vi.fn().mockResolvedValue(over.locked ?? [{ id: 5, status: "ACEPTADA", targetKind: "NEW_VOLUME", contentClass: "MANGA", version: 2, refWorkId: null, refEditionId: 77 }]),
+    resolutionRecord: {
+      findUnique: vi.fn().mockResolvedValue(over.resolution === undefined
+        ? { id: 42, outcome: "ACEPTADA", mutationCorrelationId: null, appliedWorkId: null, appliedEditionId: null, appliedVolumeId: null }
+        : over.resolution),
+      update: vi.fn().mockResolvedValue({}),
+    },
+    proposalClaim: { findMany: vi.fn().mockResolvedValue(over.claims ?? [
+      { id: 31, attributeKind: "VOLUME_NUMBER", value: 3, result: "ACEPTADA" },
+    ]) },
+    publisherEdition: { findUnique: vi.fn().mockResolvedValue(over.parent === undefined ? { id: 77 } : over.parent) },
+    volume: {
+      findUnique: vi.fn().mockResolvedValue(over.volUnique ?? null),
+      create: over.create ?? vi.fn().mockResolvedValue({ id: 999 }),
+    },
+  };
+}
+const runApplyVolume = (tx: VolumeFakeTx, onCommitted = vi.fn(), corr = "corr-v") =>
+  applyWritePort(tx as unknown as Prisma.TransactionClient, onCommitted).apply({ proposalId: 5, idempotencyKey: "k1" }, corr);
+
+describe("infra write-port — NEW_VOLUME", () => {
+  it("happy path: lee parent (mínimo), crea Volume (sin coverImage) y update único del RR (appliedVolumeId)", async () => {
+    const tx = volumeFakeTx();
+    const onCommitted = vi.fn();
+    const out = await runApplyVolume(tx, onCommitted, "corr-v1");
+    const lockOrder = tx.$queryRaw.mock.invocationCallOrder[0];
+    expect(lockOrder).toBeLessThan(tx.volume.create.mock.invocationCallOrder[0]);
+    // parent read exacto (solo id)
+    expect(tx.publisherEdition.findUnique).toHaveBeenCalledWith({ where: { id: 77 }, select: { id: true } });
+    // create exacto (editionId + number; opcionales `?? undefined`; SIN coverImage)
+    expect(tx.volume.create).toHaveBeenCalledWith({
+      data: { editionId: 77, number: 3, isbn: undefined, whakoomComicId: undefined },
+      select: { id: true },
+    });
+    const createData = tx.volume.create.mock.calls[0][0].data;
+    expect(createData).not.toHaveProperty("coverImage");
+    // update exacto del RR
+    expect(tx.resolutionRecord.update).toHaveBeenCalledTimes(1);
+    expect(tx.resolutionRecord.update).toHaveBeenCalledWith({
+      where: { proposalId: 5 },
+      data: { appliedVolumeId: 999, mutationCorrelationId: "corr-v1" },
+    });
+    expect(out).toEqual({ proposalId: 5, resolutionRecordId: 42, targetKind: "NEW_VOLUME", appliedWorkId: null, appliedEditionId: null, appliedVolumeId: 999, mutationCorrelationId: "corr-v1", recovered: false });
+    expect(onCommitted).toHaveBeenCalledWith(out);
+  });
+
+  it("happy completo: isbn + whakoomComicId materializados", async () => {
+    const tx = volumeFakeTx({ claims: [
+      { id: 31, attributeKind: "VOLUME_NUMBER", value: 3, result: "ACEPTADA" },
+      { id: 32, attributeKind: "VOLUME_ISBN", value: "978-1", result: "ACEPTADA" },
+      { id: 33, attributeKind: "EXTERNAL_VOLUME_ID", value: { provider: "Whakoom", externalId: "wc-9" }, result: "ACEPTADA" },
+    ] });
+    await runApplyVolume(tx);
+    expect(tx.volume.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: { editionId: 77, number: 3, isbn: "978-1", whakoomComicId: "wc-9" },
+    }));
+  });
+
+  it("dedup por (editionId, number); NO consulta por ISBN ni whakoomComicId", async () => {
+    const tx = volumeFakeTx({ volUnique: { id: 1 } });
+    await expect(runApplyVolume(tx)).rejects.toThrow(CatalogConflictError);
+    expect(tx.volume.create).not.toHaveBeenCalled();
+    // el único findUnique de volume es por editionId_number
+    expect(tx.volume.findUnique).toHaveBeenCalledTimes(1);
+    expect(tx.volume.findUnique).toHaveBeenCalledWith({ where: { editionId_number: { editionId: 77, number: 3 } }, select: { id: true } });
+  });
+
+  it("edición padre inexistente → ParentEditionNotFoundError (refEditionId null o fila ausente), sin create", async () => {
+    const tx1 = volumeFakeTx({ locked: [{ id: 5, status: "ACEPTADA", targetKind: "NEW_VOLUME", contentClass: "MANGA", version: 2, refWorkId: null, refEditionId: null }] });
+    await expect(runApplyVolume(tx1)).rejects.toThrow(ParentEditionNotFoundError);
+    const tx2 = volumeFakeTx({ parent: null });
+    await expect(runApplyVolume(tx2)).rejects.toThrow(ParentEditionNotFoundError);
+    expect(tx2.volume.create).not.toHaveBeenCalled();
+  });
+
+  it("falta VOLUME_NUMBER → InsufficientCatalogDataError, sin create", async () => {
+    const tx = volumeFakeTx({ claims: [{ id: 31, attributeKind: "VOLUME_ISBN", value: "978-1", result: "ACEPTADA" }] });
+    await expect(runApplyVolume(tx)).rejects.toThrow(InsufficientCatalogDataError);
+    expect(tx.volume.create).not.toHaveBeenCalled();
+  });
+
+  it("P2002 al crear el Volume → CatalogConflictError, sin marcar Apply", async () => {
+    const p2002 = new Prisma.PrismaClientKnownRequestError("unique", { code: "P2002", clientVersion: "6.19.3", meta: { target: ["Volume_editionId_number_key"] } });
+    const tx = volumeFakeTx({ create: vi.fn().mockRejectedValue(p2002) });
+    await expect(runApplyVolume(tx)).rejects.toThrow(CatalogConflictError);
+    expect(tx.resolutionRecord.update).not.toHaveBeenCalled();
+  });
+
+  it("error ≠ P2002 (p.ej. FK/P2003) se propaga sin convertir; rollback (onCommitted no llamado)", async () => {
+    const p2003 = new Prisma.PrismaClientKnownRequestError("fk", { code: "P2003", clientVersion: "6.19.3", meta: { field_name: "editionId" } });
+    const tx = volumeFakeTx({ create: vi.fn().mockRejectedValue(p2003) });
+    const onC = vi.fn();
+    await expect(applyWritePort(tx as unknown as Prisma.TransactionClient, onC).apply({ proposalId: 5, idempotencyKey: "k" }, "c")).rejects.toThrow(Prisma.PrismaClientKnownRequestError);
+    expect(onC).not.toHaveBeenCalled();
+  });
+
+  it("rollback: fallo en create o en update del RR propaga y NO captura", async () => {
+    const tx1 = volumeFakeTx({ create: vi.fn().mockRejectedValue(new Error("boom")) });
+    const onC1 = vi.fn();
+    await expect(applyWritePort(tx1 as unknown as Prisma.TransactionClient, onC1).apply({ proposalId: 5, idempotencyKey: "k" }, "c")).rejects.toThrow("boom");
+    expect(onC1).not.toHaveBeenCalled();
+
+    const tx2 = volumeFakeTx();
+    tx2.resolutionRecord.update.mockRejectedValue(new Error("kaboom"));
+    const onC2 = vi.fn();
+    await expect(applyWritePort(tx2 as unknown as Prisma.TransactionClient, onC2).apply({ proposalId: 5, idempotencyKey: "k" }, "c")).rejects.toThrow("kaboom");
+    expect(onC2).not.toHaveBeenCalled();
+  });
+
+  it("replay: retorna ANTES de leer parent/claims, dedup, create y update", async () => {
+    const tx = volumeFakeTx({ resolution: { id: 42, outcome: "ACEPTADA", mutationCorrelationId: "corr-old", appliedWorkId: null, appliedEditionId: null, appliedVolumeId: 555 } });
+    const out = await runApplyVolume(tx);
+    expect(out).toEqual({ proposalId: 5, resolutionRecordId: 42, targetKind: "NEW_VOLUME", appliedWorkId: null, appliedEditionId: null, appliedVolumeId: 555, mutationCorrelationId: "corr-old", recovered: true });
+    expect(tx.proposalClaim.findMany).not.toHaveBeenCalled();
+    expect(tx.publisherEdition.findUnique).not.toHaveBeenCalled();
+    expect(tx.volume.findUnique).not.toHaveBeenCalled();
+    expect(tx.volume.create).not.toHaveBeenCalled();
+    expect(tx.resolutionRecord.update).not.toHaveBeenCalled();
+  });
+
+  it("gate inconsistente para volumen (appliedEditionId inesperado) → InconsistentApplyStateError", async () => {
+    const tx = volumeFakeTx({ resolution: { id: 42, outcome: "ACEPTADA", mutationCorrelationId: "c", appliedWorkId: null, appliedEditionId: 9, appliedVolumeId: null } });
+    await expect(runApplyVolume(tx)).rejects.toThrow(InconsistentApplyStateError);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Mutation Framework — audit
 // ---------------------------------------------------------------------------
 describe("mutación applyCatalogProposal — audit", () => {
@@ -678,6 +935,19 @@ describe("mutación applyCatalogProposal — audit", () => {
     await runMutation(applyCatalogProposal, { proposalId: 5, idempotencyKey: "k1" }, { read, transaction: tx, actor, dryRun: false, audit: spy.sink });
     const success = spy.entries.find((e) => e.phase === "success")!;
     expect(success.affected).toEqual({ creates: 1, updates: 1, deletes: 0, entities: ["PublisherEdition", "ResolutionRecord"] });
+  });
+
+  it("NEW_VOLUME → entities ['Volume','ResolutionRecord'], sin número/isbn/external en auditoría", async () => {
+    const write: ApplyWritePort = { apply: vi.fn().mockResolvedValue({ proposalId: 5, resolutionRecordId: 42, targetKind: "NEW_VOLUME", appliedWorkId: null, appliedEditionId: null, appliedVolumeId: 999, mutationCorrelationId: "c", recovered: false }) };
+    const tx: TransactionRunner<ApplyReadPort, ApplyWritePort> = { run: (fn) => fn({ read, write }) };
+    const spy = spySink();
+    await runMutation(applyCatalogProposal, { proposalId: 5, idempotencyKey: "k1" }, { read, transaction: tx, actor, dryRun: false, audit: spy.sink });
+    const success = spy.entries.find((e) => e.phase === "success")!;
+    expect(success.affected).toEqual({ creates: 1, updates: 1, deletes: 0, entities: ["Volume", "ResolutionRecord"] });
+    // sin número/isbn/external en el audit (el summary es genérico por proposalId)
+    const dump = JSON.stringify(spy.entries);
+    expect(dump).not.toContain("978");
+    expect(dump).not.toContain("wc-");
   });
 });
 
@@ -722,5 +992,20 @@ describe("applyCatalogProposalAction", () => {
     expect((await applyCatalogProposalAction(cmd) as { ok: false; error: string }).error).toContain("catálogo");
     vi.mocked(applyCatalogProposalUseCase).mockRejectedValueOnce(new ParentWorkNotFoundError());
     expect((await applyCatalogProposalAction(cmd) as { ok: false; error: string }).error).toContain("obra padre");
+    vi.mocked(applyCatalogProposalUseCase).mockRejectedValueOnce(new ParentEditionNotFoundError());
+    expect((await applyCatalogProposalAction(cmd) as { ok: false; error: string }).error).toContain("edición padre");
+  });
+
+  it("NEW_VOLUME → ok con appliedVolumeId string y appliedWorkId/appliedEditionId null", async () => {
+    vi.mocked(applyCatalogProposalUseCase).mockResolvedValueOnce({
+      proposalId: "5", resolutionRecordId: "42", targetKind: "NEW_VOLUME",
+      appliedWorkId: null, appliedEditionId: null, appliedVolumeId: "999",
+      mutationCorrelationId: "corr-1", recovered: false,
+    });
+    expect(await applyCatalogProposalAction(cmd)).toEqual({
+      ok: true, proposalId: "5", resolutionRecordId: "42", targetKind: "NEW_VOLUME",
+      appliedWorkId: null, appliedEditionId: null, appliedVolumeId: "999",
+      mutationCorrelationId: "corr-1", recovered: false,
+    });
   });
 });
