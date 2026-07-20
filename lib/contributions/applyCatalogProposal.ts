@@ -17,7 +17,6 @@ import { prismaApplyIO } from "@/lib/infra/proposal/apply";
 import { applyCatalogProposal } from "@/lib/contributions/mutations/applyCatalogProposal";
 import {
   buildApplySeed,
-  TARGET_KIND_NEW_WORK,
   type ApplyCatalogProposalCommand,
 } from "@/lib/domain/proposal/apply";
 
@@ -33,14 +32,15 @@ export {
   CatalogConflictError,
   InconsistentApplyStateError,
   UnsupportedClaimForApplyError,
+  ParentWorkNotFoundError,
 } from "@/lib/domain/proposal/apply";
 
 export interface ApplyCatalogProposalResult {
   proposalId: string;
   resolutionRecordId: string;
-  targetKind: "NEW_WORK";
-  appliedWorkId: string;
-  appliedEditionId: null;
+  targetKind: "NEW_WORK" | "NEW_EDITION";
+  appliedWorkId: string | null;
+  appliedEditionId: string | null;
   appliedVolumeId: null;
   mutationCorrelationId: string;
   recovered: boolean;
@@ -64,9 +64,9 @@ export async function applyCatalogProposalUseCase(
   return {
     proposalId: String(c.proposalId),
     resolutionRecordId: String(c.resolutionRecordId),
-    targetKind: TARGET_KIND_NEW_WORK,
-    appliedWorkId: String(c.appliedWorkId),
-    appliedEditionId: null,
+    targetKind: c.targetKind as "NEW_WORK" | "NEW_EDITION",
+    appliedWorkId: c.appliedWorkId === null ? null : String(c.appliedWorkId),
+    appliedEditionId: c.appliedEditionId === null ? null : String(c.appliedEditionId),
     appliedVolumeId: null,
     mutationCorrelationId: c.mutationCorrelationId,
     recovered: c.recovered,
