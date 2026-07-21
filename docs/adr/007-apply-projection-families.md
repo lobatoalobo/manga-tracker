@@ -152,7 +152,9 @@ Un **Patch** es la representación de dominio de un **cambio parcial** sobre un 
 
 ## Semántica general de claimOperation
 
-Toda claim porta una **operación** que declara qué se afirma sobre el atributo. La familia Creation puede ignorar la operación porque una propuesta de Alta solo puede afirmar valores. La familia **Mutation debe honrarla**, porque corregir es precisamente cambiar, quitar o marcar.
+Toda claim porta una **operación** que declara qué se afirma sobre el atributo. La familia Creation puede ignorar la operación porque una propuesta de Alta solo puede afirmar valores. La familia **Mutation debe honrarla sobre los atributos que la proyección concreta materializa**, porque corregir es precisamente cambiar, quitar o marcar.
+
+Una claim aceptada cuyo atributo **no es materializado** por esa proyección **no produce escritura**: su operación no se aplica al catálogo. El **ledger de contribuciones conserva íntegramente la claim y su operación**, aunque la proyección actual no pueda materializarla; una futura capacidad del modelo podría materializarla sin tocar esta arquitectura. En consecuencia, una resolución cuyas claims aceptadas no toquen ningún atributo materializable produce un **Patch vacío** y un **no-op exitoso** (ver Decisiones de instancia).
 
 Vocabulario y semántica:
 
@@ -168,7 +170,7 @@ Vocabulario y semántica:
 
 Reglas generales derivadas:
 
-- Toda operación produce **algún** efecto de escritura (un valor o un vaciado); ninguna es un no-op declarativo.
+- Toda operación **sobre un atributo materializado** produce **algún** efecto de escritura (un valor o un vaciado); ninguna es un no-op declarativo. Sobre un atributo **no materializado** por la proyección, la operación no se aplica (no hay escritura) y la claim queda registrada solo como evidencia en el ledger.
 - Las operaciones de quitar y de marcar sobre un atributo **obligatorio** son inválidas y deben rechazarse; nunca deben degradarse a un vaciado imposible ni ignorarse.
 - Un cambio que resulta idéntico al estado actual (afirmar el valor vigente, quitar un atributo ya vacío) es una escritura sin efecto observable; el modelo no le asigna un tratamiento especial.
 
@@ -193,7 +195,7 @@ En otras palabras: la coincidencia de materialización es un **hecho del modelo 
 2. **Idempotencia por correlación de mutación.** La autoridad de "ya aplicada" es la correlación registrada en la resolución; una segunda ejecución no duplica el efecto.
 3. **Replay temprano.** Si la resolución ya está aplicada, el kernel retorna **antes** de cualquier lectura o escritura específica de la proyección; el replay no toca el catálogo.
 4. **Gate genérico por refs esperadas.** La forma "aplicada" se valida contra las referencias que la entidad de esa proyección debe producir; cualquier referencia inesperada o incompatible es un estado inconsistente.
-5. **Política de proyección cerrada por nivel.** Toda claim aceptada está clasificada explícitamente (se materializa, o se acepta sin materializar); una claim de nivel incompatible o de tipo no clasificado es un error duro; **ninguna claim aceptada se descarta en silencio**.
+5. **Política de proyección cerrada por nivel.** Toda claim aceptada está clasificada explícitamente (se materializa, o se acepta sin materializar); una claim de nivel incompatible o de tipo no clasificado es un error duro. El principio "**ninguna claim aceptada se descarta en silencio**" se interpreta como: (a) ninguna claim **materializable** puede ignorarse silenciosamente; (b) las claims **no materializables** deben estar explícitamente clasificadas como tales por la proyección (no producen escritura, pero su clasificación es deliberada, no un olvido).
 6. **Registro de resolución mínimo.** Solo se registran la referencia de aplicación y la correlación de mutación; nunca se altera el estado ni la versión de la propuesta.
 7. **Auditoría sin contenido sensible.** La traza no incluye valores de claims (títulos, identificadores externos, números, textos).
 8. **Anti-enumeración.** La existencia de una propuesta no se revela; los accesos no autorizados o inexistentes producen una respuesta genérica indistinguible.
