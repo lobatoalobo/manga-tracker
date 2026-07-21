@@ -13,6 +13,7 @@ import {
   buildWorkDraft,
   buildEditionDraft,
   buildVolumeDraft,
+  buildVolumePatch,
   communityEditionSlug,
   classifyApplyState,
   WORK_MATERIALIZED_KINDS,
@@ -34,6 +35,7 @@ import {
   InsufficientCatalogDataError,
   ParentWorkNotFoundError,
   ParentEditionNotFoundError,
+  TargetVolumeNotFoundError,
   type AppliedRef,
   type ApplyClaimRow,
   type ApplyReadPort,
@@ -66,8 +68,10 @@ vi.mock("@/lib/contributions/applyCatalogProposal", async (orig) => {
 });
 
 const ADMIN = "admin-1";
-const claim = (attributeKind: string, value: unknown, id = 1, result = "ACEPTADA"): ApplyClaimRow =>
-  ({ id, attributeKind, value, result });
+// `claimOperation` default "SET" → los fixtures Creation existentes lo heredan sin cambio
+// (Creation lo ignora); los tests Mutation lo pasan explícito.
+const claim = (attributeKind: string, value: unknown, id = 1, result = "ACEPTADA", claimOperation = "SET"): ApplyClaimRow =>
+  ({ id, attributeKind, value, claimOperation, result });
 const titleEs = (text = "Naruto", id = 11) => claim("TITLE_LOCALIZED", { language: "es", text }, id);
 
 // ---------------------------------------------------------------------------
@@ -446,6 +450,79 @@ describe("dominio — buildVolumeDraft (mapping cerrado NEW_VOLUME)", () => {
     expect(() => buildVolumeDraft([claim("VOLUME_TITLE", { text: "Tomo 1" }, 31)], 42)).toThrow(InsufficientCatalogDataError);
     // ISBN presente pero sin número
     expect(() => buildVolumeDraft([claim("VOLUME_ISBN", "978-1", 31)], 42)).toThrow(InsufficientCatalogDataError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dominio — buildVolumePatch (Mutation × Volume; ADR-007, familia Mutation)
+// ---------------------------------------------------------------------------
+describe("dominio — buildVolumePatch (patch parcial, honra claimOperation)", () => {
+  // helper: claim VOLUME_* con operación explícita (5º arg del helper `claim`)
+  const cop = (kind: string, value: unknown, op: string, id = 31) => claim(kind, value, id, "ACEPTADA", op);
+
+  it("patch vacío: sin claims → {}; solo no-materializada (VOLUME_TITLE) → {}", () => {
+    // ausencia ≠ null: un patch vacío es un no-op legítimo (no lanza, no fuerza columnas)
+    expect(buildVolumePatch([])).toEqual({});
+    expect(buildVolumePatch([claim("VOLUME_TITLE", { text: "Tomo 1" }, 31)])).toEqual({});
+  });
+
+  it("SET escalares: number / isbn / external se afirman por separado", () => {
+    expect(buildVolumePatch([cop("VOLUME_NUMBER", 7, "SET")])).toEqual({ number: 7 });
+    expect(buildVolumePatch([cop("VOLUME_NUMBER", 0, "SET")])).toEqual({ number: 0 });
+    expect(buildVolumePatch([cop("VOLUME_ISBN", "  978-1  ", "SET")])).toEqual({ isbn: "978-1" });
+    expect(buildVolumePatch([cop("EXTERNAL_VOLUME_ID", { provider: "Whakoom", externalId: "  wc-9  " }, "SET")])).toEqual({ whakoomComicId: "wc-9" });
+  });
+
+  it("patch parcial: solo aparecen las columnas tocadas (ausencia ≠ null)", () => {
+    // número + isbn tocados; whakoomComicId AUSENTE (no la clave con null): no se toca
+    const p = buildVolumePatch([cop("VOLUME_NUMBER", 4, "SET", 31), cop("VOLUME_ISBN", "978-2", "SET", 32)]);
+    expect(p).toEqual({ number: 4, isbn: "978-2" });
+    expect("whakoomComicId" in p).toBe(false);
+  });
+
+  it("ERASE (REMOVE / MARK_UNKNOWN / MARK_NOT_APPLICABLE) en columnas nullable → null", () => {
+    for (const op of ["REMOVE", "MARK_UNKNOWN", "MARK_NOT_APPLICABLE"]) {
+      expect(buildVolumePatch([cop("VOLUME_ISBN", null, op)])).toEqual({ isbn: null });
+      expect(buildVolumePatch([cop("EXTERNAL_VOLUME_ID", null, op)])).toEqual({ whakoomComicId: null });
+    }
+  });
+
+  it("ADD sobre slot único Whakoom (EXTERNAL_VOLUME_ID) se comporta como SET (fijar)", () => {
+    expect(buildVolumePatch([cop("EXTERNAL_VOLUME_ID", { provider: "Whakoom", externalId: "wc-1" }, "ADD")])).toEqual({ whakoomComicId: "wc-1" });
+  });
+
+  it("ADD sobre escalares (VOLUME_NUMBER / VOLUME_ISBN) → rechazo explícito", () => {
+    expect(() => buildVolumePatch([cop("VOLUME_NUMBER", 3, "ADD")])).toThrow(ClaimSetInvalidError);
+    expect(() => buildVolumePatch([cop("VOLUME_ISBN", "978-1", "ADD")])).toThrow(ClaimSetInvalidError);
+  });
+
+  it("VOLUME_NUMBER (columna obligatoria) NO admite vaciado: REMOVE/MARK_* → error", () => {
+    for (const op of ["REMOVE", "MARK_UNKNOWN", "MARK_NOT_APPLICABLE"]) {
+      expect(() => buildVolumePatch([cop("VOLUME_NUMBER", null, op)])).toThrow(ClaimSetInvalidError);
+    }
+  });
+
+  it("SET inválido: number no entero≥0 / isbn vacío / external malformado → error", () => {
+    expect(() => buildVolumePatch([cop("VOLUME_NUMBER", -1, "SET")])).toThrow(ClaimSetInvalidError);
+    expect(() => buildVolumePatch([cop("VOLUME_NUMBER", 1.5, "SET")])).toThrow(ClaimSetInvalidError);
+    expect(() => buildVolumePatch([cop("VOLUME_NUMBER", "3", "SET")])).toThrow(ClaimSetInvalidError);
+    expect(() => buildVolumePatch([cop("VOLUME_ISBN", "   ", "SET")])).toThrow(ClaimSetInvalidError);
+    expect(() => buildVolumePatch([cop("EXTERNAL_VOLUME_ID", { provider: "MangaDex", externalId: "x" }, "SET")])).toThrow(ClaimSetInvalidError);
+    expect(() => buildVolumePatch([cop("EXTERNAL_VOLUME_ID", { provider: "Whakoom", externalId: "   " }, "SET")])).toThrow(ClaimSetInvalidError);
+  });
+
+  it("cardinalidad: número duplicado / external mismo provider duplicado → error", () => {
+    expect(() => buildVolumePatch([cop("VOLUME_NUMBER", 1, "SET", 31), cop("VOLUME_NUMBER", 2, "SET", 32)])).toThrow(ClaimSetInvalidError);
+    expect(() => buildVolumePatch([
+      cop("EXTERNAL_VOLUME_ID", { provider: "Whakoom", externalId: "a" }, "SET", 31),
+      cop("EXTERNAL_VOLUME_ID", { provider: "Whakoom", externalId: "b" }, "SET", 32),
+    ])).toThrow(ClaimSetInvalidError);
+  });
+
+  it("nivel WORK/EDITION o kind desconocido → UnsupportedClaimForApplyError", () => {
+    expect(() => buildVolumePatch([claim("TITLE_LOCALIZED", { language: "es", text: "x" }, 31)])).toThrow(UnsupportedClaimForApplyError);
+    expect(() => buildVolumePatch([claim("EDITION_PUBLISHER", "Ivrea", 31)])).toThrow(UnsupportedClaimForApplyError);
+    expect(() => buildVolumePatch([claim("TOTALLY_UNKNOWN", 1, 31)])).toThrow(UnsupportedClaimForApplyError);
   });
 });
 
@@ -897,6 +974,159 @@ describe("infra write-port — NEW_VOLUME", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Infra write-port — VOLUME (corrección; familia Mutation, ADR-007)
+// ---------------------------------------------------------------------------
+type VolCorrFakeTx = {
+  $queryRaw: ReturnType<typeof vi.fn>;
+  resolutionRecord: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+  proposalClaim: { findMany: ReturnType<typeof vi.fn> };
+  volume: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+};
+function volCorrFakeTx(over: Partial<{
+  locked: unknown[]; resolution: unknown; claims: unknown[]; target: unknown; update: ReturnType<typeof vi.fn>;
+}> = {}): VolCorrFakeTx {
+  return {
+    $queryRaw: vi.fn().mockResolvedValue(over.locked ?? [{ id: 5, status: "ACEPTADA", targetKind: "VOLUME", contentClass: "MANGA", version: 2, refWorkId: null, refEditionId: null, refVolumeId: 88 }]),
+    resolutionRecord: {
+      findUnique: vi.fn().mockResolvedValue(over.resolution === undefined
+        ? { id: 42, outcome: "ACEPTADA", mutationCorrelationId: null, appliedWorkId: null, appliedEditionId: null, appliedVolumeId: null }
+        : over.resolution),
+      update: vi.fn().mockResolvedValue({}),
+    },
+    // corrección por defecto: fija el ISBN del volumen 88
+    proposalClaim: { findMany: vi.fn().mockResolvedValue(over.claims ?? [
+      { id: 31, attributeKind: "VOLUME_ISBN", value: "978-1", claimOperation: "SET", result: "ACEPTADA" },
+    ]) },
+    volume: {
+      findUnique: vi.fn().mockResolvedValue(over.target === undefined ? { id: 88 } : over.target),
+      update: over.update ?? vi.fn().mockResolvedValue({ id: 88 }),
+    },
+  };
+}
+const runApplyVolCorr = (tx: VolCorrFakeTx, onCommitted = vi.fn(), corr = "corr-c") =>
+  applyWritePort(tx as unknown as Prisma.TransactionClient, onCommitted).apply({ proposalId: 5, idempotencyKey: "k1" }, corr);
+
+describe("infra write-port — VOLUME (corrección)", () => {
+  it("happy: lock → carga target (solo id) → UPDATE parcial → update único del RR (appliedVolumeId=refVolumeId)", async () => {
+    const tx = volCorrFakeTx();
+    const onCommitted = vi.fn();
+    const out = await runApplyVolCorr(tx, onCommitted, "corr-c1");
+    const lockOrder = tx.$queryRaw.mock.invocationCallOrder[0];
+    expect(lockOrder).toBeLessThan(tx.volume.findUnique.mock.invocationCallOrder[0]);
+    expect(lockOrder).toBeLessThan(tx.volume.update.mock.invocationCallOrder[0]);
+    // target: lookup exacto por id (NO por editionId_number: Mutation no re-parenta ni deduplica)
+    expect(tx.volume.findUnique).toHaveBeenCalledWith({ where: { id: 88 }, select: { id: true } });
+    // UPDATE parcial: solo la columna tocada (isbn); NO crea, NO toca editionId
+    expect(tx.volume.update).toHaveBeenCalledTimes(1);
+    expect(tx.volume.update).toHaveBeenCalledWith({ where: { id: 88 }, data: { isbn: "978-1" }, select: { id: true } });
+    // RR: appliedVolumeId = refVolumeId (el volumen preexistente afectado) + correlation
+    expect(tx.resolutionRecord.update).toHaveBeenCalledTimes(1);
+    expect(tx.resolutionRecord.update).toHaveBeenCalledWith({ where: { proposalId: 5 }, data: { appliedVolumeId: 88, mutationCorrelationId: "corr-c1" } });
+    expect(out).toEqual({ proposalId: 5, resolutionRecordId: 42, targetKind: "VOLUME", appliedWorkId: null, appliedEditionId: null, appliedVolumeId: 88, mutationCorrelationId: "corr-c1", recovered: false });
+    expect(onCommitted).toHaveBeenCalledWith(out);
+    expect(Object.keys(tx)).not.toContain("publisherEdition");
+  });
+
+  it("UPDATE exacto = solo columnas tocadas (número SET + isbn REMOVE ⇒ {number, isbn:null})", async () => {
+    const tx = volCorrFakeTx({ claims: [
+      { id: 31, attributeKind: "VOLUME_NUMBER", value: 7, claimOperation: "SET", result: "ACEPTADA" },
+      { id: 32, attributeKind: "VOLUME_ISBN", value: null, claimOperation: "REMOVE", result: "ACEPTADA" },
+    ] });
+    await runApplyVolCorr(tx);
+    expect(tx.volume.update).toHaveBeenCalledWith({ where: { id: 88 }, data: { number: 7, isbn: null }, select: { id: true } });
+  });
+
+  it("EXTERNAL_VOLUME_ID (Whakoom, SET): el slot externo llega intacto (trimmed) al UPDATE, sin editionId", async () => {
+    const tx = volCorrFakeTx({ claims: [
+      { id: 31, attributeKind: "EXTERNAL_VOLUME_ID", value: { provider: "Whakoom", externalId: "  wc-42  " }, claimOperation: "SET", result: "ACEPTADA" },
+    ] });
+    const out = await runApplyVolCorr(tx, vi.fn(), "corr-ext");
+    // el patch materializa whakoomComicId (trimmed); NO toca editionId; NO crea
+    expect(tx.volume.update).toHaveBeenCalledTimes(1);
+    expect(tx.volume.update).toHaveBeenCalledWith({ where: { id: 88 }, data: { whakoomComicId: "wc-42" }, select: { id: true } });
+    expect(tx.resolutionRecord.update).toHaveBeenCalledTimes(1);
+    expect(out.recovered).toBe(false);
+  });
+
+  it("patch vacío (solo claim no materializada) = no-op exitoso: NO hace UPDATE, sí marca el RR", async () => {
+    const tx = volCorrFakeTx({ claims: [
+      { id: 31, attributeKind: "VOLUME_TITLE", value: { text: "Tomo 1" }, claimOperation: "SET", result: "ACEPTADA" },
+    ] });
+    const out = await runApplyVolCorr(tx, vi.fn(), "corr-noop");
+    expect(tx.volume.findUnique).toHaveBeenCalledTimes(1); // el target igual se valida
+    expect(tx.volume.update).not.toHaveBeenCalled();
+    expect(tx.resolutionRecord.update).toHaveBeenCalledWith({ where: { proposalId: 5 }, data: { appliedVolumeId: 88, mutationCorrelationId: "corr-noop" } });
+    expect(out).toEqual({ proposalId: 5, resolutionRecordId: 42, targetKind: "VOLUME", appliedWorkId: null, appliedEditionId: null, appliedVolumeId: 88, mutationCorrelationId: "corr-noop", recovered: false });
+  });
+
+  it("target inexistente (refVolumeId null o fila ausente) → TargetVolumeNotFoundError, sin UPDATE ni RR", async () => {
+    const tx1 = volCorrFakeTx({ locked: [{ id: 5, status: "ACEPTADA", targetKind: "VOLUME", contentClass: "MANGA", version: 2, refWorkId: null, refEditionId: null, refVolumeId: null }] });
+    await expect(runApplyVolCorr(tx1)).rejects.toThrow(TargetVolumeNotFoundError);
+    expect(tx1.volume.update).not.toHaveBeenCalled();
+    expect(tx1.resolutionRecord.update).not.toHaveBeenCalled();
+    const tx2 = volCorrFakeTx({ target: null });
+    await expect(runApplyVolCorr(tx2)).rejects.toThrow(TargetVolumeNotFoundError);
+    expect(tx2.volume.update).not.toHaveBeenCalled();
+    expect(tx2.resolutionRecord.update).not.toHaveBeenCalled();
+  });
+
+  it("ADD sobre escalar (VOLUME_NUMBER) → ClaimSetInvalidError, sin UPDATE", async () => {
+    const tx = volCorrFakeTx({ claims: [
+      { id: 31, attributeKind: "VOLUME_NUMBER", value: 3, claimOperation: "ADD", result: "ACEPTADA" },
+    ] });
+    await expect(runApplyVolCorr(tx)).rejects.toThrow(ClaimSetInvalidError);
+    expect(tx.volume.update).not.toHaveBeenCalled();
+    expect(tx.resolutionRecord.update).not.toHaveBeenCalled();
+  });
+
+  it("P2002 al actualizar el Volume (colisión de número) → CatalogConflictError, sin marcar Apply", async () => {
+    const p2002 = new Prisma.PrismaClientKnownRequestError("unique", { code: "P2002", clientVersion: "6.19.3", meta: { target: ["Volume_editionId_number_key"] } });
+    const tx = volCorrFakeTx({
+      claims: [{ id: 31, attributeKind: "VOLUME_NUMBER", value: 9, claimOperation: "SET", result: "ACEPTADA" }],
+      update: vi.fn().mockRejectedValue(p2002),
+    });
+    await expect(runApplyVolCorr(tx)).rejects.toThrow(CatalogConflictError);
+    expect(tx.resolutionRecord.update).not.toHaveBeenCalled();
+  });
+
+  it("error ≠ P2002 (FK/P2003) se propaga sin convertir; rollback (onCommitted no llamado)", async () => {
+    const p2003 = new Prisma.PrismaClientKnownRequestError("fk", { code: "P2003", clientVersion: "6.19.3", meta: { field_name: "id" } });
+    const tx = volCorrFakeTx({ update: vi.fn().mockRejectedValue(p2003) });
+    const onC = vi.fn();
+    await expect(applyWritePort(tx as unknown as Prisma.TransactionClient, onC).apply({ proposalId: 5, idempotencyKey: "k" }, "c")).rejects.toThrow(Prisma.PrismaClientKnownRequestError);
+    expect(onC).not.toHaveBeenCalled();
+  });
+
+  it("rollback: fallo en UPDATE del Volume o en update del RR propaga y NO captura", async () => {
+    const tx1 = volCorrFakeTx({ update: vi.fn().mockRejectedValue(new Error("boom")) });
+    const onC1 = vi.fn();
+    await expect(applyWritePort(tx1 as unknown as Prisma.TransactionClient, onC1).apply({ proposalId: 5, idempotencyKey: "k" }, "c")).rejects.toThrow("boom");
+    expect(onC1).not.toHaveBeenCalled();
+
+    const tx2 = volCorrFakeTx();
+    tx2.resolutionRecord.update.mockRejectedValue(new Error("kaboom"));
+    const onC2 = vi.fn();
+    await expect(applyWritePort(tx2 as unknown as Prisma.TransactionClient, onC2).apply({ proposalId: 5, idempotencyKey: "k" }, "c")).rejects.toThrow("kaboom");
+    expect(onC2).not.toHaveBeenCalled();
+  });
+
+  it("replay consistente: retorna ANTES de leer claims/target y sin UPDATE ni update del RR", async () => {
+    const tx = volCorrFakeTx({ resolution: { id: 42, outcome: "ACEPTADA", mutationCorrelationId: "corr-old", appliedWorkId: null, appliedEditionId: null, appliedVolumeId: 555 } });
+    const out = await runApplyVolCorr(tx);
+    expect(out).toEqual({ proposalId: 5, resolutionRecordId: 42, targetKind: "VOLUME", appliedWorkId: null, appliedEditionId: null, appliedVolumeId: 555, mutationCorrelationId: "corr-old", recovered: true });
+    expect(tx.proposalClaim.findMany).not.toHaveBeenCalled();
+    expect(tx.volume.findUnique).not.toHaveBeenCalled();
+    expect(tx.volume.update).not.toHaveBeenCalled();
+    expect(tx.resolutionRecord.update).not.toHaveBeenCalled();
+  });
+
+  it("gate inconsistente (appliedWorkId inesperado para VOLUME) → InconsistentApplyStateError", async () => {
+    const tx = volCorrFakeTx({ resolution: { id: 42, outcome: "ACEPTADA", mutationCorrelationId: "c", appliedWorkId: 9, appliedEditionId: null, appliedVolumeId: null } });
+    await expect(runApplyVolCorr(tx)).rejects.toThrow(InconsistentApplyStateError);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Mutation Framework — audit
 // ---------------------------------------------------------------------------
 describe("mutación applyCatalogProposal — audit", () => {
@@ -948,6 +1178,41 @@ describe("mutación applyCatalogProposal — audit", () => {
     const dump = JSON.stringify(spy.entries);
     expect(dump).not.toContain("978");
     expect(dump).not.toContain("wc-");
+  });
+
+  it("VOLUME (corrección) → entities ['Volume','ResolutionRecord'], affected mutación (creates:0, updates:2)", async () => {
+    const write: ApplyWritePort = { apply: vi.fn().mockResolvedValue({ proposalId: 5, resolutionRecordId: 42, targetKind: "VOLUME", appliedWorkId: null, appliedEditionId: null, appliedVolumeId: 88, mutationCorrelationId: "c", recovered: false }) };
+    const tx: TransactionRunner<ApplyReadPort, ApplyWritePort> = { run: (fn) => fn({ read, write }) };
+    const spy = spySink();
+    await runMutation(applyCatalogProposal, { proposalId: 5, idempotencyKey: "k1" }, { read, transaction: tx, actor, dryRun: false, audit: spy.sink });
+    const success = spy.entries.find((e) => e.phase === "success")!;
+    // Mutation actualiza (no crea): creates 0. entities = Volume + ResolutionRecord.
+    expect(success.affected).toEqual({ creates: 0, updates: 2, deletes: 0, entities: ["Volume", "ResolutionRecord"] });
+  });
+
+  // Decisión pineada: `affected` es una estimación conservadora para policy/auditoría; el
+  // over-count en patch vacío es intencional. No refleja el nº exacto de sentencias SQL
+  // (acá solo corre el UPDATE del ResolutionRecord). Se evita contaminar ApplyOutcome con
+  // detalle operacional. Ver análisis best-effort vs exactitud.
+  it("VOLUME (corrección) patch vacío: over-count deliberado (updates:2) aunque solo corra el update del RR", async () => {
+    // write-port REAL sobre una corrección cuyas claims aceptadas no materializan nada → patch {}
+    const fake = volCorrFakeTx({ claims: [
+      { id: 31, attributeKind: "VOLUME_TITLE", value: { text: "Tomo 1" }, claimOperation: "SET", result: "ACEPTADA" },
+    ] });
+    const committed = vi.fn();
+    const write = applyWritePort(fake as unknown as Prisma.TransactionClient, committed);
+    const tx: TransactionRunner<ApplyReadPort, ApplyWritePort> = { run: (fn) => fn({ read, write }) };
+    const spy = spySink();
+    const r = await runMutation(applyCatalogProposal, { proposalId: 5, idempotencyKey: "k1" }, { read, transaction: tx, actor, dryRun: false, audit: spy.sink });
+    // aplicación exitosa y NO replay
+    expect(committed).toHaveBeenCalledWith(expect.objectContaining({ targetKind: "VOLUME", appliedVolumeId: 88, recovered: false }));
+    // físicamente: patch vacío ⇒ NO se toca el Volume; SÍ se marca el ResolutionRecord
+    expect(fake.volume.update).not.toHaveBeenCalled();
+    expect(fake.resolutionRecord.update).toHaveBeenCalledTimes(1);
+    // `affected` deliberadamente sobre-estimado; entidades correctas y sin afirmar creación (creates:0)
+    expect(r.affected).toEqual({ creates: 0, updates: 2, deletes: 0, entities: ["Volume", "ResolutionRecord"] });
+    const success = spy.entries.find((e) => e.phase === "success")!;
+    expect(success.affected).toEqual({ creates: 0, updates: 2, deletes: 0, entities: ["Volume", "ResolutionRecord"] });
   });
 });
 
@@ -1007,5 +1272,23 @@ describe("applyCatalogProposalAction", () => {
       appliedWorkId: null, appliedEditionId: null, appliedVolumeId: "999",
       mutationCorrelationId: "corr-1", recovered: false,
     });
+  });
+
+  it("VOLUME (corrección) → ok con targetKind VOLUME y appliedVolumeId string", async () => {
+    vi.mocked(applyCatalogProposalUseCase).mockResolvedValueOnce({
+      proposalId: "5", resolutionRecordId: "42", targetKind: "VOLUME",
+      appliedWorkId: null, appliedEditionId: null, appliedVolumeId: "88",
+      mutationCorrelationId: "corr-1", recovered: false,
+    });
+    expect(await applyCatalogProposalAction(cmd)).toEqual({
+      ok: true, proposalId: "5", resolutionRecordId: "42", targetKind: "VOLUME",
+      appliedWorkId: null, appliedEditionId: null, appliedVolumeId: "88",
+      mutationCorrelationId: "corr-1", recovered: false,
+    });
+  });
+
+  it("target inexistente → mensaje específico (volumen a corregir)", async () => {
+    vi.mocked(applyCatalogProposalUseCase).mockRejectedValueOnce(new TargetVolumeNotFoundError());
+    expect((await applyCatalogProposalAction(cmd) as { ok: false; error: string }).error).toContain("volumen a corregir");
   });
 });

@@ -34,12 +34,13 @@ export {
   UnsupportedClaimForApplyError,
   ParentWorkNotFoundError,
   ParentEditionNotFoundError,
+  TargetVolumeNotFoundError,
 } from "@/lib/domain/proposal/apply";
 
 export interface ApplyCatalogProposalResult {
   proposalId: string;
   resolutionRecordId: string;
-  targetKind: "NEW_WORK" | "NEW_EDITION" | "NEW_VOLUME";
+  targetKind: "NEW_WORK" | "NEW_EDITION" | "NEW_VOLUME" | "VOLUME";
   appliedWorkId: string | null;
   appliedEditionId: string | null;
   appliedVolumeId: string | null;
@@ -65,7 +66,7 @@ export async function applyCatalogProposalUseCase(
   return {
     proposalId: String(c.proposalId),
     resolutionRecordId: String(c.resolutionRecordId),
-    targetKind: c.targetKind as "NEW_WORK" | "NEW_EDITION" | "NEW_VOLUME",
+    targetKind: c.targetKind as "NEW_WORK" | "NEW_EDITION" | "NEW_VOLUME" | "VOLUME",
     appliedWorkId: c.appliedWorkId === null ? null : String(c.appliedWorkId),
     appliedEditionId: c.appliedEditionId === null ? null : String(c.appliedEditionId),
     appliedVolumeId: c.appliedVolumeId === null ? null : String(c.appliedVolumeId),
