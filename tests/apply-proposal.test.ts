@@ -14,6 +14,7 @@ import {
   buildEditionDraft,
   buildVolumeDraft,
   buildVolumePatch,
+  buildEditionPatch,
   communityEditionSlug,
   classifyApplyState,
   WORK_MATERIALIZED_KINDS,
@@ -36,6 +37,8 @@ import {
   ParentWorkNotFoundError,
   ParentEditionNotFoundError,
   TargetVolumeNotFoundError,
+  TargetEditionNotFoundError,
+  EditionAttributeNotEditableError,
   type AppliedRef,
   type ApplyClaimRow,
   type ApplyReadPort,
@@ -523,6 +526,78 @@ describe("dominio — buildVolumePatch (patch parcial, honra claimOperation)", (
     expect(() => buildVolumePatch([claim("TITLE_LOCALIZED", { language: "es", text: "x" }, 31)])).toThrow(UnsupportedClaimForApplyError);
     expect(() => buildVolumePatch([claim("EDITION_PUBLISHER", "Ivrea", 31)])).toThrow(UnsupportedClaimForApplyError);
     expect(() => buildVolumePatch([claim("TOTALLY_UNKNOWN", 1, 31)])).toThrow(UnsupportedClaimForApplyError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dominio — buildEditionPatch (Mutation × Edition v1; TRES buckets; ADR-007)
+// ---------------------------------------------------------------------------
+describe("dominio — buildEditionPatch (v1: whakoomId + volumes; 3 categorías)", () => {
+  const cop = (kind: string, value: unknown, op: string, id = 31) => claim(kind, value, id, "ACEPTADA", op);
+  const wk = (externalId: string, op = "SET", id = 31) => cop("EXTERNAL_EDITION_ID", { provider: "Whakoom", externalId }, op, id);
+
+  it("bucket 2 (sin columna) → patch vacío: sin claims, o solo FORMAT/LABEL/RELEASE_DATE/IS_UPCOMING", () => {
+    expect(buildEditionPatch([])).toEqual({});
+    expect(buildEditionPatch([
+      claim("EDITION_FORMAT", { value: "Tankōbon" }, 31),
+      claim("EDITION_LABEL_OR_IMPRINT", { value: "Shonen" }, 32),
+      claim("EDITION_RELEASE_DATE", { year: 2020 }, 33),
+      claim("EDITION_IS_UPCOMING", true, 34),
+    ])).toEqual({});
+  });
+
+  it("bucket 1 — volumes SET fija volumes + volumesLocked=true (efecto acoplado)", () => {
+    expect(buildEditionPatch([cop("EDITION_ANNOUNCED_TOTAL_VOLUMES", 12, "SET")])).toEqual({ volumes: 12, volumesLocked: true });
+    expect(buildEditionPatch([cop("EDITION_ANNOUNCED_TOTAL_VOLUMES", 0, "SET")])).toEqual({ volumes: 0, volumesLocked: true });
+  });
+
+  it("bucket 1 — whakoomId SET/ADD(=fijar) / ERASE(→null)", () => {
+    expect(buildEditionPatch([wk("  ed-9  ", "SET")])).toEqual({ whakoomId: "ed-9" });
+    expect(buildEditionPatch([wk("ed-9", "ADD")])).toEqual({ whakoomId: "ed-9" });
+    for (const op of ["REMOVE", "MARK_UNKNOWN", "MARK_NOT_APPLICABLE"]) {
+      expect(buildEditionPatch([cop("EXTERNAL_EDITION_ID", null, op)])).toEqual({ whakoomId: null });
+    }
+  });
+
+  it("bucket 1 — combinado: volumes + whakoomId; solo columnas tocadas", () => {
+    const p = buildEditionPatch([cop("EDITION_ANNOUNCED_TOTAL_VOLUMES", 5, "SET", 31), wk("ed-1", "SET", 32)]);
+    expect(p).toEqual({ volumes: 5, volumesLocked: true, whakoomId: "ed-1" });
+  });
+
+  it("bucket 3 (materializable diferido) → EditionAttributeNotEditableError, parametrizado", () => {
+    for (const kind of ["EDITION_PUBLISHER", "EDITION_LANGUAGE", "EDITION_COUNTRY", "EDITION_STATUS"]) {
+      let caught: unknown;
+      try { buildEditionPatch([cop(kind, "x", "SET")]); } catch (e) { caught = e; }
+      expect(caught).toBeInstanceOf(EditionAttributeNotEditableError);
+      expect((caught as EditionAttributeNotEditableError).attributeKind).toBe(kind);
+    }
+  });
+
+  it("atomicidad: mezcla soportada + diferida → rechazo (NO aplica parcial la soportada)", () => {
+    expect(() => buildEditionPatch([
+      cop("EDITION_ANNOUNCED_TOTAL_VOLUMES", 5, "SET", 31),
+      cop("EDITION_STATUS", "PUBLISHING", "SET", 32),
+    ])).toThrow(EditionAttributeNotEditableError);
+  });
+
+  it("operación inválida en atributo soportado usa el error de claim, NO el de bucket 3", () => {
+    // volumes NOT NULL: REMOVE/MARK/ADD → ClaimSetInvalidError (no EditionAttributeNotEditableError)
+    expect(() => buildEditionPatch([cop("EDITION_ANNOUNCED_TOTAL_VOLUMES", null, "REMOVE")])).toThrow(ClaimSetInvalidError);
+    expect(() => buildEditionPatch([cop("EDITION_ANNOUNCED_TOTAL_VOLUMES", 3, "ADD")])).toThrow(ClaimSetInvalidError);
+    expect(() => buildEditionPatch([cop("EDITION_ANNOUNCED_TOTAL_VOLUMES", -1, "SET")])).toThrow(ClaimSetInvalidError);
+    expect(() => buildEditionPatch([cop("EDITION_ANNOUNCED_TOTAL_VOLUMES", 1.5, "SET")])).toThrow(ClaimSetInvalidError);
+  });
+
+  it("whakoomId: provider no soportado / vacío → error; cardinalidad duplicada → error", () => {
+    expect(() => buildEditionPatch([cop("EXTERNAL_EDITION_ID", { provider: "MangaDex", externalId: "x" }, "SET")])).toThrow(ClaimSetInvalidError);
+    expect(() => buildEditionPatch([cop("EXTERNAL_EDITION_ID", { provider: "Whakoom", externalId: "  " }, "SET")])).toThrow(ClaimSetInvalidError);
+    expect(() => buildEditionPatch([wk("a", "SET", 31), wk("b", "SET", 32)])).toThrow(ClaimSetInvalidError);
+  });
+
+  it("nivel WORK/VOLUME o kind desconocido → UnsupportedClaimForApplyError", () => {
+    expect(() => buildEditionPatch([claim("TITLE_LOCALIZED", { language: "es", text: "x" }, 31)])).toThrow(UnsupportedClaimForApplyError);
+    expect(() => buildEditionPatch([claim("VOLUME_NUMBER", 1, 31)])).toThrow(UnsupportedClaimForApplyError);
+    expect(() => buildEditionPatch([claim("TOTALLY_UNKNOWN", 1, 31)])).toThrow(UnsupportedClaimForApplyError);
   });
 });
 
@@ -1127,6 +1202,150 @@ describe("infra write-port — VOLUME (corrección)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Infra write-port — EDITION (corrección; familia Mutation, ADR-007; v1)
+// ---------------------------------------------------------------------------
+type EdCorrFakeTx = {
+  $queryRaw: ReturnType<typeof vi.fn>;
+  resolutionRecord: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+  proposalClaim: { findMany: ReturnType<typeof vi.fn> };
+  publisherEdition: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+};
+function edCorrFakeTx(over: Partial<{
+  locked: unknown[]; resolution: unknown; claims: unknown[]; target: unknown; update: ReturnType<typeof vi.fn>;
+}> = {}): EdCorrFakeTx {
+  return {
+    $queryRaw: vi.fn().mockResolvedValue(over.locked ?? [{ id: 5, status: "ACEPTADA", targetKind: "EDITION", contentClass: "MANGA", version: 2, refWorkId: null, refEditionId: 77, refVolumeId: null }]),
+    resolutionRecord: {
+      findUnique: vi.fn().mockResolvedValue(over.resolution === undefined
+        ? { id: 42, outcome: "ACEPTADA", mutationCorrelationId: null, appliedWorkId: null, appliedEditionId: null, appliedVolumeId: null }
+        : over.resolution),
+      update: vi.fn().mockResolvedValue({}),
+    },
+    // corrección por defecto: fija el conteo de tomos (SET volumes ⇒ volumesLocked=true)
+    proposalClaim: { findMany: vi.fn().mockResolvedValue(over.claims ?? [
+      { id: 31, attributeKind: "EDITION_ANNOUNCED_TOTAL_VOLUMES", value: 12, claimOperation: "SET", result: "ACEPTADA" },
+    ]) },
+    publisherEdition: {
+      findUnique: vi.fn().mockResolvedValue(over.target === undefined ? { id: 77 } : over.target),
+      update: over.update ?? vi.fn().mockResolvedValue({ id: 77 }),
+    },
+  };
+}
+const runApplyEdCorr = (tx: EdCorrFakeTx, onCommitted = vi.fn(), corr = "corr-e") =>
+  applyWritePort(tx as unknown as Prisma.TransactionClient, onCommitted).apply({ proposalId: 5, idempotencyKey: "k1" }, corr);
+
+describe("infra write-port — EDITION (corrección) v1", () => {
+  it("happy: lock → carga target (solo id) → UPDATE parcial (volumes+volumesLocked) → RR (appliedEditionId=refEditionId)", async () => {
+    const tx = edCorrFakeTx();
+    const onCommitted = vi.fn();
+    const out = await runApplyEdCorr(tx, onCommitted, "corr-e1");
+    const lockOrder = tx.$queryRaw.mock.invocationCallOrder[0];
+    expect(lockOrder).toBeLessThan(tx.publisherEdition.findUnique.mock.invocationCallOrder[0]);
+    expect(tx.publisherEdition.findUnique).toHaveBeenCalledWith({ where: { id: 77 }, select: { id: true } });
+    // UPDATE: volumes + volumesLocked=true (acoplado). NO toca workId/slug.
+    expect(tx.publisherEdition.update).toHaveBeenCalledTimes(1);
+    expect(tx.publisherEdition.update).toHaveBeenCalledWith({ where: { id: 77 }, data: { volumes: 12, volumesLocked: true }, select: { id: true } });
+    expect(tx.resolutionRecord.update).toHaveBeenCalledWith({ where: { proposalId: 5 }, data: { appliedEditionId: 77, mutationCorrelationId: "corr-e1" } });
+    expect(out).toEqual({ proposalId: 5, resolutionRecordId: 42, targetKind: "EDITION", appliedWorkId: null, appliedEditionId: 77, appliedVolumeId: null, mutationCorrelationId: "corr-e1", recovered: false });
+    expect(onCommitted).toHaveBeenCalledWith(out);
+  });
+
+  it("whakoomId SET: el slot externo llega intacto (trimmed) al UPDATE, sin workId/slug", async () => {
+    const tx = edCorrFakeTx({ claims: [
+      { id: 31, attributeKind: "EXTERNAL_EDITION_ID", value: { provider: "Whakoom", externalId: "  ed-42  " }, claimOperation: "SET", result: "ACEPTADA" },
+    ] });
+    await runApplyEdCorr(tx);
+    expect(tx.publisherEdition.update).toHaveBeenCalledWith({ where: { id: 77 }, data: { whakoomId: "ed-42" }, select: { id: true } });
+  });
+
+  it("bucket 3 (EDITION_STATUS) → EditionAttributeNotEditableError ANTES del UPDATE y del RR", async () => {
+    const tx = edCorrFakeTx({ claims: [
+      { id: 31, attributeKind: "EDITION_STATUS", value: "PUBLISHING", claimOperation: "SET", result: "ACEPTADA" },
+    ] });
+    await expect(runApplyEdCorr(tx)).rejects.toThrow(EditionAttributeNotEditableError);
+    expect(tx.publisherEdition.update).not.toHaveBeenCalled();
+    expect(tx.resolutionRecord.update).not.toHaveBeenCalled();
+  });
+
+  it("atomicidad: soportada + diferida en la misma propuesta → falla, sin UPDATE ni RR", async () => {
+    const tx = edCorrFakeTx({ claims: [
+      { id: 31, attributeKind: "EDITION_ANNOUNCED_TOTAL_VOLUMES", value: 12, claimOperation: "SET", result: "ACEPTADA" },
+      { id: 32, attributeKind: "EDITION_LANGUAGE", value: "en", claimOperation: "SET", result: "ACEPTADA" },
+    ] });
+    await expect(runApplyEdCorr(tx)).rejects.toThrow(EditionAttributeNotEditableError);
+    expect(tx.publisherEdition.update).not.toHaveBeenCalled();
+    expect(tx.resolutionRecord.update).not.toHaveBeenCalled();
+  });
+
+  it("patch vacío (solo bucket 2) = no-op exitoso: NO hace UPDATE, sí marca el RR", async () => {
+    const tx = edCorrFakeTx({ claims: [
+      { id: 31, attributeKind: "EDITION_FORMAT", value: { value: "Tankōbon" }, claimOperation: "SET", result: "ACEPTADA" },
+    ] });
+    const out = await runApplyEdCorr(tx, vi.fn(), "corr-noop");
+    expect(tx.publisherEdition.findUnique).toHaveBeenCalledTimes(1);
+    expect(tx.publisherEdition.update).not.toHaveBeenCalled();
+    expect(tx.resolutionRecord.update).toHaveBeenCalledWith({ where: { proposalId: 5 }, data: { appliedEditionId: 77, mutationCorrelationId: "corr-noop" } });
+    expect(out.recovered).toBe(false);
+  });
+
+  it("target inexistente (refEditionId null o fila ausente) → TargetEditionNotFoundError, sin UPDATE ni RR", async () => {
+    const tx1 = edCorrFakeTx({ locked: [{ id: 5, status: "ACEPTADA", targetKind: "EDITION", contentClass: "MANGA", version: 2, refWorkId: null, refEditionId: null, refVolumeId: null }] });
+    await expect(runApplyEdCorr(tx1)).rejects.toThrow(TargetEditionNotFoundError);
+    expect(tx1.publisherEdition.update).not.toHaveBeenCalled();
+    const tx2 = edCorrFakeTx({ target: null });
+    await expect(runApplyEdCorr(tx2)).rejects.toThrow(TargetEditionNotFoundError);
+    expect(tx2.publisherEdition.update).not.toHaveBeenCalled();
+    expect(tx2.resolutionRecord.update).not.toHaveBeenCalled();
+  });
+
+  it("P2002 al actualizar (whakoomId o [publisher,slug]) → CatalogConflictError neutro, sin marcar Apply", async () => {
+    const p2002 = new Prisma.PrismaClientKnownRequestError("unique", { code: "P2002", clientVersion: "6.19.3", meta: { target: ["PublisherEdition_whakoomId_key"] } });
+    const tx = edCorrFakeTx({
+      claims: [{ id: 31, attributeKind: "EXTERNAL_EDITION_ID", value: { provider: "Whakoom", externalId: "ed-dup" }, claimOperation: "SET", result: "ACEPTADA" }],
+      update: vi.fn().mockRejectedValue(p2002),
+    });
+    await expect(runApplyEdCorr(tx)).rejects.toThrow(CatalogConflictError);
+    expect(tx.resolutionRecord.update).not.toHaveBeenCalled();
+  });
+
+  it("error ≠ P2002 (FK/P2003) se propaga sin convertir; rollback (onCommitted no llamado)", async () => {
+    const p2003 = new Prisma.PrismaClientKnownRequestError("fk", { code: "P2003", clientVersion: "6.19.3", meta: { field_name: "id" } });
+    const tx = edCorrFakeTx({ update: vi.fn().mockRejectedValue(p2003) });
+    const onC = vi.fn();
+    await expect(applyWritePort(tx as unknown as Prisma.TransactionClient, onC).apply({ proposalId: 5, idempotencyKey: "k" }, "c")).rejects.toThrow(Prisma.PrismaClientKnownRequestError);
+    expect(onC).not.toHaveBeenCalled();
+  });
+
+  it("rollback: fallo en UPDATE o en update del RR propaga y NO captura", async () => {
+    const tx1 = edCorrFakeTx({ update: vi.fn().mockRejectedValue(new Error("boom")) });
+    const onC1 = vi.fn();
+    await expect(applyWritePort(tx1 as unknown as Prisma.TransactionClient, onC1).apply({ proposalId: 5, idempotencyKey: "k" }, "c")).rejects.toThrow("boom");
+    expect(onC1).not.toHaveBeenCalled();
+
+    const tx2 = edCorrFakeTx();
+    tx2.resolutionRecord.update.mockRejectedValue(new Error("kaboom"));
+    const onC2 = vi.fn();
+    await expect(applyWritePort(tx2 as unknown as Prisma.TransactionClient, onC2).apply({ proposalId: 5, idempotencyKey: "k" }, "c")).rejects.toThrow("kaboom");
+    expect(onC2).not.toHaveBeenCalled();
+  });
+
+  it("replay consistente: retorna ANTES de leer claims/target y sin UPDATE ni update del RR", async () => {
+    const tx = edCorrFakeTx({ resolution: { id: 42, outcome: "ACEPTADA", mutationCorrelationId: "corr-old", appliedWorkId: null, appliedEditionId: 888, appliedVolumeId: null } });
+    const out = await runApplyEdCorr(tx);
+    expect(out).toEqual({ proposalId: 5, resolutionRecordId: 42, targetKind: "EDITION", appliedWorkId: null, appliedEditionId: 888, appliedVolumeId: null, mutationCorrelationId: "corr-old", recovered: true });
+    expect(tx.proposalClaim.findMany).not.toHaveBeenCalled();
+    expect(tx.publisherEdition.findUnique).not.toHaveBeenCalled();
+    expect(tx.publisherEdition.update).not.toHaveBeenCalled();
+    expect(tx.resolutionRecord.update).not.toHaveBeenCalled();
+  });
+
+  it("gate inconsistente (appliedVolumeId inesperado para EDITION) → InconsistentApplyStateError", async () => {
+    const tx = edCorrFakeTx({ resolution: { id: 42, outcome: "ACEPTADA", mutationCorrelationId: "c", appliedWorkId: null, appliedEditionId: null, appliedVolumeId: 9 } });
+    await expect(runApplyEdCorr(tx)).rejects.toThrow(InconsistentApplyStateError);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Mutation Framework — audit
 // ---------------------------------------------------------------------------
 describe("mutación applyCatalogProposal — audit", () => {
@@ -1188,6 +1407,15 @@ describe("mutación applyCatalogProposal — audit", () => {
     const success = spy.entries.find((e) => e.phase === "success")!;
     // Mutation actualiza (no crea): creates 0. entities = Volume + ResolutionRecord.
     expect(success.affected).toEqual({ creates: 0, updates: 2, deletes: 0, entities: ["Volume", "ResolutionRecord"] });
+  });
+
+  it("EDITION (corrección) → entities ['PublisherEdition','ResolutionRecord'], affected mutación (creates:0, updates:2)", async () => {
+    const write: ApplyWritePort = { apply: vi.fn().mockResolvedValue({ proposalId: 5, resolutionRecordId: 42, targetKind: "EDITION", appliedWorkId: null, appliedEditionId: 77, appliedVolumeId: null, mutationCorrelationId: "c", recovered: false }) };
+    const tx: TransactionRunner<ApplyReadPort, ApplyWritePort> = { run: (fn) => fn({ read, write }) };
+    const spy = spySink();
+    await runMutation(applyCatalogProposal, { proposalId: 5, idempotencyKey: "k1" }, { read, transaction: tx, actor, dryRun: false, audit: spy.sink });
+    const success = spy.entries.find((e) => e.phase === "success")!;
+    expect(success.affected).toEqual({ creates: 0, updates: 2, deletes: 0, entities: ["PublisherEdition", "ResolutionRecord"] });
   });
 
   // Decisión pineada: `affected` es una estimación conservadora para policy/auditoría; el
@@ -1290,5 +1518,27 @@ describe("applyCatalogProposalAction", () => {
   it("target inexistente → mensaje específico (volumen a corregir)", async () => {
     vi.mocked(applyCatalogProposalUseCase).mockRejectedValueOnce(new TargetVolumeNotFoundError());
     expect((await applyCatalogProposalAction(cmd) as { ok: false; error: string }).error).toContain("volumen a corregir");
+  });
+
+  it("EDITION (corrección) → ok con targetKind EDITION y appliedEditionId string", async () => {
+    vi.mocked(applyCatalogProposalUseCase).mockResolvedValueOnce({
+      proposalId: "5", resolutionRecordId: "42", targetKind: "EDITION",
+      appliedWorkId: null, appliedEditionId: "77", appliedVolumeId: null,
+      mutationCorrelationId: "corr-1", recovered: false,
+    });
+    expect(await applyCatalogProposalAction(cmd)).toEqual({
+      ok: true, proposalId: "5", resolutionRecordId: "42", targetKind: "EDITION",
+      appliedWorkId: null, appliedEditionId: "77", appliedVolumeId: null,
+      mutationCorrelationId: "corr-1", recovered: false,
+    });
+  });
+
+  it("edición inexistente → mensaje específico; atributo diferido → mensaje reconocido", async () => {
+    vi.mocked(applyCatalogProposalUseCase).mockRejectedValueOnce(new TargetEditionNotFoundError());
+    expect((await applyCatalogProposalAction(cmd) as { ok: false; error: string }).error).toContain("edición a corregir");
+    vi.mocked(applyCatalogProposalUseCase).mockRejectedValueOnce(new EditionAttributeNotEditableError("EDITION_STATUS"));
+    const r = (await applyCatalogProposalAction(cmd) as { ok: false; error: string }).error;
+    expect(r).toContain("EDITION_STATUS");
+    expect(r).toContain("no está habilitada");
   });
 });
