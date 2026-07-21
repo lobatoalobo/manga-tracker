@@ -1177,6 +1177,31 @@ describe("mutación applyCatalogProposal — audit", () => {
     // Mutation actualiza (no crea): creates 0. entities = Volume + ResolutionRecord.
     expect(success.affected).toEqual({ creates: 0, updates: 2, deletes: 0, entities: ["Volume", "ResolutionRecord"] });
   });
+
+  // Decisión pineada: `affected` es una estimación conservadora para policy/auditoría; el
+  // over-count en patch vacío es intencional. No refleja el nº exacto de sentencias SQL
+  // (acá solo corre el UPDATE del ResolutionRecord). Se evita contaminar ApplyOutcome con
+  // detalle operacional. Ver análisis best-effort vs exactitud.
+  it("VOLUME (corrección) patch vacío: over-count deliberado (updates:2) aunque solo corra el update del RR", async () => {
+    // write-port REAL sobre una corrección cuyas claims aceptadas no materializan nada → patch {}
+    const fake = volCorrFakeTx({ claims: [
+      { id: 31, attributeKind: "VOLUME_TITLE", value: { text: "Tomo 1" }, claimOperation: "SET", result: "ACEPTADA" },
+    ] });
+    const committed = vi.fn();
+    const write = applyWritePort(fake as unknown as Prisma.TransactionClient, committed);
+    const tx: TransactionRunner<ApplyReadPort, ApplyWritePort> = { run: (fn) => fn({ read, write }) };
+    const spy = spySink();
+    const r = await runMutation(applyCatalogProposal, { proposalId: 5, idempotencyKey: "k1" }, { read, transaction: tx, actor, dryRun: false, audit: spy.sink });
+    // aplicación exitosa y NO replay
+    expect(committed).toHaveBeenCalledWith(expect.objectContaining({ targetKind: "VOLUME", appliedVolumeId: 88, recovered: false }));
+    // físicamente: patch vacío ⇒ NO se toca el Volume; SÍ se marca el ResolutionRecord
+    expect(fake.volume.update).not.toHaveBeenCalled();
+    expect(fake.resolutionRecord.update).toHaveBeenCalledTimes(1);
+    // `affected` deliberadamente sobre-estimado; entidades correctas y sin afirmar creación (creates:0)
+    expect(r.affected).toEqual({ creates: 0, updates: 2, deletes: 0, entities: ["Volume", "ResolutionRecord"] });
+    const success = spy.entries.find((e) => e.phase === "success")!;
+    expect(success.affected).toEqual({ creates: 0, updates: 2, deletes: 0, entities: ["Volume", "ResolutionRecord"] });
+  });
 });
 
 // ---------------------------------------------------------------------------
