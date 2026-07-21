@@ -33,15 +33,16 @@ export {
   InconsistentApplyStateError,
   UnsupportedClaimForApplyError,
   ParentWorkNotFoundError,
+  ParentEditionNotFoundError,
 } from "@/lib/domain/proposal/apply";
 
 export interface ApplyCatalogProposalResult {
   proposalId: string;
   resolutionRecordId: string;
-  targetKind: "NEW_WORK" | "NEW_EDITION";
+  targetKind: "NEW_WORK" | "NEW_EDITION" | "NEW_VOLUME";
   appliedWorkId: string | null;
   appliedEditionId: string | null;
-  appliedVolumeId: null;
+  appliedVolumeId: string | null;
   mutationCorrelationId: string;
   recovered: boolean;
 }
@@ -64,10 +65,10 @@ export async function applyCatalogProposalUseCase(
   return {
     proposalId: String(c.proposalId),
     resolutionRecordId: String(c.resolutionRecordId),
-    targetKind: c.targetKind as "NEW_WORK" | "NEW_EDITION",
+    targetKind: c.targetKind as "NEW_WORK" | "NEW_EDITION" | "NEW_VOLUME",
     appliedWorkId: c.appliedWorkId === null ? null : String(c.appliedWorkId),
     appliedEditionId: c.appliedEditionId === null ? null : String(c.appliedEditionId),
-    appliedVolumeId: null,
+    appliedVolumeId: c.appliedVolumeId === null ? null : String(c.appliedVolumeId),
     mutationCorrelationId: c.mutationCorrelationId,
     recovered: c.recovered,
   };

@@ -20,6 +20,7 @@ export { ProposalNotFoundError } from "@/lib/domain/proposal/requestInfo";
 
 export const TARGET_KIND_NEW_WORK = "NEW_WORK" as const;
 export const TARGET_KIND_NEW_EDITION = "NEW_EDITION" as const;
+export const TARGET_KIND_NEW_VOLUME = "NEW_VOLUME" as const;
 export const PROPOSAL_STATUS_ACEPTADA = "ACEPTADA" as const;
 export const RESOLUTION_OUTCOME_ACEPTADA = "ACEPTADA" as const;
 export const CLAIM_RESULT_ACCEPTED = "ACEPTADA" as const;
@@ -53,6 +54,7 @@ export type AppliedRef = "work" | "edition" | "volume";
 export const APPLY_TARGET_REFS: Readonly<Record<string, ReadonlySet<AppliedRef>>> = {
   [TARGET_KIND_NEW_WORK]: new Set<AppliedRef>(["work"]),
   [TARGET_KIND_NEW_EDITION]: new Set<AppliedRef>(["edition"]),
+  [TARGET_KIND_NEW_VOLUME]: new Set<AppliedRef>(["volume"]),
 };
 
 /**
@@ -73,6 +75,26 @@ export const EDITION_ACCEPTED_NOT_MATERIALIZED_KINDS: ReadonlySet<string> = new 
 /** Provider (EXTERNAL_EDITION_ID) admitido en MVP → columna de identidad externa. */
 const EDITION_PROVIDER_FIELD: Readonly<Record<string, "whakoomId">> = {
   whakoom: "whakoomId",
+};
+
+/**
+ * Política CERRADA de proyección de claims VOLUME-level para NEW_VOLUME (mismo patrón que
+ * WORK/EDITION): partición exhaustiva y disjunta sobre los kinds VOLUME de
+ * `ATTRIBUTE_KIND_LEVEL` (comprobado en tests). Kind VOLUME no clasificado → error duro.
+ */
+// Se proyectan hoy a columnas de `Volume`.
+export const VOLUME_MATERIALIZED_KINDS: ReadonlySet<string> = new Set([
+  "VOLUME_NUMBER", "VOLUME_ISBN", "EXTERNAL_VOLUME_ID",
+]);
+// Válidas VOLUME-level pero sin columna materializable hoy: quedan en el ledger.
+// `VOLUME_COVER` existe como `coverImage` pero su promoción es efecto diferido (MVP-B).
+export const VOLUME_ACCEPTED_NOT_MATERIALIZED_KINDS: ReadonlySet<string> = new Set([
+  "VOLUME_TITLE", "VOLUME_RELEASE_DATE", "VOLUME_PAGE_COUNT", "VOLUME_STATUS", "VOLUME_COVER",
+]);
+
+/** Provider (EXTERNAL_VOLUME_ID) admitido en MVP → columna de identidad externa. */
+const VOLUME_PROVIDER_FIELD: Readonly<Record<string, "whakoomComicId">> = {
+  whakoom: "whakoomComicId",
 };
 
 /** Prioridad del título primario (menor gana). TITLE_ROMAJI=4, TITLE_NATIVE=5. */
@@ -115,7 +137,8 @@ export interface ApplyOutcome {
   recovered: boolean;
 }
 
-/** Propuesta bajo lock (para elegibilidad + dedup). `refWorkId` = Work padre (NEW_EDITION). */
+/** Propuesta bajo lock (para elegibilidad + dedup). `refWorkId` = Work padre (NEW_EDITION);
+ * `refEditionId` = edición padre (NEW_VOLUME). */
 export interface LockedProposalForApply {
   id: number;
   status: string;
@@ -123,6 +146,7 @@ export interface LockedProposalForApply {
   contentClass: string;
   version: number;
   refWorkId: number | null;
+  refEditionId: number | null;
 }
 
 /** ResolutionRecord existente (gate de idempotencia + outcome). */
@@ -191,6 +215,18 @@ export function communityEditionSlug(workId: number, language: string): string {
   return `cc:w${workId}:${language}`;
 }
 
+/**
+ * Borrador de volumen (Prisma-free). `Volume` no tiene slug/normTitle → el draft solo
+ * lleva valores de dominio. `editionId` = edición padre (refEditionId). NO carga
+ * `coverImage` (promoción de portada diferida). Paralelo a Work/EditionDraft.
+ */
+export interface VolumeDraft {
+  editionId: number;
+  number: number;
+  isbn: string | null;
+  whakoomComicId: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Puertos
 // ---------------------------------------------------------------------------
@@ -225,6 +261,13 @@ export class ParentWorkNotFoundError extends Error {
   constructor() {
     super("La obra padre de la edición no existe.");
     this.name = "ParentWorkNotFoundError";
+  }
+}
+export class ParentEditionNotFoundError extends Error {
+  readonly code = "PARENT_EDITION_NOT_FOUND" as const;
+  constructor() {
+    super("La edición padre del volumen no existe.");
+    this.name = "ParentEditionNotFoundError";
   }
 }
 export class ResolutionNotFoundError extends Error {
@@ -352,6 +395,16 @@ function enumText(v: unknown): string | null {
   if (typeof v === "string") return v.trim() || null;
   const r = asRecord(v);
   return r && typeof r.value === "string" ? r.value.trim() || null : null;
+}
+/** Escalar de texto (string | {value|text}), trim; vacío o no-texto → null. */
+function scalarText(v: unknown): string | null {
+  if (typeof v === "string") return v.trim() || null;
+  const r = asRecord(v);
+  if (r) {
+    if (typeof r.value === "string") return r.value.trim() || null;
+    if (typeof r.text === "string") return r.text.trim() || null;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -623,4 +676,79 @@ export function buildEditionDraft(
   const whakoomId = resolveEditionExternalId(accepted);
 
   return { publisher, language, country, status, volumes, volumesLocked, whakoomId, title: parentTitle, workId: parentWorkId };
+}
+
+// ---------------------------------------------------------------------------
+// Construcción del VolumeDraft (NEW_VOLUME; mapping cerrado, paralelo a Work/Edition)
+// ---------------------------------------------------------------------------
+function resolveVolumeExternalId(accepted: ApplyClaimRow[]): string | null {
+  for (const c of accepted) {
+    if (c.attributeKind !== "EXTERNAL_VOLUME_ID") continue;
+    const r = asRecord(c.value);
+    const provider = r && typeof r.provider === "string" ? r.provider.toLowerCase() : null;
+    const externalId = r && (typeof r.externalId === "string" || typeof r.externalId === "number") ? String(r.externalId).trim() : null;
+    if (!provider || !externalId || !(provider in VOLUME_PROVIDER_FIELD))
+      throw new ClaimSetInvalidError("EXTERNAL_VOLUME_ID con provider/externalId inválido.");
+    return externalId; // whakoomComicId
+  }
+  return null;
+}
+
+/**
+ * Arma el `VolumeDraft` desde las claims ACEPTADA (misma mecánica cerrada que
+ * build{Work,Edition}Draft): política VOLUME, cardinalidad y `VOLUME_NUMBER` requerido.
+ * `editionId` viene del padre. Precedencia semántica: 0 claims aceptadas →
+ * `NoApplicableClaimsError`; hay claims pero falta `VOLUME_NUMBER` →
+ * `InsufficientCatalogDataError`. Sin extraer `ProjectionPolicy` (deuda diferida).
+ */
+export function buildVolumeDraft(accepted: ApplyClaimRow[], parentEditionId: number): VolumeDraft {
+  if (accepted.length < 1) throw new NoApplicableClaimsError("La resolución no tiene claims aceptadas.");
+
+  const seenSingular = new Set<string>();
+  const seenSubkey = new Set<string>();
+  for (const c of accepted) {
+    const level = ATTRIBUTE_KIND_LEVEL[c.attributeKind];
+    if (level !== "VOLUME")
+      throw new UnsupportedClaimForApplyError(
+        level
+          ? `La claim ${c.attributeKind} (nivel ${level}) no aplica a un NEW_VOLUME.`
+          : `Apply no reconoce el kind de claim ${c.attributeKind}.`,
+      );
+    if (VOLUME_ACCEPTED_NOT_MATERIALIZED_KINDS.has(c.attributeKind)) continue; // evidencia; no se proyecta
+    if (!VOLUME_MATERIALIZED_KINDS.has(c.attributeKind))
+      throw new UnsupportedClaimForApplyError(
+        `La claim VOLUME ${c.attributeKind} no está clasificada por la política de Apply.`,
+      );
+    if (c.attributeKind === "EXTERNAL_VOLUME_ID") {
+      const r = asRecord(c.value);
+      const provider = r && typeof r.provider === "string" ? r.provider.toLowerCase() : "?";
+      const k = `EXTERNAL_VOLUME_ID|${provider}`;
+      if (seenSubkey.has(k)) throw new ClaimSetInvalidError(`Colisión de sub-clave en EXTERNAL_VOLUME_ID (${provider}).`);
+      seenSubkey.add(k);
+    } else {
+      if (seenSingular.has(c.attributeKind))
+        throw new ClaimSetInvalidError(`Más de una claim aceptada para el atributo singular ${c.attributeKind}.`);
+      seenSingular.add(c.attributeKind);
+    }
+  }
+
+  // VOLUME_NUMBER: requerido. Ausencia → InsufficientCatalogData; presente inválido → ClaimSetInvalid.
+  const numClaim = accepted.find((x) => x.attributeKind === "VOLUME_NUMBER");
+  if (!numClaim) throw new InsufficientCatalogDataError("Falta VOLUME_NUMBER para crear el volumen.");
+  const number = scalarNumber(numClaim.value);
+  if (number === null || !Number.isInteger(number) || number < 0)
+    throw new ClaimSetInvalidError("VOLUME_NUMBER inválido (entero ≥ 0).");
+
+  // VOLUME_ISBN: opcional; si está presente debe ser texto no vacío (no se silencia el vacío).
+  const isbnClaim = accepted.find((x) => x.attributeKind === "VOLUME_ISBN");
+  let isbn: string | null = null;
+  if (isbnClaim) {
+    const t = scalarText(isbnClaim.value);
+    if (t === null) throw new ClaimSetInvalidError("VOLUME_ISBN vacío o no es un texto válido.");
+    isbn = t;
+  }
+
+  const whakoomComicId = resolveVolumeExternalId(accepted);
+
+  return { editionId: parentEditionId, number, isbn, whakoomComicId };
 }

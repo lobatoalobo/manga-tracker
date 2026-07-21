@@ -11,6 +11,7 @@
 import { defineMutation, ValidationError } from "@/lib/mutations";
 import {
   TARGET_KIND_NEW_EDITION,
+  TARGET_KIND_NEW_VOLUME,
   type ApplyReadPort,
   type ApplySeed,
   type ApplyWritePort,
@@ -63,7 +64,9 @@ export const applyCatalogProposal = defineMutation<
     const entities =
       r.targetKind === TARGET_KIND_NEW_EDITION
         ? (["PublisherEdition", "ResolutionRecord"] as const)
-        : (["Work", "ResolutionRecord"] as const);
+        : r.targetKind === TARGET_KIND_NEW_VOLUME
+          ? (["Volume", "ResolutionRecord"] as const)
+          : (["Work", "ResolutionRecord"] as const);
     return { affected: { creates: 1, updates: 1, deletes: 0, entities } };
   },
 });

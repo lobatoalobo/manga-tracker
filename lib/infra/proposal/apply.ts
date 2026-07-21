@@ -6,6 +6,8 @@
  * - NEW_EDITION: valida Work padre (refWorkId) → build EditionDraft → deriva slug
  *   (`communityEditionSlug`) y normTitle → dedup (whakoomId, (publisher, slug)) →
  *   create PublisherEdition (url="") → RR (appliedEditionId).
+ * - NEW_VOLUME: valida Edition padre (refEditionId) → build VolumeDraft → dedup
+ *   ((editionId, number)) → create Volume → RR (appliedVolumeId).
  * Escritura INDIVISIBLE bajo el lock de la propuesta (mismo orden que los demás slices);
  * gate por `mutationCorrelationId`; create-only; NO cambia la propuesta; reusa helpers
  * puros de lib/catalog SIN modificarlo ni usar prisma global. P2002 → CatalogConflictError.
@@ -18,6 +20,7 @@ import { normalizeTitle, tightTitleKey, romajiKey, sameContentClass } from "@/li
 import {
   buildWorkDraft,
   buildEditionDraft,
+  buildVolumeDraft,
   communityEditionSlug,
   classifyApplyState,
   APPLY_TARGET_REFS,
@@ -25,6 +28,7 @@ import {
   InconsistentApplyStateError,
   ClaimSetInvalidError,
   ParentWorkNotFoundError,
+  ParentEditionNotFoundError,
   ProposalNotApplicableError,
   ProposalNotFoundError,
   ResolutionNotFoundError,
@@ -36,6 +40,7 @@ import {
   RESOLUTION_OUTCOME_ACEPTADA,
   TARGET_KIND_NEW_WORK,
   TARGET_KIND_NEW_EDITION,
+  TARGET_KIND_NEW_VOLUME,
   type ApplyClaimRow,
   type ApplyOutcome,
   type ApplyReadPort,
@@ -46,7 +51,7 @@ import {
   type WorkDraft,
 } from "@/lib/domain/proposal/apply";
 
-type Db = Pick<Prisma.TransactionClient, "resolutionRecord" | "proposalClaim" | "work" | "publisherEdition">;
+type Db = Pick<Prisma.TransactionClient, "resolutionRecord" | "proposalClaim" | "work" | "publisherEdition" | "volume">;
 
 async function loadResolution(db: Db, proposalId: number): Promise<ExistingResolutionForApply | null> {
   const r = await db.resolutionRecord.findUnique({
@@ -110,7 +115,7 @@ export function applyWritePort(
     async apply(seed, correlationId) {
       // 1. Lock de la propuesta (mismo orden que los demás slices).
       const locked = await tx.$queryRaw<LockedProposalForApply[]>(
-        Prisma.sql`SELECT id, status, "targetKind", "contentClass", version, "refWorkId" FROM "CatalogProposal" WHERE id = ${seed.proposalId} FOR UPDATE`,
+        Prisma.sql`SELECT id, status, "targetKind", "contentClass", version, "refWorkId", "refEditionId" FROM "CatalogProposal" WHERE id = ${seed.proposalId} FOR UPDATE`,
       );
       const proposal = locked[0];
       if (!proposal) throw new ProposalNotFoundError();
@@ -156,6 +161,11 @@ export function applyWritePort(
       // 5. Dispatch por targetKind (una sola mutación; create-only).
       if (proposal.targetKind === TARGET_KIND_NEW_EDITION) {
         const out = await applyNewEdition(tx, seed.proposalId, resolution.id, proposal.refWorkId, accepted, correlationId);
+        onCommitted(out);
+        return out;
+      }
+      if (proposal.targetKind === TARGET_KIND_NEW_VOLUME) {
+        const out = await applyNewVolume(tx, seed.proposalId, resolution.id, proposal.refEditionId, accepted, correlationId);
         onCommitted(out);
         return out;
       }
@@ -266,6 +276,62 @@ async function applyNewEdition(
     appliedWorkId: null,
     appliedEditionId,
     appliedVolumeId: null,
+    mutationCorrelationId: correlationId,
+    recovered: false,
+  };
+}
+
+/** Camino NEW_VOLUME: valida la edición padre, arma el draft, dedup por (editionId,
+ * number), crea el Volume y actualiza el ResolutionRecord (appliedVolumeId). NO toca la
+ * propuesta, el Work ni la edición padre. */
+async function applyNewVolume(
+  tx: Prisma.TransactionClient,
+  proposalId: number,
+  resolutionRecordId: number,
+  refEditionId: number | null,
+  accepted: ApplyClaimRow[],
+  correlationId: string,
+): Promise<ApplyOutcome> {
+  if (refEditionId === null) throw new ParentEditionNotFoundError();
+  const parent = await tx.publisherEdition.findUnique({ where: { id: refEditionId }, select: { id: true } });
+  if (!parent) throw new ParentEditionNotFoundError();
+
+  const draft = buildVolumeDraft(accepted, parent.id);
+
+  // Dedup create-only: único pre-check por el unique compuesto (editionId, number).
+  if (await tx.volume.findUnique({ where: { editionId_number: { editionId: draft.editionId, number: draft.number } }, select: { id: true } }))
+    throw new CatalogConflictError("Ya existe un volumen con ese número en la edición.");
+
+  let appliedVolumeId: number;
+  try {
+    const created = await tx.volume.create({
+      data: {
+        editionId: draft.editionId,
+        number: draft.number,
+        isbn: draft.isbn ?? undefined,
+        whakoomComicId: draft.whakoomComicId ?? undefined,
+      },
+      select: { id: true },
+    });
+    appliedVolumeId = created.id;
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002")
+      throw new CatalogConflictError("Colisión de identidad de volumen al crear.");
+    throw err;
+  }
+
+  await tx.resolutionRecord.update({
+    where: { proposalId },
+    data: { appliedVolumeId, mutationCorrelationId: correlationId },
+  });
+
+  return {
+    proposalId,
+    resolutionRecordId,
+    targetKind: TARGET_KIND_NEW_VOLUME,
+    appliedWorkId: null,
+    appliedEditionId: null,
+    appliedVolumeId,
     mutationCorrelationId: correlationId,
     recovered: false,
   };
