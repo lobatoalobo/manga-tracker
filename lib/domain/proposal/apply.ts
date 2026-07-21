@@ -21,6 +21,7 @@ export { ProposalNotFoundError } from "@/lib/domain/proposal/requestInfo";
 export const TARGET_KIND_NEW_WORK = "NEW_WORK" as const;
 export const TARGET_KIND_NEW_EDITION = "NEW_EDITION" as const;
 export const TARGET_KIND_NEW_VOLUME = "NEW_VOLUME" as const;
+export const TARGET_KIND_VOLUME = "VOLUME" as const; // corrección de volumen existente (familia Mutation)
 export const PROPOSAL_STATUS_ACEPTADA = "ACEPTADA" as const;
 export const RESOLUTION_OUTCOME_ACEPTADA = "ACEPTADA" as const;
 export const CLAIM_RESULT_ACCEPTED = "ACEPTADA" as const;
@@ -55,6 +56,7 @@ export const APPLY_TARGET_REFS: Readonly<Record<string, ReadonlySet<AppliedRef>>
   [TARGET_KIND_NEW_WORK]: new Set<AppliedRef>(["work"]),
   [TARGET_KIND_NEW_EDITION]: new Set<AppliedRef>(["edition"]),
   [TARGET_KIND_NEW_VOLUME]: new Set<AppliedRef>(["volume"]),
+  [TARGET_KIND_VOLUME]: new Set<AppliedRef>(["volume"]), // Mutation × Volume: ref = volumen afectado
 };
 
 /**
@@ -138,7 +140,7 @@ export interface ApplyOutcome {
 }
 
 /** Propuesta bajo lock (para elegibilidad + dedup). `refWorkId` = Work padre (NEW_EDITION);
- * `refEditionId` = edición padre (NEW_VOLUME). */
+ * `refEditionId` = edición padre (NEW_VOLUME); `refVolumeId` = volumen target (VOLUME). */
 export interface LockedProposalForApply {
   id: number;
   status: string;
@@ -147,6 +149,7 @@ export interface LockedProposalForApply {
   version: number;
   refWorkId: number | null;
   refEditionId: number | null;
+  refVolumeId: number | null;
 }
 
 /** ResolutionRecord existente (gate de idempotencia + outcome). */
@@ -159,11 +162,13 @@ export interface ExistingResolutionForApply {
   appliedVolumeId: number | null;
 }
 
-/** Claim de la propuesta (para armar el draft). */
+/** Claim de la propuesta (intake compartido del kernel). `claimOperation` lo requiere la
+ * familia Mutation (ADR-007); la familia Creation lo ignora (asume afirmación). */
 export interface ApplyClaimRow {
   id: number;
   attributeKind: string;
   value: unknown;
+  claimOperation: string;
   result: string;
 }
 
@@ -227,6 +232,18 @@ export interface VolumeDraft {
   whakoomComicId: string | null;
 }
 
+/**
+ * Patch de volumen (familia Mutation, ADR-007): diff PARCIAL sobre las columnas
+ * materializables de `Volume`. La **presencia** de una clave = "tocar"; su **ausencia** =
+ * "preservar" (ausencia ≠ null). Un valor `null` = borrado explícito (solo columnas
+ * nullable). NO incluye `editionId` (no re-parenta) ni `coverImage` (no materializado).
+ */
+export interface VolumePatch {
+  number?: number;
+  isbn?: string | null;
+  whakoomComicId?: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Puertos
 // ---------------------------------------------------------------------------
@@ -268,6 +285,13 @@ export class ParentEditionNotFoundError extends Error {
   constructor() {
     super("La edición padre del volumen no existe.");
     this.name = "ParentEditionNotFoundError";
+  }
+}
+export class TargetVolumeNotFoundError extends Error {
+  readonly code = "TARGET_VOLUME_NOT_FOUND" as const;
+  constructor() {
+    super("El volumen a corregir no existe.");
+    this.name = "TargetVolumeNotFoundError";
   }
 }
 export class ResolutionNotFoundError extends Error {
@@ -751,4 +775,108 @@ export function buildVolumeDraft(accepted: ApplyClaimRow[], parentEditionId: num
   const whakoomComicId = resolveVolumeExternalId(accepted);
 
   return { editionId: parentEditionId, number, isbn, whakoomComicId };
+}
+
+// ---------------------------------------------------------------------------
+// Construcción del VolumePatch (Mutation × Volume; ADR-007)
+// ---------------------------------------------------------------------------
+const CLAIM_OP_SET = "SET" as const;
+const CLAIM_OP_ADD = "ADD" as const;
+/** Operaciones de vaciado (semántica general ADR-007): quitar / marcar. */
+const ERASE_OPS: ReadonlySet<string> = new Set(["REMOVE", "MARK_UNKNOWN", "MARK_NOT_APPLICABLE"]);
+
+/** Valida un `EXTERNAL_VOLUME_ID` puntual (proveedor Whakoom, id no vacío) para SET/ADD. */
+function readVolumeExternalIdValue(c: ApplyClaimRow): string {
+  const r = asRecord(c.value);
+  const provider = r && typeof r.provider === "string" ? r.provider.toLowerCase() : null;
+  const externalId = r && (typeof r.externalId === "string" || typeof r.externalId === "number") ? String(r.externalId).trim() : null;
+  if (!provider || !externalId || !(provider in VOLUME_PROVIDER_FIELD))
+    throw new ClaimSetInvalidError("EXTERNAL_VOLUME_ID con provider/externalId inválido.");
+  return externalId;
+}
+
+/**
+ * Arma el `VolumePatch` desde las claims ACEPTADA honrando `claimOperation` (ADR-007,
+ * familia Mutation). Clasificación/cardinalidad idénticas a `buildVolumeDraft` (sin
+ * extraer una política compartida: deuda diferida). Un patch **vacío** (ninguna columna
+ * tocada) es legítimo → la infra lo trata como no-op exitoso. Reglas por atributo:
+ * - `VOLUME_NUMBER` (columna obligatoria): solo afirmar; vaciar/agregar → error.
+ * - `VOLUME_ISBN` (nullable): afirmar (texto no vacío) o vaciar; agregar → error.
+ * - `EXTERNAL_VOLUME_ID` (slot único Whakoom): afirmar/agregar (=fijar) o vaciar.
+ */
+export function buildVolumePatch(accepted: ApplyClaimRow[]): VolumePatch {
+  const seenSingular = new Set<string>();
+  const seenSubkey = new Set<string>();
+  for (const c of accepted) {
+    const level = ATTRIBUTE_KIND_LEVEL[c.attributeKind];
+    if (level !== "VOLUME")
+      throw new UnsupportedClaimForApplyError(
+        level
+          ? `La claim ${c.attributeKind} (nivel ${level}) no aplica a un VOLUME.`
+          : `Apply no reconoce el kind de claim ${c.attributeKind}.`,
+      );
+    if (VOLUME_ACCEPTED_NOT_MATERIALIZED_KINDS.has(c.attributeKind)) continue; // evidencia; no se proyecta
+    if (!VOLUME_MATERIALIZED_KINDS.has(c.attributeKind))
+      throw new UnsupportedClaimForApplyError(
+        `La claim VOLUME ${c.attributeKind} no está clasificada por la política de Apply.`,
+      );
+    if (c.attributeKind === "EXTERNAL_VOLUME_ID") {
+      const r = asRecord(c.value);
+      const provider = r && typeof r.provider === "string" ? r.provider.toLowerCase() : "?";
+      const k = `EXTERNAL_VOLUME_ID|${provider}`;
+      if (seenSubkey.has(k)) throw new ClaimSetInvalidError(`Colisión de sub-clave en EXTERNAL_VOLUME_ID (${provider}).`);
+      seenSubkey.add(k);
+    } else {
+      if (seenSingular.has(c.attributeKind))
+        throw new ClaimSetInvalidError(`Más de una claim aceptada para el atributo singular ${c.attributeKind}.`);
+      seenSingular.add(c.attributeKind);
+    }
+  }
+
+  const patch: VolumePatch = {};
+
+  const numClaim = accepted.find((x) => x.attributeKind === "VOLUME_NUMBER");
+  if (numClaim) {
+    const op = numClaim.claimOperation;
+    if (op === CLAIM_OP_ADD)
+      throw new ClaimSetInvalidError("ADD no aplica a VOLUME_NUMBER (atributo escalar).");
+    if (ERASE_OPS.has(op))
+      throw new ClaimSetInvalidError("VOLUME_NUMBER no admite vaciado (columna obligatoria).");
+    if (op !== CLAIM_OP_SET)
+      throw new ClaimSetInvalidError(`Operación no soportada para VOLUME_NUMBER: ${op}.`);
+    const n = scalarNumber(numClaim.value);
+    if (n === null || !Number.isInteger(n) || n < 0)
+      throw new ClaimSetInvalidError("VOLUME_NUMBER inválido (entero ≥ 0).");
+    patch.number = n;
+  }
+
+  const isbnClaim = accepted.find((x) => x.attributeKind === "VOLUME_ISBN");
+  if (isbnClaim) {
+    const op = isbnClaim.claimOperation;
+    if (op === CLAIM_OP_ADD)
+      throw new ClaimSetInvalidError("ADD no aplica a VOLUME_ISBN (atributo escalar).");
+    if (ERASE_OPS.has(op)) {
+      patch.isbn = null;
+    } else if (op === CLAIM_OP_SET) {
+      const t = scalarText(isbnClaim.value);
+      if (t === null) throw new ClaimSetInvalidError("VOLUME_ISBN vacío o no es un texto válido.");
+      patch.isbn = t;
+    } else {
+      throw new ClaimSetInvalidError(`Operación no soportada para VOLUME_ISBN: ${op}.`);
+    }
+  }
+
+  const extClaim = accepted.find((x) => x.attributeKind === "EXTERNAL_VOLUME_ID");
+  if (extClaim) {
+    const op = extClaim.claimOperation;
+    if (ERASE_OPS.has(op)) {
+      patch.whakoomComicId = null;
+    } else if (op === CLAIM_OP_SET || op === CLAIM_OP_ADD) {
+      patch.whakoomComicId = readVolumeExternalIdValue(extClaim);
+    } else {
+      throw new ClaimSetInvalidError(`Operación no soportada para EXTERNAL_VOLUME_ID: ${op}.`);
+    }
+  }
+
+  return patch;
 }

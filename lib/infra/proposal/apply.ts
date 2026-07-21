@@ -8,6 +8,9 @@
  *   create PublisherEdition (url="") → RR (appliedEditionId).
  * - NEW_VOLUME: valida Edition padre (refEditionId) → build VolumeDraft → dedup
  *   ((editionId, number)) → create Volume → RR (appliedVolumeId).
+ * - VOLUME (Mutation, ADR-007): valida target (refVolumeId) → build VolumePatch (honra
+ *   claimOperation) → update parcial del Volume → RR (appliedVolumeId = refVolumeId).
+ *   Patch vacío = no-op exitoso. NO crea, NO re-parenta.
  * Escritura INDIVISIBLE bajo el lock de la propuesta (mismo orden que los demás slices);
  * gate por `mutationCorrelationId`; create-only; NO cambia la propuesta; reusa helpers
  * puros de lib/catalog SIN modificarlo ni usar prisma global. P2002 → CatalogConflictError.
@@ -21,6 +24,7 @@ import {
   buildWorkDraft,
   buildEditionDraft,
   buildVolumeDraft,
+  buildVolumePatch,
   communityEditionSlug,
   classifyApplyState,
   APPLY_TARGET_REFS,
@@ -29,6 +33,7 @@ import {
   ClaimSetInvalidError,
   ParentWorkNotFoundError,
   ParentEditionNotFoundError,
+  TargetVolumeNotFoundError,
   ProposalNotApplicableError,
   ProposalNotFoundError,
   ResolutionNotFoundError,
@@ -41,6 +46,7 @@ import {
   TARGET_KIND_NEW_WORK,
   TARGET_KIND_NEW_EDITION,
   TARGET_KIND_NEW_VOLUME,
+  TARGET_KIND_VOLUME,
   type ApplyClaimRow,
   type ApplyOutcome,
   type ApplyReadPort,
@@ -115,7 +121,7 @@ export function applyWritePort(
     async apply(seed, correlationId) {
       // 1. Lock de la propuesta (mismo orden que los demás slices).
       const locked = await tx.$queryRaw<LockedProposalForApply[]>(
-        Prisma.sql`SELECT id, status, "targetKind", "contentClass", version, "refWorkId", "refEditionId" FROM "CatalogProposal" WHERE id = ${seed.proposalId} FOR UPDATE`,
+        Prisma.sql`SELECT id, status, "targetKind", "contentClass", version, "refWorkId", "refEditionId", "refVolumeId" FROM "CatalogProposal" WHERE id = ${seed.proposalId} FOR UPDATE`,
       );
       const proposal = locked[0];
       if (!proposal) throw new ProposalNotFoundError();
@@ -152,8 +158,8 @@ export function applyWritePort(
       // 4. Claims: no debe quedar ninguna PROPUESTA; tomar solo ACEPTADA.
       const claims = (await tx.proposalClaim.findMany({
         where: { contribution: { proposalId: seed.proposalId } },
-        select: { id: true, attributeKind: true, value: true, result: true },
-      })).map<ApplyClaimRow>((c) => ({ id: c.id, attributeKind: c.attributeKind, value: c.value ?? null, result: c.result }));
+        select: { id: true, attributeKind: true, value: true, claimOperation: true, result: true },
+      })).map<ApplyClaimRow>((c) => ({ id: c.id, attributeKind: c.attributeKind, value: c.value ?? null, claimOperation: c.claimOperation, result: c.result }));
       if (claims.some((c) => c.result === CLAIM_RESULT_PROPOSED))
         throw new ClaimSetInvalidError("Quedan claims sin resolver (PROPUESTA).");
       const accepted = claims.filter((c) => c.result === CLAIM_RESULT_ACCEPTED);
@@ -166,6 +172,11 @@ export function applyWritePort(
       }
       if (proposal.targetKind === TARGET_KIND_NEW_VOLUME) {
         const out = await applyNewVolume(tx, seed.proposalId, resolution.id, proposal.refEditionId, accepted, correlationId);
+        onCommitted(out);
+        return out;
+      }
+      if (proposal.targetKind === TARGET_KIND_VOLUME) {
+        const out = await applyVolumeCorrection(tx, seed.proposalId, resolution.id, proposal.refVolumeId, accepted, correlationId);
         onCommitted(out);
         return out;
       }
@@ -332,6 +343,52 @@ async function applyNewVolume(
     appliedWorkId: null,
     appliedEditionId: null,
     appliedVolumeId,
+    mutationCorrelationId: correlationId,
+    recovered: false,
+  };
+}
+
+/** Camino VOLUME (Mutation, ADR-007): valida el volumen target, arma el patch parcial
+ * (honrando claimOperation), lo aplica como UPDATE (patch vacío = no-op) y actualiza el
+ * ResolutionRecord (appliedVolumeId = refVolumeId). NO crea, NO re-parenta, NO toca la
+ * propuesta. P2002 (colisión de número) → CatalogConflictError. */
+async function applyVolumeCorrection(
+  tx: Prisma.TransactionClient,
+  proposalId: number,
+  resolutionRecordId: number,
+  refVolumeId: number | null,
+  accepted: ApplyClaimRow[],
+  correlationId: string,
+): Promise<ApplyOutcome> {
+  if (refVolumeId === null) throw new TargetVolumeNotFoundError();
+  const target = await tx.volume.findUnique({ where: { id: refVolumeId }, select: { id: true } });
+  if (!target) throw new TargetVolumeNotFoundError();
+
+  const patch = buildVolumePatch(accepted);
+
+  // Cambio parcial. Patch vacío → no-op exitoso (no se toca el Volume; solo el RR).
+  if (Object.keys(patch).length > 0) {
+    try {
+      await tx.volume.update({ where: { id: target.id }, data: patch, select: { id: true } });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002")
+        throw new CatalogConflictError("Colisión de identidad de volumen al corregir el número.");
+      throw err;
+    }
+  }
+
+  await tx.resolutionRecord.update({
+    where: { proposalId },
+    data: { appliedVolumeId: target.id, mutationCorrelationId: correlationId },
+  });
+
+  return {
+    proposalId,
+    resolutionRecordId,
+    targetKind: TARGET_KIND_VOLUME,
+    appliedWorkId: null,
+    appliedEditionId: null,
+    appliedVolumeId: target.id,
     mutationCorrelationId: correlationId,
     recovered: false,
   };
