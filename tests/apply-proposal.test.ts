@@ -1036,6 +1036,18 @@ describe("infra write-port — VOLUME (corrección)", () => {
     expect(tx.volume.update).toHaveBeenCalledWith({ where: { id: 88 }, data: { number: 7, isbn: null }, select: { id: true } });
   });
 
+  it("EXTERNAL_VOLUME_ID (Whakoom, SET): el slot externo llega intacto (trimmed) al UPDATE, sin editionId", async () => {
+    const tx = volCorrFakeTx({ claims: [
+      { id: 31, attributeKind: "EXTERNAL_VOLUME_ID", value: { provider: "Whakoom", externalId: "  wc-42  " }, claimOperation: "SET", result: "ACEPTADA" },
+    ] });
+    const out = await runApplyVolCorr(tx, vi.fn(), "corr-ext");
+    // el patch materializa whakoomComicId (trimmed); NO toca editionId; NO crea
+    expect(tx.volume.update).toHaveBeenCalledTimes(1);
+    expect(tx.volume.update).toHaveBeenCalledWith({ where: { id: 88 }, data: { whakoomComicId: "wc-42" }, select: { id: true } });
+    expect(tx.resolutionRecord.update).toHaveBeenCalledTimes(1);
+    expect(out.recovered).toBe(false);
+  });
+
   it("patch vacío (solo claim no materializada) = no-op exitoso: NO hace UPDATE, sí marca el RR", async () => {
     const tx = volCorrFakeTx({ claims: [
       { id: 31, attributeKind: "VOLUME_TITLE", value: { text: "Tomo 1" }, claimOperation: "SET", result: "ACEPTADA" },
