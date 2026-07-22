@@ -568,7 +568,12 @@ model IdentityExternalReference {
   identityId Int
   provider   String
   externalId String
-  createdAt  DateTime @default(now())
+  // Decisión Asociar que creó esta referencia (idempotencia + reuso divergente). NULL en las
+  // referencias semilla creadas durante Conferir (su procedencia es la decisión de la identidad).
+  // El índice único permite múltiples NULL (Postgres trata NULL como distinto).
+  decisionId          String? @unique
+  decisionFingerprint String?
+  createdAt           DateTime @default(now())
 
   identity CatalogIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
 
