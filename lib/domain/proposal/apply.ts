@@ -22,6 +22,7 @@ export const TARGET_KIND_NEW_WORK = "NEW_WORK" as const;
 export const TARGET_KIND_NEW_EDITION = "NEW_EDITION" as const;
 export const TARGET_KIND_NEW_VOLUME = "NEW_VOLUME" as const;
 export const TARGET_KIND_VOLUME = "VOLUME" as const; // corrección de volumen existente (familia Mutation)
+export const TARGET_KIND_EDITION = "EDITION" as const; // corrección de edición existente (familia Mutation)
 export const PROPOSAL_STATUS_ACEPTADA = "ACEPTADA" as const;
 export const RESOLUTION_OUTCOME_ACEPTADA = "ACEPTADA" as const;
 export const CLAIM_RESULT_ACCEPTED = "ACEPTADA" as const;
@@ -57,6 +58,7 @@ export const APPLY_TARGET_REFS: Readonly<Record<string, ReadonlySet<AppliedRef>>
   [TARGET_KIND_NEW_EDITION]: new Set<AppliedRef>(["edition"]),
   [TARGET_KIND_NEW_VOLUME]: new Set<AppliedRef>(["volume"]),
   [TARGET_KIND_VOLUME]: new Set<AppliedRef>(["volume"]), // Mutation × Volume: ref = volumen afectado
+  [TARGET_KIND_EDITION]: new Set<AppliedRef>(["edition"]), // Mutation × Edition: ref = edición afectada
 };
 
 /**
@@ -78,6 +80,28 @@ export const EDITION_ACCEPTED_NOT_MATERIALIZED_KINDS: ReadonlySet<string> = new 
 const EDITION_PROVIDER_FIELD: Readonly<Record<string, "whakoomId">> = {
   whakoom: "whakoomId",
 };
+
+/**
+ * Subconjunto de `EDITION_MATERIALIZED_KINDS` que la proyección **Mutation × Edition v1**
+ * habilita para corrección. Los demás materializados (EDITION_PUBLISHER/LANGUAGE/COUNTRY/
+ * STATUS) quedan diferidos: son materializables (Creation los escribe) pero el crawl los
+ * pisa (`upsertPublisherEdition`) o participan de identidad; corregirlos hoy daría datos
+ * revertidos/duplicados. Se rechazan explícitamente (NO patch vacío: sería descartar en
+ * silencio una claim materializable, ADR-007 invariante #5). Restricción EXCLUSIVA de esta
+ * proyección: NO altera `EDITION_MATERIALIZED_KINDS` (Creation los sigue materializando).
+ */
+export const EDITION_MUTATION_V1_SUPPORTED_KINDS: ReadonlySet<string> = new Set([
+  "EXTERNAL_EDITION_ID", "EDITION_ANNOUNCED_TOTAL_VOLUMES",
+]);
+
+/**
+ * Guard de sanidad del conteo de tomos para la CORRECCIÓN (Mutation): mismo tope que la
+ * acción admin `setEditionVolumesAction` (app/actions.ts), la otra vía manual que fija
+ * `volumes` + `volumesLocked`. Duplicación DELIBERADA del literal 2000: compartirlo exigiría
+ * que `app/` importe del dominio (capa ajena a esta vertical); se unifica en una pasada
+ * futura. Creation NO aplica este tope a propósito (incorpora datos de una fuente).
+ */
+export const EDITION_MAX_VOLUMES = 2000;
 
 /**
  * Política CERRADA de proyección de claims VOLUME-level para NEW_VOLUME (mismo patrón que
@@ -244,6 +268,21 @@ export interface VolumePatch {
   whakoomComicId?: string | null;
 }
 
+/**
+ * Patch de edición (familia Mutation, ADR-007) — alcance Mutation × Edition **v1**: solo
+ * las columnas materializables SEGURAS frente al crawl. `whakoomId` (unique, provider-keyed
+ * 1 slot) y `volumes` (con `volumesLocked` acoplado: un SET de `volumes` fija
+ * `volumesLocked=true` — replica `setEditionVolumesAction` — para que la corrección
+ * sobreviva a `upsertPublisherEdition`). Presencia = tocar; ausencia = preservar; `null` =
+ * borrar (solo `whakoomId`, nullable). NO incluye publisher/language/country/status
+ * (diferidos, rechazo explícito), ni slug/title/normTitle/workId (no re-parenta ni re-deriva).
+ */
+export interface EditionPatch {
+  whakoomId?: string | null;
+  volumes?: number;
+  volumesLocked?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Puertos
 // ---------------------------------------------------------------------------
@@ -292,6 +331,27 @@ export class TargetVolumeNotFoundError extends Error {
   constructor() {
     super("El volumen a corregir no existe.");
     this.name = "TargetVolumeNotFoundError";
+  }
+}
+export class TargetEditionNotFoundError extends Error {
+  readonly code = "TARGET_EDITION_NOT_FOUND" as const;
+  constructor() {
+    super("La edición a corregir no existe.");
+    this.name = "TargetEditionNotFoundError";
+  }
+}
+/**
+ * Bucket 3 de Mutation × Edition v1: la claim es de un atributo EDITION **reconocido y
+ * materializable** (Creation lo escribe), pero su corrección NO está habilitada en v1
+ * (publisher/language/country/status). NO es "desconocida" ni patch vacío: rechazo
+ * explícito (ADR-007 invariante #5: no descartar en silencio una claim materializable).
+ * Único error tipado, parametrizado por `attributeKind`.
+ */
+export class EditionAttributeNotEditableError extends Error {
+  readonly code = "EDITION_ATTRIBUTE_NOT_EDITABLE_V1" as const;
+  constructor(readonly attributeKind: string) {
+    super(`La corrección del atributo ${attributeKind} de edición no está habilitada en esta versión.`);
+    this.name = "EditionAttributeNotEditableError";
   }
 }
 export class ResolutionNotFoundError extends Error {
@@ -875,6 +935,100 @@ export function buildVolumePatch(accepted: ApplyClaimRow[]): VolumePatch {
       patch.whakoomComicId = readVolumeExternalIdValue(extClaim);
     } else {
       throw new ClaimSetInvalidError(`Operación no soportada para EXTERNAL_VOLUME_ID: ${op}.`);
+    }
+  }
+
+  return patch;
+}
+
+// ---------------------------------------------------------------------------
+// Construcción del EditionPatch (Mutation × Edition v1; ADR-007)
+// ---------------------------------------------------------------------------
+/** Valida un `EXTERNAL_EDITION_ID` puntual (proveedor Whakoom, id no vacío) para SET/ADD. */
+function readEditionExternalIdValue(c: ApplyClaimRow): string {
+  const r = asRecord(c.value);
+  const provider = r && typeof r.provider === "string" ? r.provider.toLowerCase() : null;
+  const externalId = r && (typeof r.externalId === "string" || typeof r.externalId === "number") ? String(r.externalId).trim() : null;
+  if (!provider || !externalId || !(provider in EDITION_PROVIDER_FIELD))
+    throw new ClaimSetInvalidError("EXTERNAL_EDITION_ID con provider/externalId inválido.");
+  return externalId;
+}
+
+/**
+ * Arma el `EditionPatch` desde las claims ACEPTADA honrando `claimOperation` (ADR-007,
+ * familia Mutation) — alcance v1. Clasificación en TRES categorías (decisión de instancia,
+ * no amplía ADR-007; aplica el invariante #5 "no descartar en silencio lo materializable"):
+ * - **Bucket 2** (sin columna: FORMAT/LABEL/RELEASE_DATE/IS_UPCOMING) → se omite (patch vacío).
+ * - **Bucket 3** (materializable pero fuera de alcance v1: PUBLISHER/LANGUAGE/COUNTRY/STATUS)
+ *   → `EditionAttributeNotEditableError` (rechazo explícito, NO patch vacío, NO "desconocido").
+ * - **Bucket 1** (soportado v1: EXTERNAL_EDITION_ID→whakoomId, EDITION_ANNOUNCED_TOTAL_VOLUMES
+ *   →volumes+volumesLocked) → materializa.
+ * Un patch **vacío** (solo claims de bucket 2) es legítimo → la infra lo trata como no-op.
+ * El rechazo de bucket 3 ocurre en la clasificación → antes de construir/aplicar el patch:
+ * una propuesta que mezcle soportadas + diferidas falla atómicamente (no aplica parcial).
+ */
+export function buildEditionPatch(accepted: ApplyClaimRow[]): EditionPatch {
+  const seenSingular = new Set<string>();
+  const seenSubkey = new Set<string>();
+  for (const c of accepted) {
+    const level = ATTRIBUTE_KIND_LEVEL[c.attributeKind];
+    if (level !== "EDITION")
+      throw new UnsupportedClaimForApplyError(
+        level
+          ? `La claim ${c.attributeKind} (nivel ${level}) no aplica a un EDITION.`
+          : `Apply no reconoce el kind de claim ${c.attributeKind}.`,
+      );
+    if (EDITION_ACCEPTED_NOT_MATERIALIZED_KINDS.has(c.attributeKind)) continue; // bucket 2: evidencia; no se proyecta
+    if (!EDITION_MATERIALIZED_KINDS.has(c.attributeKind))
+      throw new UnsupportedClaimForApplyError(
+        `La claim EDITION ${c.attributeKind} no está clasificada por la política de Apply.`,
+      );
+    if (!EDITION_MUTATION_V1_SUPPORTED_KINDS.has(c.attributeKind)) // bucket 3: materializable, diferido en v1
+      throw new EditionAttributeNotEditableError(c.attributeKind);
+    // bucket 1 (soportado): cardinalidad
+    if (c.attributeKind === "EXTERNAL_EDITION_ID") {
+      const r = asRecord(c.value);
+      const provider = r && typeof r.provider === "string" ? r.provider.toLowerCase() : "?";
+      const k = `EXTERNAL_EDITION_ID|${provider}`;
+      if (seenSubkey.has(k)) throw new ClaimSetInvalidError(`Colisión de sub-clave en EXTERNAL_EDITION_ID (${provider}).`);
+      seenSubkey.add(k);
+    } else {
+      if (seenSingular.has(c.attributeKind))
+        throw new ClaimSetInvalidError(`Más de una claim aceptada para el atributo singular ${c.attributeKind}.`);
+      seenSingular.add(c.attributeKind);
+    }
+  }
+
+  const patch: EditionPatch = {};
+
+  // EDITION_ANNOUNCED_TOTAL_VOLUMES → volumes (obligatoria) + volumesLocked=true (acoplado:
+  // el conteo corregido queda "curado" y el crawl no lo pisa; replica setEditionVolumesAction).
+  const volClaim = accepted.find((x) => x.attributeKind === "EDITION_ANNOUNCED_TOTAL_VOLUMES");
+  if (volClaim) {
+    const op = volClaim.claimOperation;
+    if (op === CLAIM_OP_ADD)
+      throw new ClaimSetInvalidError("ADD no aplica a EDITION_ANNOUNCED_TOTAL_VOLUMES (atributo escalar).");
+    if (ERASE_OPS.has(op))
+      throw new ClaimSetInvalidError("EDITION_ANNOUNCED_TOTAL_VOLUMES no admite vaciado (columna obligatoria).");
+    if (op !== CLAIM_OP_SET)
+      throw new ClaimSetInvalidError(`Operación no soportada para EDITION_ANNOUNCED_TOTAL_VOLUMES: ${op}.`);
+    const n = scalarNumber(volClaim.value);
+    if (n === null || !Number.isInteger(n) || n < 0 || n > EDITION_MAX_VOLUMES)
+      throw new ClaimSetInvalidError(`EDITION_ANNOUNCED_TOTAL_VOLUMES inválido (entero entre 0 y ${EDITION_MAX_VOLUMES}).`);
+    patch.volumes = n;
+    patch.volumesLocked = true;
+  }
+
+  // EXTERNAL_EDITION_ID → whakoomId (slot único Whakoom, nullable): afirmar/agregar (=fijar) o vaciar.
+  const extClaim = accepted.find((x) => x.attributeKind === "EXTERNAL_EDITION_ID");
+  if (extClaim) {
+    const op = extClaim.claimOperation;
+    if (ERASE_OPS.has(op)) {
+      patch.whakoomId = null;
+    } else if (op === CLAIM_OP_SET || op === CLAIM_OP_ADD) {
+      patch.whakoomId = readEditionExternalIdValue(extClaim);
+    } else {
+      throw new ClaimSetInvalidError(`Operación no soportada para EXTERNAL_EDITION_ID: ${op}.`);
     }
   }
 

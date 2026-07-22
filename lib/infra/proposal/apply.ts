@@ -11,6 +11,10 @@
  * - VOLUME (Mutation, ADR-007): valida target (refVolumeId) → build VolumePatch (honra
  *   claimOperation) → update parcial del Volume → RR (appliedVolumeId = refVolumeId).
  *   Patch vacío = no-op exitoso. NO crea, NO re-parenta.
+ * - EDITION (Mutation, ADR-007; v1): valida target (refEditionId) → build EditionPatch
+ *   (alcance v1: whakoomId + volumes/volumesLocked; publisher/language/country/status
+ *   rechazados explícitamente) → update parcial de PublisherEdition → RR (appliedEditionId
+ *   = refEditionId). Patch vacío = no-op. NO crea, NO re-parenta. P2002 → mensaje neutro.
  * Escritura INDIVISIBLE bajo el lock de la propuesta (mismo orden que los demás slices);
  * gate por `mutationCorrelationId`; create-only; NO cambia la propuesta; reusa helpers
  * puros de lib/catalog SIN modificarlo ni usar prisma global. P2002 → CatalogConflictError.
@@ -25,6 +29,7 @@ import {
   buildEditionDraft,
   buildVolumeDraft,
   buildVolumePatch,
+  buildEditionPatch,
   communityEditionSlug,
   classifyApplyState,
   APPLY_TARGET_REFS,
@@ -34,6 +39,7 @@ import {
   ParentWorkNotFoundError,
   ParentEditionNotFoundError,
   TargetVolumeNotFoundError,
+  TargetEditionNotFoundError,
   ProposalNotApplicableError,
   ProposalNotFoundError,
   ResolutionNotFoundError,
@@ -47,6 +53,7 @@ import {
   TARGET_KIND_NEW_EDITION,
   TARGET_KIND_NEW_VOLUME,
   TARGET_KIND_VOLUME,
+  TARGET_KIND_EDITION,
   type ApplyClaimRow,
   type ApplyOutcome,
   type ApplyReadPort,
@@ -177,6 +184,11 @@ export function applyWritePort(
       }
       if (proposal.targetKind === TARGET_KIND_VOLUME) {
         const out = await applyVolumeCorrection(tx, seed.proposalId, resolution.id, proposal.refVolumeId, accepted, correlationId);
+        onCommitted(out);
+        return out;
+      }
+      if (proposal.targetKind === TARGET_KIND_EDITION) {
+        const out = await applyEditionCorrection(tx, seed.proposalId, resolution.id, proposal.refEditionId, accepted, correlationId);
         onCommitted(out);
         return out;
       }
@@ -389,6 +401,55 @@ async function applyVolumeCorrection(
     appliedWorkId: null,
     appliedEditionId: null,
     appliedVolumeId: target.id,
+    mutationCorrelationId: correlationId,
+    recovered: false,
+  };
+}
+
+/** Camino EDITION (Mutation, ADR-007; v1): valida la edición target, arma el patch parcial
+ * (alcance v1; `buildEditionPatch` rechaza los atributos diferidos ANTES de escribir), lo
+ * aplica como UPDATE (patch vacío = no-op) y actualiza el ResolutionRecord (appliedEditionId
+ * = refEditionId). NO crea, NO re-parenta (no toca workId/slug), NO toca la propuesta.
+ * P2002 (dos fuentes: whakoomId / [publisher,slug]) → mensaje neutro por ahora. */
+async function applyEditionCorrection(
+  tx: Prisma.TransactionClient,
+  proposalId: number,
+  resolutionRecordId: number,
+  refEditionId: number | null,
+  accepted: ApplyClaimRow[],
+  correlationId: string,
+): Promise<ApplyOutcome> {
+  if (refEditionId === null) throw new TargetEditionNotFoundError();
+  const target = await tx.publisherEdition.findUnique({ where: { id: refEditionId }, select: { id: true } });
+  if (!target) throw new TargetEditionNotFoundError();
+
+  // Rechazo de atributos diferidos (bucket 3) ocurre acá, ANTES del UPDATE y del RR:
+  // una propuesta que mezcle soportadas + diferidas falla atómicamente (sin aplicar parcial).
+  const patch = buildEditionPatch(accepted);
+
+  // Cambio parcial. Patch vacío → no-op exitoso (no se toca la edición; solo el RR).
+  if (Object.keys(patch).length > 0) {
+    try {
+      await tx.publisherEdition.update({ where: { id: target.id }, data: patch, select: { id: true } });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002")
+        throw new CatalogConflictError("Colisión de identidad de edición al corregir.");
+      throw err;
+    }
+  }
+
+  await tx.resolutionRecord.update({
+    where: { proposalId },
+    data: { appliedEditionId: target.id, mutationCorrelationId: correlationId },
+  });
+
+  return {
+    proposalId,
+    resolutionRecordId,
+    targetKind: TARGET_KIND_EDITION,
+    appliedWorkId: null,
+    appliedEditionId: target.id,
+    appliedVolumeId: null,
     mutationCorrelationId: correlationId,
     recovered: false,
   };

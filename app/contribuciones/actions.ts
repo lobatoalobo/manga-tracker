@@ -58,6 +58,8 @@ import {
   ParentWorkNotFoundError,
   ParentEditionNotFoundError,
   TargetVolumeNotFoundError,
+  TargetEditionNotFoundError,
+  EditionAttributeNotEditableError,
   type ApplyCatalogProposalResult,
 } from "@/lib/contributions/applyCatalogProposal";
 import type { ApplyCatalogProposalCommand } from "@/lib/domain/proposal/apply";
@@ -308,6 +310,8 @@ export async function applyCatalogProposalAction(
     if (e instanceof ParentWorkNotFoundError) return { ok: false, error: e.message };
     if (e instanceof ParentEditionNotFoundError) return { ok: false, error: e.message };
     if (e instanceof TargetVolumeNotFoundError) return { ok: false, error: e.message };
+    if (e instanceof TargetEditionNotFoundError) return { ok: false, error: e.message };
+    if (e instanceof EditionAttributeNotEditableError) return { ok: false, error: e.message };
     console.error("[applyCatalogProposalAction]", e);
     return { ok: false, error: GENERIC };
   }

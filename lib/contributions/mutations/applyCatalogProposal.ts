@@ -13,6 +13,7 @@ import {
   TARGET_KIND_NEW_EDITION,
   TARGET_KIND_NEW_VOLUME,
   TARGET_KIND_VOLUME,
+  TARGET_KIND_EDITION,
   type ApplyReadPort,
   type ApplySeed,
   type ApplyWritePort,
@@ -62,16 +63,17 @@ export const applyCatalogProposal = defineMutation<
     if (!ctx.write) throw new Error("applyCatalogProposal.execute requiere write-port (tx).");
     const r = await ctx.write.apply(plan, ctx.correlationId);
     if (r.recovered) return { affected: RECOVERED };
-    const isVolumeCorrection = r.targetKind === TARGET_KIND_VOLUME;
+    // Mutation (corrección): actualiza una entidad existente (VOLUME/EDITION).
+    const isCorrection = r.targetKind === TARGET_KIND_VOLUME || r.targetKind === TARGET_KIND_EDITION;
     const entities =
-      r.targetKind === TARGET_KIND_NEW_EDITION
+      r.targetKind === TARGET_KIND_NEW_EDITION || r.targetKind === TARGET_KIND_EDITION
         ? (["PublisherEdition", "ResolutionRecord"] as const)
-        : r.targetKind === TARGET_KIND_NEW_VOLUME || isVolumeCorrection
+        : r.targetKind === TARGET_KIND_NEW_VOLUME || r.targetKind === TARGET_KIND_VOLUME
           ? (["Volume", "ResolutionRecord"] as const)
           : (["Work", "ResolutionRecord"] as const);
     // Mutation (corrección) actualiza la entidad; Creation la crea. `affected` es
-    // best-effort: en un patch vacío el UPDATE del Volume no ocurre (updates real = 1).
-    return isVolumeCorrection
+    // best-effort: en un patch vacío el UPDATE de la entidad no ocurre (updates real = 1).
+    return isCorrection
       ? { affected: { creates: 0, updates: 2, deletes: 0, entities } }
       : { affected: { creates: 1, updates: 1, deletes: 0, entities } };
   },
