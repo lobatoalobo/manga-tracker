@@ -1,8 +1,9 @@
 /**
- * Corre los tests de integración del slice de identidad contra un PostgreSQL EFÍMERO y AISLADO
+ * Corre los tests de integración del subsistema de identidad contra un PostgreSQL EFÍMERO y AISLADO
  * (embedded-postgres: binario real, no un mock; nunca la base compartida). Levanta la instancia,
- * aplica TODAS las migraciones (`prisma migrate deploy`) sobre una base limpia y ejecuta solo
- * `tests/identity-confer.integration.test.ts`. Config mínima y reproducible para dev/CI:
+ * aplica TODAS las migraciones (`prisma migrate deploy`) sobre una base limpia y ejecuta todos los
+ * `tests/identity-*.integration.test.ts` (Conferir + Asociar + los que se sumen). Config mínima y
+ * reproducible para dev/CI:
  *   node scripts/identity-it.mjs
  */
 import EmbeddedPostgres from "embedded-postgres";
@@ -39,7 +40,11 @@ try {
   execSync("npx prisma migrate deploy", { stdio: "inherit", cwd: root, env: { ...process.env, DATABASE_URL: url } });
 
   console.log("[identity-it] running integration suite…");
-  execSync("npx vitest run tests/identity-confer.integration.test.ts", {
+  // Lista explícita de suites de integración de identidad (vitest no expande globs en el arg).
+  // `--no-file-parallelism`: comparten UNA base efímera y cada archivo limpia globalmente en
+  // afterEach; correrlos en paralelo haría que una limpieza borre datos en vuelo de la otra.
+  const suites = ["tests/identity-confer.integration.test.ts", "tests/identity-associate.integration.test.ts"];
+  execSync(`npx vitest run --no-file-parallelism ${suites.join(" ")}`, {
     stdio: "inherit",
     cwd: root,
     env: { ...process.env, IDENTITY_TEST_DATABASE_URL: url },
