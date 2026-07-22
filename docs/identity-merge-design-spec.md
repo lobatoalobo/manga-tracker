@@ -3,8 +3,13 @@
 Especificación para implementar la futura vertical slice **Fusionar** sin improvisar. NO es
 implementación ni reformulación del modelo. Se apoya en: el Glosario Normativo, el contrato
 consolidado de Identity, la separación Adjudicación → Registro, las slices Conferir y Asociar ya
-implementadas, y el schema real del repo. Dos **tensiones** se señalan explícitamente y **no** se
-resuelven en silencio (T1 y T2).
+implementadas, y el schema real del repo.
+
+> **Estado de bloqueo (actualizado):** las dos tensiones que bloqueaban la implementación quedaron
+> **RESUELTAS** por ADRs: **T1** (coordinación identidad–contenido) → **ADR-008**; **T2** (integridad
+> de referencias bajo concurrencia) → **ADR-009**. Este spec se actualizó para reflejar esas
+> decisiones. Fusionar queda **desbloqueada** para implementación, con un pre-trabajo obligatorio (ver
+> §L). Las secciones marcan lo que cambió respecto de la versión anterior.
 
 > Alcance: solo Fusionar. NO Partir, NO deshacer, NO compactar cadenas, NO migrar colecciones, NO
 > reconciliación automática, NO UI/moderación. Las dependencias que Fusionar crea para esas
@@ -72,7 +77,7 @@ absorber filas técnicamente, ≠ reconciliar evidencia, ≠ decidir cuál sobre
 
 ## C. Alternativas de diseño (identidad ↔ contenido; movimiento de referencias)
 
-### Coordinación identidad ↔ contenido — **T1 (tensión central, señalada)**
+### Coordinación identidad ↔ contenido — **T1 → RESUELTA por ADR-008**
 
 Dos identidades activas designan **Works distintos** (por el índice parcial `designatedWorkId WHERE
 ACTIVE`, un Work tiene a lo sumo una identidad activa). Por lo tanto **toda fusión implica reconciliar
@@ -92,18 +97,22 @@ diseño más delicada. Alternativas:
 | Acoplamiento con Prisma | Registro acoplado a tablas de Catálogo | acoplamiento solo en la frontera tx del caso de uso | mínimo |
 | Futuro Partir | hereda el acople | simétrico y reutilizable | requiere el mismo pre-paso |
 
-**Recomendación: B.** Un caso de uso `mergeIdentities` abre **una** transacción Prisma que compone dos
-write-ports: (1) consolidación de contenido (Catálogo: re-parentar ediciones del Work absorbido al Work
-sobreviviente, dejar el Work absorbido *detached*) y (2) fusión de namespace (Registro: mover
-referencias, transición de estado, redirección). El **dominio** permanece separado (dos servicios); el
-acoplamiento es solo la **frontera transaccional** en la capa de aplicación — exactamente el patrón que
-ya usa el arco Apply. A rompe la separación; C introduce estados intermedios ilegales.
+**Decisión congelada (ADR-008): Alternativa B** (en el ADR se numera **A** — "caso de uso de aplicación
+coordinador"; misma opción). Un caso de uso `mergeIdentities` abre **una** transacción Prisma que compone
+dos write-ports **específicos** (que reciben el `TransactionClient` compartido): (1) consolidación de
+contenido (Catálogo `absorbWorkInto`: re-parentar ediciones del Work absorbido al sobreviviente, marcar
+el absorbido) y (2) fusión de namespace (Registro: mover referencias, transición de estado, redirección).
+El dominio permanece separado; el acoplamiento es solo la frontera transaccional en la capa de
+aplicación. A (Registro coordinador) rompe la separación; C introduce estados intermedios ilegales; D
+(saga) es innecesaria para algo que cabe en una tx.
 
-> **Dependencia que B crea (a especificar aparte, NO en esta slice):** el write-port de contenido del
-> Catálogo (`absorbWorkInto(survivorWorkId, absorbedWorkId)`): re-parentar `PublisherEdition.workId`
-> y marcar el Work absorbido. Como `Work` no tiene estado "absorbida" y la FK `designatedWorkId` es
-> Restrict, el Work absorbido **no se borra**: queda *detached* (0 ediciones) o se le agrega un estado
-> de Catálogo. Esto es un cambio del bounded context Catálogo, fuera del alcance de Fusionar-identidad.
+> **Dependencia congelada (ADR-008), dentro del alcance del caso de uso de Fusionar:** write-port de
+> Catálogo `absorbWorkInto(tx, survivorWorkId, absorbedWorkId, mergePlan) → CatalogAbsorptionResult`.
+> v1: re-parenta ediciones, **no combina hechos descriptivos** (diferido), marca el Work absorbido con
+> `Work.absorbedIntoId` (nuevo, self-FK; el absorbido queda **detached**, no se borra — perpetuidad +
+> FK Restrict). Catálogo valida/ejecuta reglas mecánicas; los hechos contradictorios que requieran
+> juicio → `CONTENT_CONFLICT_REQUIRES_JUDGMENT` (aborta la tx). Reconciliación de hechos descriptivos y
+> guard de Conferir contra Works absorbidos = follow-ups (ver ADR-008).
 
 ### Movimiento de referencias — **físico vs indirecto**
 
@@ -167,24 +176,21 @@ Carreras del §11 (todas se comprueban con Postgres real, ver §H):
 | 2 | mismo sobreviviente, distintos absorbidos (A→S, B→S) | ambas EXECUTED (secuencial) | lock en S serializa; refs no colisionan | estados de A/B/S |
 | 3 | A→B concurrente con B→A | una EXECUTED; la otra `INVALID_SURVIVOR_STATE` | lock ordenado; el survivor quedó REDIRECTED | estado del survivor |
 | 4 | A→B concurrente con B→C | una EXECUTED; la otra rechazada (v1: absorbida/survivor no ACTIVE o con redirect entrante) | lock en B + regla anti-cadena | estado de B |
-| 5 | **Fusión vs Asociar sobre la absorbida** | **TENSIÓN T2 (ver abajo)** | requiere lock+recheck en Asociar o trigger DB | estado de la absorbida |
+| 5 | **Fusión vs Asociar sobre la absorbida** | insert de Asociar rechazado → `INVALID_IDENTITY_STATE` | **FK compuesta (ADR-009)**; sin lock en Asociar | FK re-evalúa estado al commit |
 | 6 | Fusión vs Conferir compitiendo por contenido | Conferir sobre el Work absorbido: DESIGNATION_TAKEN (absorbida aún ACTIVE) o, tras commit, crea identidad nueva sobre Work *detached* (edge, bajo riesgo) | índice parcial de designación | designación del Work |
 | 7 | replay concurrente de la misma MergeDecision | EXECUTED + `ALREADY_SATISFIED` | `mergeDecisionId` unique → P2002 → re-leer huella | fila por mergeDecisionId |
 | 8 | mismo mergeDecisionId, payload divergente | `DECISION_ID_REUSED_DIVERGENTLY` | huella distinta | fila por mergeDecisionId |
 | 9 | dos decisiones distintas, mismo estado final | `ALREADY_MERGED` (estado ya satisfecho por otra decisión) | absorbida ya REDIRECTED→survivor | redirect de la absorbida |
 | 10 | estado cambió entre Adjudicación y ejecución | `STALE_DECISION` (o el invariante de estado puntual) | re-lectura bajo lock | ambos estados |
 
-> **T2 — Tensión de concurrencia entre slices (señalada, NO resuelta):** en la carrera 5, **Asociar**
-> hoy lee el estado del destino **sin lock** y luego inserta la referencia; una fusión concurrente que
-> redirige la identidad destino podría hacer que Asociar **inserte una referencia sobre una identidad
-> REDIRECTED** (no terminal), violando el invariante "ninguna referencia sobre identidad no terminal".
-> El insert de Asociar toma `FOR KEY SHARE` sobre la fila padre (FK), que **espera** al `FOR UPDATE` de
-> la fusión, pero al desbloquearse Asociar **no re-verifica** el estado. Resolverlo exige **una** de:
-> (a) que Asociar lockee el destino con `FOR UPDATE` y **re-chequee** `isAssociableState` antes de
-> insertar (tocaría la slice Asociar ya cerrada — justificable como "la nueva implementación revela una
-> contradicción concreta", igual que el fix de Conferir); o (b) un **trigger** en base que rechace
-> referencias cuyo `identityId` no esté `ACTIVE`. **Debe decidirse antes de implementar Fusionar.** No
-> lo resuelvo acá.
+> **T2 → RESUELTA por ADR-009 (FK compuesta declarativa).** La garantía autoritativa NO es un trigger ni
+> un lock en Asociar, sino una **FK compuesta**: `IdentityExternalReference(identityId, identityState) →
+> CatalogIdentity(id, state)` con `identityState` CHECK-eado a `'ACTIVE'` y `ON UPDATE RESTRICT`. Un
+> insert sobre una Identity `REDIRECTED` **falla por FK** (no existe `(id,'ACTIVE')`) → Asociar lo
+> traduce a `INVALID_IDENTITY_STATE`. Y flipear una Identity a `REDIRECTED` **falla** (RESTRICT) mientras
+> tenga referencias apuntándola → **fuerza mover las referencias antes** del cambio de estado. Fusionar
+> conserva los locks `FOR UPDATE` **solo** por su coordinación de grafo (carreras 1–4/9–10), no por este
+> invariante. Cambio a Asociar: **solo traducción de P2003 → `INVALID_IDENTITY_STATE`** (sin lock nuevo).
 
 **Chains (regla anti-cadena v1):** para no razonar cadenas en la primera slice, **la absorbida debe no
 tener redirecciones entrantes** y el sobreviviente debe estar ACTIVE. Así toda redirección es de **un
@@ -272,19 +278,19 @@ pasos y verifica rollback total.
 
 | Área | Cambio | Nivel |
 |---|---|---|
-| Schema `CatalogIdentity` | `redirectsToId Int?` (self-FK) + índice; uso de `state='REDIRECTED'` | **necesario** |
+| Schema `CatalogIdentity` | `redirectsToId Int?` (self-FK) + índice; uso de `state='REDIRECTED'`; `UNIQUE(id, state)` (para la FK compuesta de ADR-009) | **necesario** |
 | Schema `CatalogIdentity` | `mergeDecisionId String? @unique` + `mergeDecisionFingerprint String?` | **necesario** (o tabla de decisiones) |
+| Schema `IdentityExternalReference` | `identityState` (DEFAULT `'ACTIVE'`, CHECK) + FK compuesta `(identityId, identityState) → CatalogIdentity(id, state)` ON UPDATE RESTRICT — **ADR-009** | **necesario** |
 | Índice | índice en `redirectsToId` (para "redirecciones entrantes" y resolución) | **necesario** |
-| Migración SQL | nueva, **sin aplicar** (gated), self-FK + índices | **necesario** |
-| Constraint | (evaluar) CHECK/trigger "referencia solo sobre ACTIVE" — parte de **T2** | **probable** |
+| Migración SQL | (pre-Fusionar) FK compuesta de ADR-009; (Fusionar) redirectsToId + procedencia. **Sin aplicar** (gated) | **necesario** |
 | Dominio | `lib/domain/identity/merge.ts` (MergeDecision, huella, estados legales, Resultado, Adjudicación) | **necesario** |
 | Infra Registro | `lib/infra/identity/mergeRegistro.ts` (namespace: lock, transición, mover refs, redirección) | **necesario** |
-| Catálogo | write-port `absorbWorkInto(...)` (re-parentar ediciones, detach del Work) — **T1**, bounded context Catálogo | **necesario (dependencia)** |
-| Caso de uso | `lib/identity/mergeIdentities.ts` (coordina Catálogo + Registro en 1 tx — Alternativa B) | **necesario** |
-| Asociar | lock+recheck del destino (si se elige la opción (a) de **T2**) | **probable** |
+| Catálogo | `Work.absorbedIntoId` (self-FK) + write-port `absorbWorkInto(...)` (re-parentar ediciones, marcar detach) — **ADR-008** | **necesario (dependencia)** |
+| Caso de uso | `lib/identity/mergeIdentities.ts` (coordina Catálogo + Registro en 1 tx — ADR-008) | **necesario** |
+| Asociar (endurecimiento pre-Fusionar) | traducir P2003 (FK compuesta) → `INVALID_IDENTITY_STATE`; **sin lock nuevo** — **ADR-009** | **necesario** |
 | Tests | `tests/identity-merge.test.ts` + `…integration.test.ts`; harness suma el archivo | **necesario** |
 | Docs | `docs/identity-merge-slice.md` al cerrar | **necesario** |
-| `Work` estado "absorbida" | si el Catálogo no puede dejar el Work simplemente *detached* | **opcional/probable** |
+| Conferir (follow-up) | guard contra conferir sobre Work absorbido (`absorbedIntoId`) | **opcional (bajo riesgo)** |
 
 SQL ilustrativo (solo para fijar la transición, **no** implementación):
 ```sql
@@ -329,10 +335,11 @@ protocolo compartido real:
 
 ## K. Riesgos y deuda deliberada
 
-- **T1 (contenido):** el write-port de Catálogo `absorbWorkInto` y la política del Work absorbido
-  (detach vs estado "absorbida") quedan **fuera** de la slice de identidad; son dependencia de Catálogo.
-- **T2 (referencia sobre no-terminal bajo concurrencia):** debe resolverse (lock+recheck en Asociar, o
-  trigger DB) **antes** de implementar Fusionar. Bloqueante.
+- **T1 → RESUELTA (ADR-008):** coordinación por caso de uso de aplicación; write-port de Catálogo
+  `absorbWorkInto` + `Work.absorbedIntoId`. Queda como *deuda diferida* la reconciliación de hechos
+  descriptivos (v1 no combina) y el guard de Conferir contra Works absorbidos (follow-up).
+- **T2 → RESUELTA (ADR-009):** FK compuesta declarativa (no trigger, no lock en Asociar). Endurecimiento
+  de Asociar (traducción de P2003) = pre-trabajo necesario antes de Fusionar.
 - **Cadenas + compactación:** v1 las prohíbe (redirección de un salto); soporte de cadenas y compactación
   = slice futura.
 - **Deshacer una fusión, Partir:** fuera de alcance; Fusionar crea la dependencia (redirectsToId,
@@ -363,12 +370,13 @@ protocolo compartido real:
    + estado `REDIRECTED`); (iii) **movimiento físico de referencias**; (iv) **resolución de T2** (dónde
    se garantiza "referencia solo sobre ACTIVE"). ADRs no bloqueantes: locks/concurrencia (ya hay
    precedente), procedencia por-columna vs tabla de decisiones, semántica `ALREADY_MERGED` vs replay.
-6. **¿Se puede empezar a implementar tras este spec?** **Casi, pero NO todavía sin cerrar dos cosas:**
-   **T1** (contrato del write-port de contenido del Catálogo — sin él, Fusionar no puede coordinar
-   coherentemente) y **T2** (garantía de que ninguna referencia quede sobre una identidad no terminal
-   bajo concurrencia con Asociar). Ambas son **contradicciones concretas señaladas, no resueltas**.
-   Resueltas esas dos (idealmente como ADRs), la implementación puede comenzar sin improvisar; el resto
-   del spec (flujo, orden, resultados, idempotencia, tests) está cerrado.
+6. **¿Se puede empezar a implementar tras este spec?** **Sí — desbloqueada.** T1 y T2 quedaron resueltas
+   por ADR-008 y ADR-009 respectivamente, sin contradicciones residuales. Pre-trabajo obligatorio, en
+   orden: (1) **endurecer Asociar** (migración de la FK compuesta de ADR-009 + traducción de P2003 →
+   `INVALID_IDENTITY_STATE`) y validarlo con Postgres real; (2) implementar la dependencia de Catálogo
+   (`Work.absorbedIntoId` + write-port `absorbWorkInto`) según ADR-008; (3) recién entonces la slice
+   Fusionar (dominio + Registro namespace + caso de uso coordinador). El resto del spec (flujo, orden,
+   locks, resultados, idempotencia, tests) está cerrado.
 
 ---
 
