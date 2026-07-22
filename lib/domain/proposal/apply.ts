@@ -95,6 +95,15 @@ export const EDITION_MUTATION_V1_SUPPORTED_KINDS: ReadonlySet<string> = new Set(
 ]);
 
 /**
+ * Guard de sanidad del conteo de tomos para la CORRECCIÓN (Mutation): mismo tope que la
+ * acción admin `setEditionVolumesAction` (app/actions.ts), la otra vía manual que fija
+ * `volumes` + `volumesLocked`. Duplicación DELIBERADA del literal 2000: compartirlo exigiría
+ * que `app/` importe del dominio (capa ajena a esta vertical); se unifica en una pasada
+ * futura. Creation NO aplica este tope a propósito (incorpora datos de una fuente).
+ */
+export const EDITION_MAX_VOLUMES = 2000;
+
+/**
  * Política CERRADA de proyección de claims VOLUME-level para NEW_VOLUME (mismo patrón que
  * WORK/EDITION): partición exhaustiva y disjunta sobre los kinds VOLUME de
  * `ATTRIBUTE_KIND_LEVEL` (comprobado en tests). Kind VOLUME no clasificado → error duro.
@@ -1004,8 +1013,8 @@ export function buildEditionPatch(accepted: ApplyClaimRow[]): EditionPatch {
     if (op !== CLAIM_OP_SET)
       throw new ClaimSetInvalidError(`Operación no soportada para EDITION_ANNOUNCED_TOTAL_VOLUMES: ${op}.`);
     const n = scalarNumber(volClaim.value);
-    if (n === null || !Number.isInteger(n) || n < 0)
-      throw new ClaimSetInvalidError("EDITION_ANNOUNCED_TOTAL_VOLUMES inválido (entero ≥ 0).");
+    if (n === null || !Number.isInteger(n) || n < 0 || n > EDITION_MAX_VOLUMES)
+      throw new ClaimSetInvalidError(`EDITION_ANNOUNCED_TOTAL_VOLUMES inválido (entero entre 0 y ${EDITION_MAX_VOLUMES}).`);
     patch.volumes = n;
     patch.volumesLocked = true;
   }

@@ -21,6 +21,7 @@ import {
   WORK_ACCEPTED_NOT_MATERIALIZED_KINDS,
   EDITION_MATERIALIZED_KINDS,
   EDITION_ACCEPTED_NOT_MATERIALIZED_KINDS,
+  EDITION_MUTATION_V1_SUPPORTED_KINDS,
   VOLUME_MATERIALIZED_KINDS,
   VOLUME_ACCEPTED_NOT_MATERIALIZED_KINDS,
   NoApplicableClaimsError,
@@ -598,6 +599,50 @@ describe("dominio — buildEditionPatch (v1: whakoomId + volumes; 3 categorías)
     expect(() => buildEditionPatch([claim("TITLE_LOCALIZED", { language: "es", text: "x" }, 31)])).toThrow(UnsupportedClaimForApplyError);
     expect(() => buildEditionPatch([claim("VOLUME_NUMBER", 1, 31)])).toThrow(UnsupportedClaimForApplyError);
     expect(() => buildEditionPatch([claim("TOTALLY_UNKNOWN", 1, 31)])).toThrow(UnsupportedClaimForApplyError);
+  });
+
+  // M1: dominio de volumes = mismo tope de sanidad que setEditionVolumesAction (0..2000).
+  it("volumes: 2000 aceptado; 2001 y entero enorme → ClaimSetInvalidError", () => {
+    expect(buildEditionPatch([cop("EDITION_ANNOUNCED_TOTAL_VOLUMES", 2000, "SET")])).toEqual({ volumes: 2000, volumesLocked: true });
+    expect(() => buildEditionPatch([cop("EDITION_ANNOUNCED_TOTAL_VOLUMES", 2001, "SET")])).toThrow(ClaimSetInvalidError);
+    expect(() => buildEditionPatch([cop("EDITION_ANNOUNCED_TOTAL_VOLUMES", 9_999_999, "SET")])).toThrow(ClaimSetInvalidError);
+    expect(() => buildEditionPatch([cop("EDITION_ANNOUNCED_TOTAL_VOLUMES", Number.MAX_SAFE_INTEGER, "SET")])).toThrow(ClaimSetInvalidError);
+  });
+
+  // Blindaje: los buckets soportados son consistentes con la clasificación global y con el build.
+  it("exhaustividad: SUPPORTED ⊆ MATERIALIZED y cada kind soportado toca ≥1 columna", () => {
+    for (const k of EDITION_MUTATION_V1_SUPPORTED_KINDS) expect(EDITION_MATERIALIZED_KINDS.has(k)).toBe(true);
+    // una claim válida por cada kind soportado → patch NO vacío (sin ramas de materialización faltantes)
+    const validClaim: Record<string, ApplyClaimRow[]> = {
+      EXTERNAL_EDITION_ID: [wk("ed-1", "SET")],
+      EDITION_ANNOUNCED_TOTAL_VOLUMES: [cop("EDITION_ANNOUNCED_TOTAL_VOLUMES", 3, "SET")],
+    };
+    for (const k of EDITION_MUTATION_V1_SUPPORTED_KINDS) {
+      const claims = validClaim[k];
+      expect(claims, `falta claim válida de muestra para ${k}`).toBeDefined();
+      expect(Object.keys(buildEditionPatch(claims)).length).toBeGreaterThan(0);
+    }
+    // EDITION_ANNOUNCED_TOTAL_VOLUMES materializa DOS columnas (volumes + volumesLocked)
+    expect(buildEditionPatch([cop("EDITION_ANNOUNCED_TOTAL_VOLUMES", 3, "SET")])).toEqual({ volumes: 3, volumesLocked: true });
+  });
+
+  it("cardinalidad: dos EDITION_ANNOUNCED_TOTAL_VOLUMES → ClaimSetInvalidError", () => {
+    expect(() => buildEditionPatch([
+      cop("EDITION_ANNOUNCED_TOTAL_VOLUMES", 3, "SET", 31),
+      cop("EDITION_ANNOUNCED_TOTAL_VOLUMES", 5, "SET", 32),
+    ])).toThrow(ClaimSetInvalidError);
+  });
+
+  it("bucket 2 (sin columna) + bucket 3 (diferido) → EditionAttributeNotEditableError, NO patch vacío", () => {
+    expect(() => buildEditionPatch([
+      claim("EDITION_FORMAT", { value: "Tankōbon" }, 31),
+      cop("EDITION_STATUS", "PUBLISHING", "SET", 32),
+    ])).toThrow(EditionAttributeNotEditableError);
+    // orden inverso (diferida primero): mismo resultado
+    expect(() => buildEditionPatch([
+      cop("EDITION_STATUS", "PUBLISHING", "SET", 31),
+      claim("EDITION_FORMAT", { value: "Tankōbon" }, 32),
+    ])).toThrow(EditionAttributeNotEditableError);
   });
 });
 
@@ -1342,6 +1387,35 @@ describe("infra write-port — EDITION (corrección) v1", () => {
   it("gate inconsistente (appliedVolumeId inesperado para EDITION) → InconsistentApplyStateError", async () => {
     const tx = edCorrFakeTx({ resolution: { id: 42, outcome: "ACEPTADA", mutationCorrelationId: "c", appliedWorkId: null, appliedEditionId: null, appliedVolumeId: 9 } });
     await expect(runApplyEdCorr(tx)).rejects.toThrow(InconsistentApplyStateError);
+  });
+
+  it("M1: SET volumes 2001 (fuera de dominio) → ClaimSetInvalidError ANTES del UPDATE y del RR", async () => {
+    const tx = edCorrFakeTx({ claims: [
+      { id: 31, attributeKind: "EDITION_ANNOUNCED_TOTAL_VOLUMES", value: 2001, claimOperation: "SET", result: "ACEPTADA" },
+    ] });
+    await expect(runApplyEdCorr(tx)).rejects.toThrow(ClaimSetInvalidError);
+    expect(tx.publisherEdition.update).not.toHaveBeenCalled();
+    expect(tx.resolutionRecord.update).not.toHaveBeenCalled();
+  });
+
+  it("bucket 2 + bucket 3 (FORMAT + STATUS) → rechazo; NO patch vacío, NO update, NO RR", async () => {
+    const tx = edCorrFakeTx({ claims: [
+      { id: 31, attributeKind: "EDITION_FORMAT", value: { value: "Tankōbon" }, claimOperation: "SET", result: "ACEPTADA" },
+      { id: 32, attributeKind: "EDITION_STATUS", value: "PUBLISHING", claimOperation: "SET", result: "ACEPTADA" },
+    ] });
+    await expect(runApplyEdCorr(tx)).rejects.toThrow(EditionAttributeNotEditableError);
+    expect(tx.publisherEdition.update).not.toHaveBeenCalled();
+    expect(tx.resolutionRecord.update).not.toHaveBeenCalled();
+  });
+
+  it("orden-independencia: diferida PRIMERO + soportada después → mismo error, cero writes", async () => {
+    const tx = edCorrFakeTx({ claims: [
+      { id: 31, attributeKind: "EDITION_LANGUAGE", value: "en", claimOperation: "SET", result: "ACEPTADA" },
+      { id: 32, attributeKind: "EDITION_ANNOUNCED_TOTAL_VOLUMES", value: 12, claimOperation: "SET", result: "ACEPTADA" },
+    ] });
+    await expect(runApplyEdCorr(tx)).rejects.toThrow(EditionAttributeNotEditableError);
+    expect(tx.publisherEdition.update).not.toHaveBeenCalled();
+    expect(tx.resolutionRecord.update).not.toHaveBeenCalled();
   });
 });
 
