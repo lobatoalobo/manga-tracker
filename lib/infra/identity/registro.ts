@@ -158,21 +158,14 @@ export async function conferInTx(db: ConferDb, decision: ConferDecision): Promis
  * invariante global ganó la carrera.
  */
 async function resolveConflict(client: RegistroClient, kind: ConferConflictKind, decision: ConferDecision): Promise<ConferResult> {
-  switch (kind) {
-    case "DECISION_ID": {
-      // Mismo decisionId ganado por una corrida concurrente → comparar huella (idempotente vs divergente).
-      const now = await client.catalogIdentity.findUnique({ where: { decisionId: decision.decisionId }, select: PRIOR_SELECT });
-      if (now) return resolveExistingDecision(now, decision);
-      return rejected(CONFER_INVARIANT.DESIGNATION_TAKEN, "Colisión de unicidad al conferir.");
-    }
-    case "DESIGNATION":
-      return rejected(CONFER_INVARIANT.DESIGNATION_TAKEN, "El contenido ya está designado por una identidad activa.");
-    case "REFERENCE":
-      return rejected(CONFER_INVARIANT.REFERENCE_ALREADY_BOUND, "Una referencia semilla ya resuelve a otra identidad.");
-    default:
-      // P2002 no clasificable: en Conferir la colisión más probable es la designación.
-      return rejected(CONFER_INVARIANT.DESIGNATION_TAKEN, "Colisión de unicidad al conferir.");
-  }
+  // La MISMA decisión DOMINA: una decisión repetida colisiona a la vez en decisionId, designación y
+  // referencia; Postgres reporta cualquiera de ellos. Por eso se re-lee por decisionId PRIMERO (sin
+  // importar el constraint reportado): si existe, es replay (idempotente/divergente). Recién si NO es
+  // la misma decisión se distingue designación vs referencia por el `kind` reportado.
+  const now = await client.catalogIdentity.findUnique({ where: { decisionId: decision.decisionId }, select: PRIOR_SELECT });
+  if (now) return resolveExistingDecision(now, decision);
+  if (kind === "REFERENCE") return rejected(CONFER_INVARIANT.REFERENCE_ALREADY_BOUND, "Una referencia semilla ya resuelve a otra identidad.");
+  return rejected(CONFER_INVARIANT.DESIGNATION_TAKEN, "El contenido ya está designado por una identidad activa.");
 }
 
 /** Construye el Registro sobre un cliente Prisma dado (inyectable: prod usa el global; los tests
