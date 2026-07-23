@@ -64,6 +64,43 @@ de Conferir (contenido+clase+conjunto de refs); comparten formato, no contenido.
 con NULL (múltiples NULL permitidos por Postgres). La asociación es **una sola fila** → decisión,
 referencia y estado-para-replay son atómicos por construcción.
 
+## Integridad de referencias frente a estados (ADR-009)
+
+Invariante nuevo: **una referencia solo puede resolver hacia una Identity `ACTIVE`.** Garantía
+**declarativa** (migración `20260722020000`, gated), no trigger ni lock:
+
+- `CatalogIdentity` gana `UNIQUE (id, state)`; `IdentityExternalReference` gana `identityState`
+  (`DEFAULT 'ACTIVE'`, `CHECK = 'ACTIVE'`) + **FK compuesta** `(identityId, identityState) →
+  CatalogIdentity(id, state)` con **`ON UPDATE RESTRICT`**.
+- **Insert sobre no-ACTIVE → rechazado por la FK** (incluso writes directos ajenos a los casos de uso).
+- **Flipear una Identity a REDIRECTED con referencias apuntándola → falla** (RESTRICT) → **fuerza mover
+  las referencias antes** de redirigir (orden de mutación de Fusionar, verificado).
+
+**`identityState` como detalle de persistencia:** SIEMPRE `ACTIVE`. En Conferir lo aporta el `@default`
+(la identidad nace ACTIVE en la misma tx); en Asociar el Registro lo fija como constante. **No** viene
+de Adjudicación/usuario, **no** está en la Decisión ni en el fingerprint, y no cambia la semántica ni la
+idempotencia de ninguna slice.
+
+**Pre-check amable vs. FK autoritativa:** el pre-check (`destino existe → ACTIVE`) se **conserva**: da
+el resultado semántico (`IDENTITY_NOT_FOUND` / `INVALID_IDENTITY_STATE`) sin excepción en ausencia de
+carrera. La **FK compuesta** es la garantía autoritativa bajo concurrencia y ante writes directos.
+
+**Traducción de P2003:** bajo carrera (el destino deja de ser ACTIVE entre el pre-check y el insert), la
+FK rechaza el insert. Metadata **real observada** (Prisma 6 / PG 18): `code='P2003'`,
+`meta.constraint='IdentityExternalReference_identity_active_fkey'`. Se encapsula en
+`isReferenceActiveFkViolation(code, meta)` (matchea ese constraint por `meta.constraint`, con respaldo
+por `meta.field_name`) → `INVALID_IDENTITY_STATE`. Un P2003 **no reconocido NO** se convierte: propaga
+como error técnico.
+
+**Carrera verificada** (Postgres real): Asociar vs. flip-a-REDIRECTED concurrentes. Resultado final
+siempre válido — o (referencia queda, flip falla por RESTRICT) o (flip completa, Asociar falla con
+`INVALID_IDENTITY_STATE`); **nunca** referencia + Identity REDIRECTED. Sin deadlock; Asociar siempre
+devuelve un resultado semántico (no lanza).
+
+**Impacto sobre Conferir:** las referencias semilla persisten `identityState = ACTIVE` (vía default +
+seteo explícito). Sin resultados nuevos: el fallo es imposible por construcción (la identidad nace
+ACTIVE en la misma tx que sus semillas).
+
 ## Corrección introducida en Conferir (contradicción revelada)
 
 Esta slice reveló una **contradicción concreta** de concurrencia que también afectaba a Conferir: una
@@ -86,9 +123,10 @@ resolution decisionId-first`); sin cambio de contrato. Hallazgo derivado: `class
 
 ## Resultados (verificados)
 
-- `npm run check`: **511 passed | 20 skipped**, tsc limpio.
-- Integración Postgres real (`npm run test:identity-it`): **20 passed** (Conferir 11 + Asociar 9), exit 0.
-- Unitarios de Asociar: 16.
+- `npm run check`: **517 passed | 29 skipped**, tsc limpio (estable sobre 4 corridas).
+- Integración Postgres real (`npm run test:identity-it`): **29 passed** (Conferir 11 + Asociar 9 +
+  integridad de referencias 9), exit 0, sobre PostgreSQL 18.4 efímero.
+- Unitarios de Asociar: 22 (incluye clasificador P2003, traducción, persistencia de `identityState`).
 
 ## Deuda deliberada
 
