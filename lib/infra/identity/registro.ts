@@ -104,8 +104,14 @@ export async function conferInTx(db: ConferDb, decision: ConferDecision): Promis
   if (prior) return resolveExistingDecision(prior, decision);
 
   // 1. El contenido designado debe existir (y su tipo da la coherencia de clase).
-  const work = await db.work.findUnique({ where: { id: decision.designatedWorkId }, select: { id: true, type: true } });
+  const work = await db.work.findUnique({ where: { id: decision.designatedWorkId }, select: { id: true, type: true, absorbedIntoId: true } });
   if (!work) return rejected(CONFER_INVARIANT.DESIGNATED_CONTENT_NOT_FOUND, "El contenido designado no existe.");
+
+  // 1b. Guard amable de ADR-008: no conferir una identidad sobre un Work ABSORBIDO (detached). Es
+  //     pre-check (no garantía autoritativa: no hay constraint declarativa barata sin denormalizar
+  //     Work en CatalogIdentity — ver docs/catalog-work-absorption-slice.md, deuda diferida).
+  if (work.absorbedIntoId !== null)
+    return rejected(CONFER_INVARIANT.DESIGNATED_CONTENT_ABSORBED, "El contenido designado fue absorbido por otro Work.");
 
   // 2. Clase coherente con el contenido designado.
   if (work.type !== decision.contentClass)
