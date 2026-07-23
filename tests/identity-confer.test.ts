@@ -98,7 +98,7 @@ describe("dominio — Adjudicación (costura de juicio)", () => {
 type Ident = { id: number; state: string; designatedWorkId: number; decisionId: string; contentClass: string; decisionFingerprint: string };
 type Ref = { provider: string; externalId: string };
 
-function fakeDb(seed: { works?: { id: number; type: string }[]; identities?: Ident[]; refs?: Ref[] } = {}) {
+function fakeDb(seed: { works?: { id: number; type: string; absorbedIntoId?: number | null }[]; identities?: Ident[]; refs?: Ref[] } = {}) {
   const works = new Map((seed.works ?? []).map((w) => [w.id, w] as const));
   const identities: Ident[] = [...(seed.identities ?? [])];
   const refs: Ref[] = [...(seed.refs ?? [])];
@@ -109,7 +109,7 @@ function fakeDb(seed: { works?: { id: number; type: string }[]; identities?: Ide
     work: {
       findUnique: async ({ where }: { where: { id: number } }) => {
         const w = works.get(where.id);
-        return w ? { id: w.id, type: w.type } : null;
+        return w ? { id: w.id, type: w.type, absorbedIntoId: w.absorbedIntoId ?? null } : null;
       },
     },
     catalogIdentity: {
@@ -266,6 +266,13 @@ describe("Registro — Conferir (dobles)", () => {
     const { db, createCalls } = fakeDb({ works: [{ id: 7, type: "COMIC" }] });
     const r = await conferInTx(db, decision({ contentClass: "MANGA" }));
     expect(r).toMatchObject({ kind: "REJECTED", invariant: CONFER_INVARIANT.CONTENT_CLASS_INCOMPATIBLE });
+    expect(createCalls).toHaveLength(0);
+  });
+
+  it("contenido designado ABSORBIDO (ADR-008) → REJECTED (guard amable)", async () => {
+    const { db, createCalls } = fakeDb({ works: [{ id: 7, type: "MANGA", absorbedIntoId: 99 }] });
+    const r = await conferInTx(db, decision());
+    expect(r).toMatchObject({ kind: "REJECTED", invariant: CONFER_INVARIANT.DESIGNATED_CONTENT_ABSORBED });
     expect(createCalls).toHaveLength(0);
   });
 
