@@ -48,6 +48,7 @@ try {
     "tests/identity-associate.integration.test.ts",
     "tests/identity-reference-integrity.integration.test.ts",
     "tests/catalog-absorb-work.integration.test.ts",
+    "tests/identity-merge.integration.test.ts",
   ];
   execSync(`npx vitest run --no-file-parallelism ${suites.join(" ")}`, {
     stdio: "inherit",
