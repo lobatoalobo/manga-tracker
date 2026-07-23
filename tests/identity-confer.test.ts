@@ -278,7 +278,8 @@ describe("Registro — Conferir (dobles)", () => {
       contentClass: "MANGA",
       designatedWorkId: 7,
       decisionId: "d9",
-      externalRefs: { create: [{ provider: "anilist", externalId: "999" }] },
+      // ADR-009: las referencias semilla persisten identityState = ACTIVE (detalle de persistencia).
+      externalRefs: { create: [{ provider: "anilist", externalId: "999", identityState: IDENTITY_STATE_ACTIVE }] },
     });
   });
 });

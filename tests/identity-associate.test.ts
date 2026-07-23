@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { Prisma } from "@prisma/client";
 import { ValidationError } from "@/lib/mutations";
 import {
   associateExternalReferenceDecision,
@@ -9,7 +10,12 @@ import {
   type AssociateExternalReferenceDecision,
 } from "@/lib/domain/identity/associate";
 import { birthIdentity, conferDecision } from "@/lib/domain/identity/confer";
-import { associateInTx } from "@/lib/infra/identity/associateRegistro";
+import {
+  associateInTx,
+  makeAssociateRegistro,
+  isReferenceActiveFkViolation,
+  REFERENCE_ACTIVE_FK_CONSTRAINT,
+} from "@/lib/infra/identity/associateRegistro";
 
 // ---------------------------------------------------------------------------
 // Dominio — Decisión Asociar + huella + Adjudicación
@@ -71,7 +77,7 @@ describe("dominio — Decisión Asociar", () => {
 type Ident = { id: number; state: string };
 type Ref = { identityId: number; provider: string; externalId: string; decisionId: string | null; decisionFingerprint: string | null };
 
-function fakeDb(seed: { identities?: Ident[]; refs?: Ref[] } = {}) {
+function fakeDb(seed: { identities?: Ident[]; refs?: Ref[]; throwOnCreate?: Error } = {}) {
   const identities = new Map((seed.identities ?? []).map((i) => [i.id, i] as const));
   const refs: Ref[] = [...(seed.refs ?? [])];
   const createCalls: Array<Record<string, unknown>> = [];
@@ -94,6 +100,7 @@ function fakeDb(seed: { identities?: Ident[]; refs?: Ref[] } = {}) {
         return f ? { identityId: f.identityId } : null;
       },
       create: async ({ data }: { data: Record<string, unknown> }) => {
+        if (seed.throwOnCreate) throw seed.throwOnCreate;
         createCalls.push(data);
         refs.push({
           identityId: data.identityId as number,
@@ -184,5 +191,55 @@ describe("Registro — Asociar (dobles)", () => {
     await associateInTx(db, decision({ decisionId: "a9", provider: "anilist", externalId: "777" }));
     expect(createCalls).toHaveLength(1);
     expect(createCalls[0]).toMatchObject({ identityId: 5, provider: "anilist", externalId: "777", decisionId: "a9" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ADR-009 — identityState + traducción de la FK compuesta (P2003)
+// ---------------------------------------------------------------------------
+const p2003 = (constraint: string) =>
+  new Prisma.PrismaClientKnownRequestError("fk", { code: "P2003", clientVersion: "6.19.3", meta: { constraint } });
+const fakeClient = (db: Parameters<typeof associateInTx>[0]) =>
+  ({ $transaction: (fn: (tx: unknown) => unknown) => fn(db) }) as unknown as Parameters<typeof makeAssociateRegistro>[0];
+
+describe("infra — ADR-009 (identityState + FK compuesta)", () => {
+  it("Asociar persiste identityState = ACTIVE (detalle de persistencia)", async () => {
+    const { db, createCalls } = fakeDb({ identities: [{ id: 5, state: "ACTIVE" }] });
+    await associateInTx(db, decision());
+    expect(createCalls[0]).toMatchObject({ identityState: "ACTIVE" });
+  });
+
+  it("identityState NO forma parte de la decisión ni del fingerprint", () => {
+    const d = decision();
+    expect("identityState" in d).toBe(false);
+    const fp = associateDecisionFingerprint(d);
+    expect(fp.includes("identityState")).toBe(false);
+    expect(fp.includes("ACTIVE")).toBe(false);
+  });
+
+  it("el Registro no acepta ni deriva identityState desde el input externo", () => {
+    // La entrada de Adjudicación no tiene el campo; la decisión construida tampoco.
+    const d = adjudicateAssociateExternalReference({ decisionId: "a1", targetHandle: 5, provider: "p", externalId: "e" });
+    expect("identityState" in d).toBe(false);
+  });
+
+  it("isReferenceActiveFkViolation reconoce SOLO la FK compuesta", () => {
+    expect(isReferenceActiveFkViolation("P2003", { constraint: REFERENCE_ACTIVE_FK_CONSTRAINT })).toBe(true); // meta.constraint (forma real)
+    expect(isReferenceActiveFkViolation("P2003", { field_name: `${REFERENCE_ACTIVE_FK_CONSTRAINT} (index)` })).toBe(true); // respaldo por field_name
+    expect(isReferenceActiveFkViolation("P2003", { constraint: "IdentityExternalReference_identityId_fkey" })).toBe(false); // FK simple: no
+    expect(isReferenceActiveFkViolation("P2003", {})).toBe(false); // sin metadata
+    expect(isReferenceActiveFkViolation("P2003", undefined)).toBe(false);
+    expect(isReferenceActiveFkViolation("P2002", { constraint: REFERENCE_ACTIVE_FK_CONSTRAINT })).toBe(false); // otro código
+  });
+
+  it("P2003 reconocido (FK compuesta) → REJECTED / INVALID_IDENTITY_STATE", async () => {
+    const { db } = fakeDb({ identities: [{ id: 5, state: "ACTIVE" }], throwOnCreate: p2003(REFERENCE_ACTIVE_FK_CONSTRAINT) });
+    const r = await makeAssociateRegistro(fakeClient(db)).associate(decision());
+    expect(r).toMatchObject({ kind: "REJECTED", invariant: ASSOCIATE_INVARIANT.INVALID_IDENTITY_STATE });
+  });
+
+  it("P2003 NO reconocido → error técnico (no se convierte silenciosamente)", async () => {
+    const { db } = fakeDb({ identities: [{ id: 5, state: "ACTIVE" }], throwOnCreate: p2003("some_other_fkey") });
+    await expect(makeAssociateRegistro(fakeClient(db)).associate(decision())).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
   });
 });
