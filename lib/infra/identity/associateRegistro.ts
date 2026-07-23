@@ -13,6 +13,7 @@
  */
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { IDENTITY_STATE_ACTIVE } from "@/lib/domain/identity/confer";
 import {
   ASSOCIATE_INVARIANT,
   associateDecisionFingerprint,
@@ -37,6 +38,33 @@ class AssociateConflict extends Error {
     super("associate uniqueness conflict");
     this.name = "AssociateConflict";
   }
+}
+
+/** El destino dejó de ser ACTIVE entre el pre-check y el insert (guardia FK compuesta de ADR-009). */
+class AssociateInvalidTargetState extends Error {
+  constructor() {
+    super("associate invalid target state");
+    this.name = "AssociateInvalidTargetState";
+  }
+}
+
+/** Nombre de la FK compuesta de ADR-009 (`(identityId, identityState) → CatalogIdentity(id, state)`). */
+export const REFERENCE_ACTIVE_FK_CONSTRAINT = "IdentityExternalReference_identity_active_fkey";
+
+/**
+ * Clasificación ACOTADA del conflicto de FK: ¿es la violación de la FK compuesta de estado activo?
+ * Encapsula la ÚNICA dependencia respecto de cómo Prisma reporta el P2003. Metadata real observada
+ * (Prisma 6 / PG 18, base efímera): `code='P2003'`, `meta.constraint='IdentityExternalReference_
+ * identity_active_fkey'`. Se acepta también `meta.field_name` como respaldo por si otra versión de
+ * Prisma reporta el nombre por ese campo. NO es un traductor universal: reconoce SOLO esta FK; un
+ * P2003 de otra causa devuelve `false` (→ error técnico, no se convierte en `INVALID_IDENTITY_STATE`).
+ */
+export function isReferenceActiveFkViolation(code: string | undefined, meta: unknown): boolean {
+  if (code !== "P2003") return false;
+  const m = (meta ?? {}) as { constraint?: unknown; field_name?: unknown };
+  const constraint = String(m.constraint ?? "");
+  const fieldName = String(m.field_name ?? "");
+  return constraint.includes(REFERENCE_ACTIVE_FK_CONSTRAINT) || fieldName.includes(REFERENCE_ACTIVE_FK_CONSTRAINT);
 }
 
 const toRef = (d: AssociateExternalReferenceDecision): AssociatedReference => ({ handle: d.targetHandle, provider: d.provider, externalId: d.externalId });
@@ -82,6 +110,10 @@ export async function associateInTx(db: AssociateDb, decision: AssociateExternal
     await db.identityExternalReference.create({
       data: {
         identityId: decision.targetHandle,
+        // `identityState` (ADR-009): detalle de persistencia, SIEMPRE ACTIVE. NO viene de Adjudicación
+        // ni del usuario, NO está en la Decisión ni en el fingerprint. Es la mitad "estado" de la FK
+        // compuesta que garantiza que el destino sea ACTIVE (guardia autoritativa bajo concurrencia).
+        identityState: IDENTITY_STATE_ACTIVE,
         provider: decision.provider,
         externalId: decision.externalId,
         decisionId: decision.decisionId,
@@ -91,7 +123,12 @@ export async function associateInTx(db: AssociateDb, decision: AssociateExternal
     });
     return assocExecuted(toRef(decision));
   } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") throw new AssociateConflict();
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      if (err.code === "P2002") throw new AssociateConflict();
+      // Guardia autoritativa de ADR-009: el destino dejó de ser ACTIVE bajo carrera → la FK compuesta
+      // rechaza el insert. Solo esta FK reconocida se traduce; otro P2003 propaga como error técnico.
+      if (isReferenceActiveFkViolation(err.code, err.meta)) throw new AssociateInvalidTargetState();
+    }
     throw err;
   }
 }
@@ -123,6 +160,8 @@ export function makeAssociateRegistro(client: AssociateClient): AssociateReferen
         return await client.$transaction((tx) => associateInTx(tx, decision), { timeout: 15000 });
       } catch (err) {
         if (err instanceof AssociateConflict) return resolveConflict(client, decision);
+        if (err instanceof AssociateInvalidTargetState)
+          return assocRejected(ASSOCIATE_INVARIANT.INVALID_IDENTITY_STATE, "La Identity destino dejó de estar ACTIVE.");
         throw err;
       }
     },
