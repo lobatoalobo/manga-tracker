@@ -560,14 +560,29 @@ model CatalogIdentity {
   // conjunto ordenado). Permite distinguir "misma decisión" (idempotente) de "mismo decisionId
   // reusado con intención divergente" (rechazo), sin comparar tablas relacionadas en el replay.
   decisionFingerprint String
-  createdAt           DateTime @default(now())
+  // Redirección de fusión (ADR-008/009): si `state='REDIRECTED'`, esta identidad fue ABSORBIDA por otra
+  // y `redirectsToId` apunta a la SOBREVIVIENTE (un salto; v1 no encadena). Invariante ACTIVE ⟺
+  // redirectsToId null (CHECK crudo en la migración). Conserva `designatedWorkId` histórico (deja de
+  // designar contenido activo porque el índice parcial es WHERE state='ACTIVE'). Ver docs/identity-merge-slice.md.
+  redirectsToId Int?
+  // Procedencia de la Decisión Fusionar que redirigió ESTA fila (vive en la ABSORBIDA, la que transiciona).
+  // NO reusa las columnas de Conferir (semántica distinta). Único (idempotencia); NULL en filas ACTIVE.
+  mergeDecisionId          String?  @unique
+  mergeDecisionFingerprint String?
+  createdAt                DateTime @default(now())
 
   designatedWork Work                        @relation(fields: [designatedWorkId], references: [id], onDelete: Restrict)
   externalRefs   IdentityExternalReference[]
+  // Self-relación de redirección (Fusionar). La FK vive en `redirectsToId`. `redirectedFrom` son las
+  // identidades que redirigen HACIA esta (v1 prohíbe encadenar sobre una ya redirigida).
+  redirectsTo    CatalogIdentity?  @relation("IdentityRedirect", fields: [redirectsToId], references: [id], onDelete: Restrict)
+  redirectedFrom CatalogIdentity[] @relation("IdentityRedirect")
 
   // La designación única entre identidades ACTIVE es un índice PARCIAL (WHERE state='ACTIVE')
-  // que Prisma no expresa en el DSL: se crea por SQL crudo en la migración.
+  // que Prisma no expresa en el DSL: se crea por SQL crudo en la migración. Los CHECK de coherencia
+  // estado⇔redirección y de pareo de procedencia también son crudos (ver migración).
   @@index([designatedWorkId])
+  @@index([redirectsToId])
 }
 
 // Asociación referencia externa → identidad (propiedad del namespace / Registro, no de
