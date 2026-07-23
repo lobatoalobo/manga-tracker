@@ -10,6 +10,16 @@ implementadas, y el schema real del repo.
 > de referencias bajo concurrencia) → **ADR-009**. Este spec se actualizó para reflejar esas
 > decisiones. Fusionar queda **desbloqueada** para implementación, con un pre-trabajo obligatorio (ver
 > §L). Las secciones marcan lo que cambió respecto de la versión anterior.
+>
+> **IMPLEMENTADA (v1):** la slice Fusionar está implementada y validada en Postgres real — ver
+> `docs/identity-merge-slice.md` (562 unit + 62 integración, 21 de ellas de Fusionar). Precisiones que la
+> implementación fijó sobre este spec: (a) el "destino ACTIVE / anti-cadena" se garantiza
+> **transaccionalmente bajo lock**, NO con una FK compuesta (a diferencia de T2/ADR-009, acá el único
+> escritor de redirecciones ya lockea, así que no se denormalizó `redirectsToState`); (b) `STALE_DECISION`
+> y `WOULD_CREATE_REDIRECT_CYCLE` resultaron **inalcanzables** en v1 (subsumidos por `INVALID_*_STATE` /
+> `ALREADY_MERGED`) y NO se implementaron; (c) el namespace se parte en dos fases (`prepare`/`apply`) que
+> viven ambas en el Registro, para intercalar la absorción de Catálogo sin que el coordinador tenga lógica
+> de namespace; (d) el orden global de locks quedó congelado **Identidades → Works**.
 
 > Alcance: solo Fusionar. NO Partir, NO deshacer, NO compactar cadenas, NO migrar colecciones, NO
 > reconciliación automática, NO UI/moderación. Las dependencias que Fusionar crea para esas
