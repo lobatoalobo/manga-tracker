@@ -337,9 +337,11 @@ protocolo compartido real:
 
 ## K. Riesgos y deuda deliberada
 
-- **T1 → RESUELTA (ADR-008):** coordinación por caso de uso de aplicación; write-port de Catálogo
-  `absorbWorkInto` + `Work.absorbedIntoId`. Queda como *deuda diferida* la reconciliación de hechos
-  descriptivos (v1 no combina) y el guard de Conferir contra Works absorbidos (follow-up).
+- **T1 → RESUELTA (ADR-008) e IMPLEMENTADA:** el write-port de Catálogo `absorbWorkInto` +
+  `Work.absorbedIntoId` está **implementado y validado en Postgres real** (12 tests de integración;
+  ver `docs/catalog-work-absorption-slice.md`). Recibe la tx del futuro coordinador, no la abre.
+  Queda como *deuda diferida* la reconciliación de hechos descriptivos (v1 no combina); el guard de
+  Conferir contra Works absorbidos quedó implementado (amable), con la garantía autoritativa diferida.
 - **T2 → RESUELTA (ADR-009):** FK compuesta declarativa (no trigger, no lock en Asociar). Endurecimiento
   de Asociar (traducción de P2003) = pre-trabajo necesario antes de Fusionar.
 - **Cadenas + compactación:** v1 las prohíbe (redirección de un salto); soporte de cadenas y compactación
