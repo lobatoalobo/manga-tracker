@@ -50,6 +50,9 @@ model User {
   // VIRTUALES (FK en StoreOrderLine / StoreOrderLineEvent). Ver docs/retail-slice-4-preorder-fulfillment.md.
   cancelledStoreOrderLines StoreOrderLine[]      @relation("lineCancelledBy")
   storeOrderLineEvents     StoreOrderLineEvent[] @relation("lineEventActor")
+  // Retail: avisos de llegada (Slice 5) que creó o envió (auditoría). VIRTUALES. Ver docs/retail-slice-5-*.
+  createdNotifications StoreOrderNotification[] @relation("notifCreatedBy")
+  sentNotifications    StoreOrderNotification[] @relation("notifSentBy")
 }
 
 // Silenciar notis de UNA serie puntual (override del toggle global "tomos
@@ -859,6 +862,7 @@ model StoreOrder {
   user        User?            @relation("customerOrders", fields: [userId], references: [id], onDelete: SetNull)
   cancelledBy User?            @relation("cancelledOrders", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
   lines       StoreOrderLine[]
+  notifications StoreOrderNotification[] // avisos de llegada (Restrict: una orden con avisos no se borra)
 
   @@unique([campaignId, userId]) // una orden por usuario/campaña (idempotencia natural de la reserva)
   @@index([userId])
@@ -906,8 +910,9 @@ model StoreOrderLine {
   order       StoreOrder           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   offer       PreorderOffer        @relation(fields: [offerId], references: [id], onDelete: Restrict)
   volume      Volume               @relation(fields: [volumeId], references: [id], onDelete: Restrict)
-  cancelledBy User?                @relation("lineCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
-  events      StoreOrderLineEvent[]
+  cancelledBy       User?                        @relation("lineCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
+  events            StoreOrderLineEvent[]
+  notificationItems StoreOrderNotificationItem[] // avisos que informaron unidades de esta línea (Restrict)
 
   @@unique([orderId, offerId]) // una línea por oferta dentro de la orden (las repetidas se consolidan antes)
   @@index([orderId])
@@ -935,6 +940,62 @@ model StoreOrderLineEvent {
   @@unique([operationKey])
   @@index([orderLineId, createdAt])
   @@index([actorUserId])
+}
+
+// ============================================================================
+// Retail / Preventas — Slice 5: avisos de llegada al cliente (StoreOrderNotification + …Item).
+// Separa mercadería LLEGADA (Slice 4) de cliente INFORMADO (comunicación). El aviso tiene su propio estado e
+// historial; que una línea esté ARRIVED NO implica que se informó. Envío MANUAL (la tienda copia el texto);
+// Nakama no manda comunicaciones externas. Ver docs/retail-slice-5-arrival-notifications.md.
+// ============================================================================
+
+// Aviso a nivel de ORDEN que agrupa ítems concretos (línea + cantidad informada). `messageSnapshot` conserva
+// el texto EXACTO confirmado. `sendOperationKey` (única) da idempotencia al "marcar enviado". Estados: DRAFT
+// | SENT | CANCELLED (SENT/CANCELLED terminales). No hard-delete desde UI/servicios.
+model StoreOrderNotification {
+  id                Int       @id @default(autoincrement())
+  orderId           Int
+  type              String    @default("ARRIVAL") // ARRIVAL (WHATSAPP/EMAIL/SMS/PUSH: futuros, no usados)
+  status            String    @default("DRAFT") // DRAFT | SENT | CANCELLED
+  channel           String    @default("MANUAL") // MANUAL (otros canales: futuros)
+  recipientSnapshot String? // nombre o email histórico; sin inventar teléfono
+  messageSnapshot   String // texto plano confirmado (sin HTML)
+  createdByUserId   String?
+  sentByUserId      String?
+  sendOperationKey  String? // idempotencia del envío; se fija al pasar a SENT
+  createdAt         DateTime  @default(now())
+  sentAt            DateTime?
+  cancelledAt       DateTime?
+  updatedAt         DateTime  @updatedAt
+
+  order     StoreOrder                   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  createdBy User?                        @relation("notifCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  sentBy    User?                        @relation("notifSentBy", fields: [sentByUserId], references: [id], onDelete: SetNull)
+  items     StoreOrderNotificationItem[]
+
+  @@unique([sendOperationKey])
+  @@index([orderId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+  @@index([sentAt])
+}
+
+// Un ítem informado: cuántas unidades LLEGADAS de una línea se incluyeron en ese aviso. No copia precios (el
+// mensaje y la línea ya conservan lo necesario). Una línea aparece a lo sumo una vez por aviso.
+model StoreOrderNotificationItem {
+  id             Int      @id @default(autoincrement())
+  notificationId Int
+  orderLineId    Int
+  quantity       Int
+  createdAt      DateTime @default(now())
+
+  notification StoreOrderNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  orderLine    StoreOrderLine         @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
+
+  @@unique([notificationId, orderLineId])
+  @@index([orderLineId])
+  @@index([notificationId])
 }
 
 // Obra de un autor independiente/local, subida por un usuario y moderada por

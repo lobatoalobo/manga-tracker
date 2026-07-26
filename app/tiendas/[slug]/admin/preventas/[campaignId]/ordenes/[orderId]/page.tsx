@@ -3,12 +3,14 @@ import { notFound } from "next/navigation";
 import { requireStoreMember } from "@/lib/storeAuth";
 import { StoreAuthError, STORE_ROLE } from "@/lib/domain/store/authorize";
 import { getStoreOrder } from "@/lib/retail/orders";
+import { getOrderArrivalNotificationPreview, listOrderNotifications } from "@/lib/retail/notifications";
 import { getOrderFulfillmentSummary } from "@/lib/domain/retail/fulfillment";
 import { RetailError } from "@/lib/domain/retail/errors";
 import { formatArsCents, orderStatusLabel, orderFulfillmentLabel, lineEventTypeLabel } from "@/lib/retail/format";
 import { ORDER_STATUS } from "@/lib/domain/retail/order";
 import StoreCancelButton from "./StoreCancelButton";
 import LineFulfillmentControls from "./LineFulfillmentControls";
+import ArrivalNotifications from "./ArrivalNotifications";
 
 export const metadata = { title: "Orden · Admin · Nakama" };
 
@@ -37,6 +39,11 @@ export default async function StoreOrderDetailPage({ params }: { params: Promise
   const summary = getOrderFulfillmentSummary(order.lines);
   const fmt = (d: Date | null) => (d ? new Date(d).toLocaleString("es-AR") : "—");
   const canCancelOrder = order.status === ORDER_STATUS.RESERVED && order.lines.every((l) => l.orderedQuantity === 0 && l.arrivedQuantity === 0);
+
+  // Avisos de llegada (Slice 5): preview de pendientes + historial. Solo si la orden no está cancelada.
+  const [preview, notifications] = order.status === ORDER_STATUS.CANCELLED
+    ? [null, []]
+    : await Promise.all([getOrderArrivalNotificationPreview(order.id, ctx.userId), listOrderNotifications(order.id, ctx.userId)]);
 
   return (
     <main className="mx-auto max-w-2xl px-5 py-8">
@@ -95,6 +102,18 @@ export default async function StoreOrderDetailPage({ params }: { params: Promise
       {canCancelOrder && <StoreCancelButton slug={slug} campaignId={cId} orderId={order.id} />}
       {order.status === ORDER_STATUS.RESERVED && !canCancelOrder && (
         <p className="mt-6 text-xs text-muted">La operación de proveedor ya comenzó: cancelá unidades por línea; no se puede cancelar la orden completa.</p>
+      )}
+
+      {preview && (
+        <ArrivalNotifications
+          slug={slug} campaignId={cId} orderId={order.id}
+          preview={{ lines: preview.lines, suggestedMessage: preview.suggestedMessage, hasPending: preview.hasPending }}
+          notifications={notifications.map((n) => ({
+            id: n.id, status: n.status, messageSnapshot: n.messageSnapshot,
+            createdAt: n.createdAt.toISOString(), sentAt: n.sentAt?.toISOString() ?? null, cancelledAt: n.cancelledAt?.toISOString() ?? null,
+            items: n.items.map((i) => ({ quantity: i.quantity, orderLine: { titleSnapshot: i.orderLine.titleSnapshot, volumeNumberSnapshot: i.orderLine.volumeNumberSnapshot } })),
+          }))}
+        />
       )}
     </main>
   );
