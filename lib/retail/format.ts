@@ -19,6 +19,17 @@ export const RETAIL_ERROR_LABEL: Record<string, string> = {
   INVALID_TITLE: "El título no puede estar vacío.",
   VOLUME_NOT_FOUND: "El tomo no existe en el catálogo.",
   STORE_COMMERCE_DISABLED: "La tienda comercial no está habilitada.",
+  // Reservas (Slice 3)
+  ORDER_NOT_FOUND: "La orden no existe.",
+  ORDER_ACCESS_DENIED: "No tenés acceso a esta orden.",
+  ORDER_ALREADY_EXISTS: "Ya tenés una orden para esta campaña.",
+  ORDER_NOT_CANCELLABLE: "La orden no se puede cancelar.",
+  EMPTY_ORDER: "Elegí al menos un tomo.",
+  INVALID_QUANTITY: "Cantidad inválida.",
+  TOO_MANY_ITEMS: "Superaste el máximo de unidades por tomo.",
+  OFFER_NOT_AVAILABLE: "Una de las ofertas ya no está disponible.",
+  OFFER_CAMPAIGN_MISMATCH: "Una oferta no pertenece a esta campaña.",
+  ORDER_TOTAL_MISMATCH: "El total cambió; revisá tu selección.",
   FORBIDDEN_ROLE: "Tu rol no permite esta acción.",
   NOT_A_MEMBER: "No sos miembro de esta tienda.",
   STORE_DISABLED: "La tienda está deshabilitada.",
@@ -28,4 +39,13 @@ export const RETAIL_ERROR_LABEL: Record<string, string> = {
 
 export function retailErrorLabel(code: string): string {
   return RETAIL_ERROR_LABEL[code] ?? code;
+}
+
+/** Etiquetas de estado de una orden (para la UI de cliente y tienda). */
+export const ORDER_STATUS_LABEL: Record<string, string> = {
+  RESERVED: "Reservada",
+  CANCELLED: "Cancelada",
+};
+export function orderStatusLabel(status: string): string {
+  return ORDER_STATUS_LABEL[status] ?? status;
 }

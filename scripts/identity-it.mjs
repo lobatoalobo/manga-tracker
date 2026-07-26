@@ -51,6 +51,7 @@ try {
     "tests/identity-merge.integration.test.ts",
     "tests/store-commerce.integration.test.ts",
     "tests/retail-preorder.integration.test.ts",
+    "tests/retail-orders.integration.test.ts",
   ];
   execSync(`npx vitest run --no-file-parallelism ${suites.join(" ")}`, {
     stdio: "inherit",
