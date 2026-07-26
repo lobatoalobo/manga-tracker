@@ -14,6 +14,7 @@ import { markOrderLineArrived, cancelOrderLineQuantity } from "@/lib/retail/fulf
 import { prepareOrderLine, pickupOrderLine, prepareOrderLines, pickupOrderLines, getCampaignHandoff } from "@/lib/retail/handoff";
 import { registerPayment } from "@/lib/retail/payments";
 import { STORE_ROLE, StoreAuthError } from "@/lib/domain/store/authorize";
+import { LINE_EVENT_TYPE } from "@/lib/domain/retail/fulfillment";
 import { RetailError, RETAIL_ERROR } from "@/lib/domain/retail/errors";
 
 const URL = process.env.IDENTITY_TEST_DATABASE_URL;
@@ -54,6 +55,15 @@ describe.skipIf(!URL)("integración — Preparación y retiro (Slice 7, base rea
     return { campaignId: c.id, order, client, lineIds: order.lines.map((l) => l.id) };
   }
   const countsOf = async (lineId: number) => prisma.storeOrderLine.findUnique({ where: { id: lineId }, select: { arrivedQuantity: true, preparedQuantity: true, pickedUpQuantity: true } });
+  /** Eventos del ledger de UNA línea (acotado por orderLineId y, opcionalmente, tipo). Evidencia directa. */
+  const eventsOf = async (lineId: number, type?: string) =>
+    prisma.storeOrderLineEvent.findMany({
+      where: { orderLineId: lineId, ...(type ? { type } : {}) },
+      select: { id: true, type: true, quantity: true, orderLineId: true, operationKey: true, note: true },
+      orderBy: { id: "asc" },
+    });
+  /** Cuenta eventos cuya operationKey deriva de un batch (`${bk}:...`); precisa (sufijo `:` evita prefijos ambiguos). */
+  const batchEventCount = async (bk: string) => prisma.storeOrderLineEvent.count({ where: { operationKey: { startsWith: `${bk}:` } } });
   const retailCode = async (fn: () => Promise<unknown>) => { try { await fn(); return "NO_THROW"; } catch (e) { return e instanceof RetailError ? e.code : `X:${(e as Error).message}`; } };
   const authThrows = async (fn: () => Promise<unknown>) => { try { await fn(); return false; } catch (e) { return e instanceof StoreAuthError; } };
 
@@ -86,6 +96,15 @@ describe.skipIf(!URL)("integración — Preparación y retiro (Slice 7, base rea
     await pickupOrderLine(lineIds[0], 1, owner, key(), prisma);
     await pickupOrderLine(lineIds[0], 2, owner, key(), prisma);
     expect(await countsOf(lineIds[0])).toMatchObject({ pickedUpQuantity: 3 });
+    // Ledger directo: un evento por operación, tipo correcto, cantidad registrada = delta, sin duplicados.
+    const prep = await eventsOf(lineIds[0], LINE_EVENT_TYPE.PREPARED);
+    expect(prep).toHaveLength(2);
+    expect(prep.every((e) => e.type === "PREPARED" && e.orderLineId === lineIds[0])).toBe(true);
+    expect(prep.map((e) => e.quantity).sort((a, b) => a - b)).toEqual([2, 3]);
+    const pick = await eventsOf(lineIds[0], LINE_EVENT_TYPE.PICKED_UP);
+    expect(pick).toHaveLength(2);
+    expect(pick.every((e) => e.type === "PICKED_UP" && e.orderLineId === lineIds[0])).toBe(true);
+    expect(pick.map((e) => e.quantity).sort((a, b) => a - b)).toEqual([1, 2]);
   });
 
   it("límites: preparar > llegado, retirar > preparado, nada para preparar/retirar", async () => {
@@ -106,7 +125,29 @@ describe.skipIf(!URL)("integración — Preparación y retiro (Slice 7, base rea
     await prepareOrderLine(lineIds[0], 2, owner, k, prisma);
     await prepareOrderLine(lineIds[0], 2, owner, k, prisma); // retry idempotente
     expect(await countsOf(lineIds[0])).toMatchObject({ preparedQuantity: 2 });
+    // Ledger: el retry NO duplica → exactamente 1 evento PREPARED con esa key, línea y cantidad.
+    const afterRetry = await eventsOf(lineIds[0], LINE_EVENT_TYPE.PREPARED);
+    expect(afterRetry).toHaveLength(1);
+    expect(afterRetry[0]).toMatchObject({ type: "PREPARED", orderLineId: lineIds[0], quantity: 2, operationKey: k });
+    // Conflicto de payload (misma key, distinta cantidad): el evento original queda intacto; nada nuevo.
     expect(await retailCode(() => prepareOrderLine(lineIds[0], 3, owner, k, prisma))).toBe(RETAIL_ERROR.OPERATION_KEY_CONFLICT);
+    const afterConflict = await eventsOf(lineIds[0], LINE_EVENT_TYPE.PREPARED);
+    expect(afterConflict).toHaveLength(1);
+    expect(afterConflict[0]).toMatchObject({ quantity: 2, operationKey: k }); // cantidad original conservada
+    expect(await countsOf(lineIds[0])).toMatchObject({ preparedQuantity: 2 }); // contador sin cambios
+  });
+
+  it("retiro idempotente: retry idéntico → exactamente 1 evento PICKED_UP (note null), contador correcto", async () => {
+    const { owner, storeId } = await commerceStore();
+    const { lineIds } = await arrivedOrder(storeId, owner, [{ qty: 5, arrive: 5 }]);
+    await prepareOrderLine(lineIds[0], 3, owner, key(), prisma);
+    const k = key();
+    await pickupOrderLine(lineIds[0], 2, owner, k, prisma);
+    await pickupOrderLine(lineIds[0], 2, owner, k, prisma); // retry idempotente
+    expect(await countsOf(lineIds[0])).toMatchObject({ pickedUpQuantity: 2 });
+    const evs = await eventsOf(lineIds[0], LINE_EVENT_TYPE.PICKED_UP);
+    expect(evs).toHaveLength(1);
+    expect(evs[0]).toMatchObject({ type: "PICKED_UP", orderLineId: lineIds[0], quantity: 2, operationKey: k, note: null });
   });
 
   it("dos empleados concurrentes (claves distintas) → proyección correcta sin romper invariante", async () => {
@@ -141,8 +182,14 @@ describe.skipIf(!URL)("integración — Preparación y retiro (Slice 7, base rea
     expect(await countsOf(lineIds[0])).toMatchObject({ preparedQuantity: 3 });
     expect(await countsOf(lineIds[1])).toMatchObject({ preparedQuantity: 2 });
     // atomicidad: un item inválido (retirar > preparado en línea 1) revierte TODO el lote
-    expect(await retailCode(() => pickupOrderLines(order.id, [{ orderLineId: lineIds[0], quantity: 1 }, { orderLineId: lineIds[1], quantity: 5 }], owner, key(), prisma))).toBe(RETAIL_ERROR.PICKUP_EXCEEDS_PREPARED);
-    expect(await countsOf(lineIds[0])).toMatchObject({ pickedUpQuantity: 0 }); // no se aplicó nada
+    const fk = key();
+    expect(await retailCode(() => pickupOrderLines(order.id, [{ orderLineId: lineIds[0], quantity: 1 }, { orderLineId: lineIds[1], quantity: 5 }], owner, fk, prisma))).toBe(RETAIL_ERROR.PICKUP_EXCEEDS_PREPARED);
+    // Contadores intactos en AMBAS líneas y CERO efectos del batch: ni evento PICKED_UP ni key derivada persistida.
+    expect(await countsOf(lineIds[0])).toMatchObject({ pickedUpQuantity: 0 });
+    expect(await countsOf(lineIds[1])).toMatchObject({ pickedUpQuantity: 0 });
+    expect(await batchEventCount(fk)).toBe(0); // ninguna clave derivada del batch quedó persistida
+    expect(await eventsOf(lineIds[0], LINE_EVENT_TYPE.PICKED_UP)).toHaveLength(0);
+    expect(await eventsOf(lineIds[1], LINE_EVENT_TYPE.PICKED_UP)).toHaveLength(0);
   });
 
   it("retry masivo inmutable: tras nuevas llegadas / otra preparación, mismo key+payload es no-op; distinto payload → conflicto", async () => {
@@ -152,8 +199,16 @@ describe.skipIf(!URL)("integración — Preparación y retiro (Slice 7, base rea
     await prepareOrderLines(order.id, [{ orderLineId: lineIds[0], quantity: 2 }], owner, bk, prisma);
     await markOrderLineArrived(lineIds[0], 3, owner, key(), prisma); // llegan 3 más
     await prepareOrderLine(lineIds[0], 1, owner, key(), prisma); // otra preparación individual (prepared → 3)
+    const eventsBeforeRetry = await batchEventCount(bk); // 1 evento del batch (por item)
     await prepareOrderLines(order.id, [{ orderLineId: lineIds[0], quantity: 2 }], owner, bk, prisma); // retry mismo lote → no-op
     expect(await countsOf(lineIds[0])).toMatchObject({ preparedQuantity: 3 }); // no recalcula el alcance
+    // Ledger: retry del mismo batch = CERO eventos nuevos, aunque cambiaron los contadores entre intentos.
+    expect(eventsBeforeRetry).toBe(1);
+    expect(await batchEventCount(bk)).toBe(1);
+    // Per-item: exactamente 1 evento con la key derivada correcta y cantidad = delta original del payload.
+    const itemEvents = await prisma.storeOrderLineEvent.findMany({ where: { operationKey: `${bk}:prepare:${lineIds[0]}` }, select: { type: true, quantity: true, orderLineId: true } });
+    expect(itemEvents).toHaveLength(1);
+    expect(itemEvents[0]).toMatchObject({ type: "PREPARED", quantity: 2, orderLineId: lineIds[0] });
     expect(await retailCode(() => prepareOrderLines(order.id, [{ orderLineId: lineIds[0], quantity: 5 }], owner, bk, prisma))).toBe(RETAIL_ERROR.OPERATION_KEY_CONFLICT);
   });
 
