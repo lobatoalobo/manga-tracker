@@ -30,6 +30,15 @@ export const RETAIL_ERROR_LABEL: Record<string, string> = {
   OFFER_NOT_AVAILABLE: "Una de las ofertas ya no está disponible.",
   OFFER_CAMPAIGN_MISMATCH: "Una oferta no pertenece a esta campaña.",
   ORDER_TOTAL_MISMATCH: "El total cambió; revisá tu selección.",
+  // Cumplimiento (Slice 4)
+  ORDER_LINE_NOT_FOUND: "La línea no existe.",
+  ORDER_LINE_OPERATION_NOT_ALLOWED: "Operación no permitida sobre esta línea.",
+  INVALID_FULFILLMENT_QUANTITY: "Cantidad inválida para esta operación.",
+  NOTHING_PENDING: "No quedan unidades pendientes.",
+  ORDER_CANCELLED: "La orden está cancelada.",
+  ORDER_FULFILLMENT_STARTED: "La operación de proveedor ya comenzó; cancelá las líneas pendientes.",
+  CAMPAIGN_HAS_ACTIVE_ORDERS: "La campaña tiene órdenes activas.",
+  OPERATION_KEY_CONFLICT: "Esa operación cambió; reintentá.",
   FORBIDDEN_ROLE: "Tu rol no permite esta acción.",
   NOT_A_MEMBER: "No sos miembro de esta tienda.",
   STORE_DISABLED: "La tienda está deshabilitada.",
@@ -48,4 +57,40 @@ export const ORDER_STATUS_LABEL: Record<string, string> = {
 };
 export function orderStatusLabel(status: string): string {
   return ORDER_STATUS_LABEL[status] ?? status;
+}
+
+/**
+ * Etiquetas del estado OPERATIVO de una línea (Slice 4). Deliberadamente NO dice "listo para retirar" cuando
+ * llega: el retiro/pago son slices futuras; "Llegó a la tienda" describe solo la recepción física.
+ */
+export const FULFILLMENT_STATUS_LABEL: Record<string, string> = {
+  RESERVED: "Reservado",
+  ORDERED: "Pedido al proveedor",
+  ARRIVED: "Llegó a la tienda",
+  CANCELLED: "Cancelado",
+};
+export function fulfillmentStatusLabel(status: string): string {
+  return FULFILLMENT_STATUS_LABEL[status] ?? status;
+}
+
+/** Etiquetas del resumen de cumplimiento de una orden (derivado; §13). */
+export const ORDER_FULFILLMENT_LABEL: Record<string, string> = {
+  NOT_STARTED: "Sin gestionar",
+  IN_PROGRESS: "En gestión",
+  FULLY_ARRIVED: "Todo en la tienda",
+  PARTIALLY_CANCELLED: "Parcialmente cancelada",
+  FULLY_CANCELLED: "Cancelada",
+};
+export function orderFulfillmentLabel(summary: string): string {
+  return ORDER_FULFILLMENT_LABEL[summary] ?? summary;
+}
+
+/** Tipos de evento operativo (para el historial). */
+export const LINE_EVENT_TYPE_LABEL: Record<string, string> = {
+  MARKED_ORDERED: "Pedido al proveedor",
+  MARKED_ARRIVED: "Llegada registrada",
+  CANCELLED: "Cancelación",
+};
+export function lineEventTypeLabel(type: string): string {
+  return LINE_EVENT_TYPE_LABEL[type] ?? type;
 }

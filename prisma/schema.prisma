@@ -46,6 +46,10 @@ model User {
   // Ver docs/retail-slice-3-preorder-orders.md.
   storeOrders          StoreOrder[] @relation("customerOrders")
   cancelledStoreOrders StoreOrder[] @relation("cancelledOrders")
+  // Retail: cumplimiento (Slice 4). Líneas que canceló y eventos operativos que registró (auditoría).
+  // VIRTUALES (FK en StoreOrderLine / StoreOrderLineEvent). Ver docs/retail-slice-4-preorder-fulfillment.md.
+  cancelledStoreOrderLines StoreOrderLine[]      @relation("lineCancelledBy")
+  storeOrderLineEvents     StoreOrderLineEvent[] @relation("lineEventActor")
 }
 
 // Silenciar notis de UNA serie puntual (override del toggle global "tomos
@@ -866,7 +870,11 @@ model StoreOrder {
 }
 
 // Una línea de reserva: un tomo (vía su oferta) con cantidad y precios/snapshots CONGELADOS al reservar. No
-// se re-resuelve desde el catálogo: la orden muestra sus líneas aunque el catálogo cambie luego.
+// se re-resuelve desde el catálogo: la orden muestra sus líneas aunque el catálogo cambie luego. Slice 4
+// suma la operación FÍSICA (pedido al proveedor + llegada) por CANTIDADES parciales: `quantity` (comercial)
+// es inmutable; `orderedQuantity`/`arrivedQuantity`/`cancelledQuantity` son los contadores operativos y
+// `fulfillmentStatus` (RESERVED|ORDERED|ARRIVED|CANCELLED) se DERIVA de ellos. `pending = quantity −
+// arrived − cancelled`. El historial vive en StoreOrderLineEvent. Ver docs/retail-slice-4-preorder-fulfillment.md.
 model StoreOrderLine {
   id                     Int      @id @default(autoincrement())
   orderId                Int
@@ -882,14 +890,51 @@ model StoreOrderLine {
   isbnSnapshot           String?
   createdAt              DateTime @default(now())
 
-  order  StoreOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  offer  PreorderOffer @relation(fields: [offerId], references: [id], onDelete: Restrict)
-  volume Volume        @relation(fields: [volumeId], references: [id], onDelete: Restrict)
+  // Cumplimiento (Slice 4). Contadores = fuente de verdad; `fulfillmentStatus` derivado y persistido para
+  // índice/display. Fechas: se fijan en la 1ra transición real y no se sobrescriben (`now` inyectado).
+  fulfillmentStatus  String    @default("RESERVED")
+  orderedQuantity    Int       @default(0)
+  arrivedQuantity    Int       @default(0)
+  cancelledQuantity  Int       @default(0)
+  orderedAt          DateTime?
+  arrivedAt          DateTime?
+  cancelledAt        DateTime?
+  cancelledByUserId  String?
+  cancellationReason String?
+  updatedAt          DateTime  @updatedAt
+
+  order       StoreOrder           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  offer       PreorderOffer        @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  volume      Volume               @relation(fields: [volumeId], references: [id], onDelete: Restrict)
+  cancelledBy User?                @relation("lineCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
+  events      StoreOrderLineEvent[]
 
   @@unique([orderId, offerId]) // una línea por oferta dentro de la orden (las repetidas se consolidan antes)
   @@index([orderId])
   @@index([offerId])
   @@index([volumeId])
+  @@index([fulfillmentStatus])
+}
+
+// Evento operativo INMUTABLE de una línea (§9/§23): auditoría de pedido/llegada/cancelación. No copia
+// snapshots comerciales (ya viven en la línea). `operationKey` único = idempotencia de la operación admin
+// (protege doble click / retry). No se edita ni borra desde la UI. `type` como String (convención del repo).
+model StoreOrderLineEvent {
+  id           Int      @id @default(autoincrement())
+  orderLineId  Int
+  type         String // MARKED_ORDERED | MARKED_ARRIVED | CANCELLED
+  quantity     Int
+  actorUserId  String?
+  operationKey String
+  note         String?
+  createdAt    DateTime @default(now())
+
+  orderLine StoreOrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+  actor     User?          @relation("lineEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@unique([operationKey])
+  @@index([orderLineId, createdAt])
+  @@index([actorUserId])
 }
 
 // Obra de un autor independiente/local, subida por un usuario y moderada por
