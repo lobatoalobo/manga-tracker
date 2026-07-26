@@ -167,6 +167,8 @@ const ORDER_LINE_SELECT = {
   // Cumplimiento (Slice 4): el cliente y la tienda ven el estado operativo por línea.
   fulfillmentStatus: true, orderedQuantity: true, arrivedQuantity: true, cancelledQuantity: true,
   orderedAt: true, arrivedAt: true, cancelledAt: true,
+  // Preparación y retiro (Slice 7): contadores outbound; los estados se derivan al leer (no persistidos).
+  preparedQuantity: true, pickedUpQuantity: true,
 } as const;
 
 /**

@@ -27,11 +27,13 @@ export const FULFILLMENT_STATUS = {
 } as const;
 export type FulfillmentStatus = (typeof FULFILLMENT_STATUS)[keyof typeof FULFILLMENT_STATUS];
 
-/** Tipos de evento operativo inmutable (§9). Sin eventos de pago/retiro. */
+/** Tipos de evento operativo inmutable (§9). Slice 7 suma el tramo outbound (PREPARED/PICKED_UP). */
 export const LINE_EVENT_TYPE = {
   MARKED_ORDERED: "MARKED_ORDERED",
   MARKED_ARRIVED: "MARKED_ARRIVED",
   CANCELLED: "CANCELLED",
+  PREPARED: "PREPARED",
+  PICKED_UP: "PICKED_UP",
 } as const;
 export type LineEventType = (typeof LINE_EVENT_TYPE)[keyof typeof LINE_EVENT_TYPE];
 

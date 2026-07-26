@@ -6,13 +6,15 @@ import { getStoreOrder } from "@/lib/retail/orders";
 import { getOrderArrivalNotificationPreview, listOrderNotifications } from "@/lib/retail/notifications";
 import { getOrderPaymentSummary } from "@/lib/retail/payments";
 import { getOrderFulfillmentSummary } from "@/lib/domain/retail/fulfillment";
+import { deriveHandoffLine, getOrderHandoffSummary } from "@/lib/domain/retail/handoff";
 import { RetailError } from "@/lib/domain/retail/errors";
-import { formatArsCents, orderStatusLabel, orderFulfillmentLabel, lineEventTypeLabel } from "@/lib/retail/format";
+import { formatArsCents, orderStatusLabel, orderFulfillmentLabel, orderHandoffLabel, lineEventTypeLabel } from "@/lib/retail/format";
 import { ORDER_STATUS } from "@/lib/domain/retail/order";
 import StoreCancelButton from "./StoreCancelButton";
 import LineFulfillmentControls from "./LineFulfillmentControls";
 import ArrivalNotifications from "./ArrivalNotifications";
 import Payments from "./Payments";
+import HandoffControls from "./HandoffControls";
 
 export const metadata = { title: "Orden · Admin · Nakama" };
 
@@ -122,6 +124,19 @@ export default async function StoreOrderDetailPage({ params }: { params: Promise
           summary={{ totalCents: payment.totalCents, paidCents: payment.paidCents, remainingCents: payment.remainingCents, paymentStatus: payment.paymentStatus }}
           payments={payment.payments.map((p) => ({ id: p.id, amountCents: p.amountCents, method: p.method, paidAt: p.paidAt.toISOString(), confirmedByUserId: p.confirmedByUserId, note: p.note, createdAt: p.createdAt.toISOString() }))}
         />
+      )}
+
+      {order.status === ORDER_STATUS.RESERVED && (
+        <>
+          <p className="mt-8 text-sm"><span className="text-muted">Estado de retiro:</span> <span className="font-medium">{orderHandoffLabel(getOrderHandoffSummary(order.lines))}</span></p>
+          <HandoffControls
+            slug={slug} campaignId={cId} orderId={order.id}
+            lines={order.lines.map((l) => {
+              const v = deriveHandoffLine(l);
+              return { id: l.id, title: l.titleSnapshot, volumeNumber: l.volumeNumberSnapshot, quantity: l.quantity, arrivedQuantity: l.arrivedQuantity, preparedQuantity: l.preparedQuantity, pickedUpQuantity: l.pickedUpQuantity, preparableQuantity: v.preparableQuantity, pickupableQuantity: v.pickupableQuantity };
+            })}
+          />
+        </>
       )}
 
       {preview && (

@@ -909,6 +909,10 @@ model StoreOrderLine {
   orderedQuantity    Int       @default(0)
   arrivedQuantity    Int       @default(0)
   cancelledQuantity  Int       @default(0)
+  // Handoff outbound (Slice 7): contadores que continúan el ciclo físico. Verdad = contadores; estados
+  // derivados y NO persistidos. Invariante: pickedUp ≤ prepared ≤ arrived. Ver docs/retail-slice-7-*.
+  preparedQuantity   Int       @default(0)
+  pickedUpQuantity   Int       @default(0)
   orderedAt          DateTime?
   arrivedAt          DateTime?
   cancelledAt        DateTime?

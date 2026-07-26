@@ -35,6 +35,7 @@ export default async function CampaignFulfillmentPage({ params }: { params: Prom
         <Link href={`/tiendas/${slug}/admin/preventas/${id}`} className="text-sm text-accent hover:underline">← Campaña</Link>
         <span className="flex gap-4">
           <Link href={`/tiendas/${slug}/admin/preventas/${id}/ordenes`} className="text-sm text-accent hover:underline">Órdenes →</Link>
+          <Link href={`/tiendas/${slug}/admin/preventas/${id}/preparacion`} className="text-sm text-accent hover:underline">Preparación →</Link>
           <Link href={`/tiendas/${slug}/admin/preventas/${id}/pagos`} className="text-sm text-accent hover:underline">Pagos →</Link>
           <Link href={`/tiendas/${slug}/admin/preventas/${id}/avisos`} className="text-sm text-accent hover:underline">Avisos →</Link>
         </span>

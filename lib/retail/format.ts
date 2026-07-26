@@ -67,6 +67,14 @@ export const RETAIL_ERROR_LABEL: Record<string, string> = {
   INVALID_PAYMENT_METHOD: "Método de pago inválido.",
   PAYMENT_OPERATION_KEY_CONFLICT: "Ese registro cambió; reintentá.",
   ORDER_HAS_PAYMENTS: "La orden tiene pagos registrados; no se puede cancelar (disponible cuando exista devoluciones).",
+  // Preparación y retiro (Slice 7)
+  INVALID_HANDOFF_QUANTITY: "Cantidad inválida.",
+  NOTHING_TO_PREPARE: "No hay unidades llegadas sin preparar.",
+  NOTHING_TO_PICKUP: "No hay unidades preparadas sin retirar.",
+  PREPARATION_EXCEEDS_ARRIVED: "No podés preparar más de lo que llegó.",
+  PICKUP_EXCEEDS_PREPARED: "No podés retirar más de lo que se preparó.",
+  EMPTY_HANDOFF_BATCH: "No hay unidades para procesar.",
+  DUPLICATE_HANDOFF_ITEM: "Hay líneas duplicadas en la operación.",
   FORBIDDEN_ROLE: "Tu rol no permite esta acción.",
   NOT_A_MEMBER: "No sos miembro de esta tienda.",
   STORE_DISABLED: "La tienda está deshabilitada.",
@@ -118,9 +126,25 @@ export const LINE_EVENT_TYPE_LABEL: Record<string, string> = {
   MARKED_ORDERED: "Pedido al proveedor",
   MARKED_ARRIVED: "Llegada registrada",
   CANCELLED: "Cancelación",
+  PREPARED: "Preparación",
+  PICKED_UP: "Retiro",
 };
 export function lineEventTypeLabel(type: string): string {
   return LINE_EVENT_TYPE_LABEL[type] ?? type;
+}
+
+/**
+ * Etiquetas del estado DERIVADO de retiro de una orden (Slice 7). `COMPLETED` es el ÚNICO que puede leerse
+ * como "entregado": nunca se muestra ese texto por haber retirado solo lo llegado hasta ahora.
+ */
+export const ORDER_HANDOFF_LABEL: Record<string, string> = {
+  NOT_STARTED: "Sin preparar",
+  IN_PROGRESS: "En preparación",
+  READY_FOR_PICKUP: "Listo para retirar",
+  COMPLETED: "Pedido entregado",
+};
+export function orderHandoffLabel(status: string): string {
+  return ORDER_HANDOFF_LABEL[status] ?? status;
 }
 
 /** Etiquetas de estado de un aviso de llegada (Slice 5). */
