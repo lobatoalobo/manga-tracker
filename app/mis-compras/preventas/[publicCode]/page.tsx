@@ -4,7 +4,8 @@ import { auth } from "@/auth";
 import { getCustomerOrder } from "@/lib/retail/orders";
 import { getOrderFulfillmentSummary } from "@/lib/domain/retail/fulfillment";
 import { RetailError } from "@/lib/domain/retail/errors";
-import { formatArsCents, orderStatusLabel, orderFulfillmentLabel, fulfillmentStatusLabel } from "@/lib/retail/format";
+import { formatArsCents, orderStatusLabel, orderFulfillmentLabel, fulfillmentStatusLabel, paymentStatusLabel, paymentMethodLabel } from "@/lib/retail/format";
+import { computeRemainingCents } from "@/lib/domain/retail/payment";
 import { ORDER_STATUS } from "@/lib/domain/retail/order";
 import CancelOrderButton from "../CancelOrderButton";
 
@@ -69,6 +70,32 @@ export default async function MyOrderDetailPage({ params }: { params: Promise<{ 
 
       <p className="mt-4 text-xs text-muted">La reserva no es un pago. Coordiná el pago y el retiro con la tienda.</p>
       {order.status === ORDER_STATUS.RESERVED && <CancelOrderButton publicCode={order.publicCode} />}
+
+      {(order.paymentStatus !== "UNPAID" || order.payments.length > 0) && (
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold">Estado de pago</h2>
+          <div className="mt-3 rounded-xl border border-border p-4 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="rounded-full bg-surface px-3 py-1 text-xs">{paymentStatusLabel(order.paymentStatus)}</span>
+              <span className="text-muted">Pagado {formatArsCents(order.paidCents)} de {formatArsCents(order.totalCents)}</span>
+            </div>
+            {computeRemainingCents(order.totalCents, order.paidCents) > 0 && (
+              <p className="mt-2 text-xs text-muted">Restante: {formatArsCents(computeRemainingCents(order.totalCents, order.paidCents))}</p>
+            )}
+            {order.payments.length > 0 && (
+              <ul className="mt-3 space-y-1">
+                {order.payments.map((p) => (
+                  <li key={p.id} className="flex items-center justify-between text-xs">
+                    <span className="text-muted">{new Date(p.paidAt).toLocaleDateString("es-AR")} · {paymentMethodLabel(p.method)}</span>
+                    <span className="font-medium">{formatArsCents(p.amountCents)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-muted">La tienda registró estos pagos. Nakama no procesa el cobro.</p>
+        </section>
+      )}
 
       {order.notifications.length > 0 && (
         <section className="mt-8">

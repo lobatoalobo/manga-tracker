@@ -28,6 +28,7 @@ import {
   type RequestedLine,
 } from "@/lib/domain/retail/order";
 import { LINE_EVENT_TYPE, deriveFulfillmentStatus, assertNoFulfillmentStarted, pendingQuantity } from "@/lib/domain/retail/fulfillment";
+import { assertCancellableWithoutPayments } from "@/lib/domain/retail/payment";
 import { RetailError, RETAIL_ERROR } from "@/lib/domain/retail/errors";
 import { generatePublicCode } from "@/lib/retail/publicCode";
 import { randomUUID } from "node:crypto";
@@ -177,6 +178,10 @@ async function cancelWholeOrder(
   tx: Pick<PrismaClient, "storeOrderLine" | "storeOrderLineEvent" | "storeOrder" | "storeOrderNotification">,
   orderId: number, who: string, reason: string | null, now: Date,
 ) {
+  // §9 (Slice 6): una orden con pagos registrados no se cancela hasta que exista devoluciones (simetría con
+  // "una orden cancelada no acepta pagos"). Se lee bajo el mismo lock del caller (lockOrder ya hizo FOR UPDATE).
+  const orderRow = await tx.storeOrder.findUnique({ where: { id: orderId }, select: { paidCents: true } });
+  assertCancellableWithoutPayments(orderRow?.paidCents ?? 0);
   const lines = await tx.storeOrderLine.findMany({
     where: { orderId },
     select: { id: true, quantity: true, orderedQuantity: true, arrivedQuantity: true, cancelledQuantity: true, cancelledAt: true },
@@ -229,6 +234,8 @@ export async function getCustomerOrder(publicCode: string, actorUserId: string |
     where: { publicCode },
     select: {
       id: true, publicCode: true, userId: true, status: true, totalCents: true, createdAt: true, cancelledAt: true,
+      // Proyección de pago visible al cliente (Slice 6): total/pagado/estado (restante se computa en la UI).
+      paidCents: true, paymentStatus: true,
       store: { select: { name: true, commerceProfile: { select: { slug: true } } } },
       campaign: { select: { id: true, title: true, weekLabel: true, status: true, opensAt: true, closesAt: true } },
       lines: { orderBy: { id: "asc" }, select: ORDER_LINE_SELECT },
@@ -237,6 +244,12 @@ export async function getCustomerOrder(publicCode: string, actorUserId: string |
         where: { status: "SENT" },
         orderBy: { sentAt: "desc" },
         select: { id: true, messageSnapshot: true, sentAt: true, items: { select: { quantity: true, orderLine: { select: { titleSnapshot: true, volumeNumberSnapshot: true } } } } },
+      },
+      // Pagos CONFIRMED visibles al cliente (§11): monto, método, fecha. Nunca nota interna ni actor.
+      payments: {
+        where: { status: "CONFIRMED" },
+        orderBy: [{ paidAt: "desc" }, { id: "desc" }],
+        select: { id: true, amountCents: true, method: true, paidAt: true },
       },
     },
   });
