@@ -55,6 +55,10 @@ model User {
   sentNotifications    StoreOrderNotification[] @relation("notifSentBy")
   // Retail: pagos manuales (Slice 6) que confirmó (auditoría). VIRTUAL. Ver docs/retail-slice-6-*.
   confirmedPayments StorePayment[] @relation("paymentConfirmedBy")
+  // Collection (Slice 8): colección automática por PICKED_UP. Back-relations VIRTUALES (FK en Acquisition/
+  // OwnershipPosition.userId, onDelete: Cascade → al borrar la cuenta se elimina su colección). Ver ADR-010.
+  acquisitions       Acquisition[]
+  ownershipPositions OwnershipPosition[]
 }
 
 // Silenciar notis de UNA serie puntual (override del toggle global "tomos
@@ -560,6 +564,10 @@ model Volume {
   // una dependencia del dominio Catálogo→Retail: no las use ningún caso de uso de Catálogo (ver Retail).
   preorderOffers PreorderOffer[]
   storeOrderLines StoreOrderLine[]
+  // Collection (Slice 8): igual criterio ORM-only (FK en Acquisition/OwnershipPosition.volumeId, onDelete:
+  // Restrict). NO son dependencia del dominio Catálogo→Collection. Ver ADR-010.
+  acquisitions       Acquisition[]
+  ownershipPositions OwnershipPosition[]
 
   @@unique([editionId, number])
   @@index([isbn])
@@ -945,6 +953,11 @@ model StoreOrderLineEvent {
   actorUserId  String?
   operationKey String
   note         String?
+  // Collection (Slice 8): snapshot ESTABLE del dueño de la orden al momento del hecho, poblado SOLO al crear
+  // un evento PICKED_UP (desde StoreOrder.userId). SIN FK (snapshot puro, como customerNameSnapshot): NO se
+  // anula con el SetNull del borrado de cuenta → hace el hecho publicado autosuficiente para el proyector de
+  // Collection sin reconstruir el userId desde una relación nullable. Ver ADR-010 §D1.b.
+  ownerUserIdSnapshot String?
   createdAt    DateTime @default(now())
 
   orderLine StoreOrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
@@ -1318,4 +1331,52 @@ model ProposalPreflightKey {
 
   @@unique([proposalId, keyType, keyValue])
   @@index([keyType, keyValue])
+}
+
+// ============================================================================
+// Collection — bounded context de POSESIÓN (Slice 8, ADR-010). Colección automática:
+// las unidades retiradas en Retail (evento PICKED_UP) se materializan acá.
+// Modelo mínimo congelado: Acquisition (hecho histórico inmutable/idempotente) +
+// OwnershipPosition (Aggregate Root pequeño de (userId, volumeId)). Escribe SOLO
+// este modelo — NO reusa OwnedVolume (eje de identidad legado incompatible). El
+// dominio puro vive en lib/domain/collection/*; la infra en lib/collection-context/*.
+// Enum-like = String (convención del repo). CHECKs (quantity > 0 / >= 0) van por SQL
+// manual en la migración (Prisma no los expresa). Ver ADR-010.
+// ============================================================================
+
+// Hecho histórico INMUTABLE de entrada de unidades a la colección. Idempotente por
+// acquisitionKey (= "retail-pickup:<operationKey>" del evento fuente, opaca). Una fila
+// = un hecho físico de pickup. El proyector la aplica sobre la OwnershipPosition.
+model Acquisition {
+  id             Int      @id @default(autoincrement())
+  acquisitionKey String   @unique // identidad estable/opaca del hecho fuente; ancla de idempotencia
+  userId         String
+  volumeId       Int // catálogo Volume.id (mismo eje que Retail)
+  quantity       Int // > 0 (CHECK en la migración)
+  channel        String // RETAIL_PICKUP (obligatorio; Collection no lo infiere)
+  occurredAt     DateTime // momento físico del pickup (= StoreOrderLineEvent.createdAt); NO el de procesamiento
+  recordedAt     DateTime @default(now()) // técnico (cuándo Collection lo procesó); FUERA del contrato de dominio
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  volume Volume @relation(fields: [volumeId], references: [id], onDelete: Restrict)
+
+  @@index([userId, volumeId])
+}
+
+// Aggregate Root deliberadamente pequeño: posesión presente del par (userId, volumeId).
+// `quantity` = fuente de verdad persistida Y reconstruible como Σ Acquisition del par.
+// Hoy (append-only) sólo crece. No contiene entidades internas todavía (ejemplares
+// individualizados = futuro, dentro del mismo agregado). Ver ADR-010 §D2.
+model OwnershipPosition {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  volumeId  Int
+  quantity  Int      @default(0) // >= 0 (CHECK en la migración)
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  volume Volume @relation(fields: [volumeId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, volumeId])
+  @@index([userId])
 }

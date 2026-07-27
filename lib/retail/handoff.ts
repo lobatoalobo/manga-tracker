@@ -64,7 +64,7 @@ async function runHandoffOp(kind: HandoffKind, input: RunHandoffInput, client: C
         where: { id: lineId },
         select: {
           id: true, quantity: true, arrivedQuantity: true, cancelledQuantity: true, preparedQuantity: true, pickedUpQuantity: true,
-          order: { select: { storeId: true, status: true } },
+          order: { select: { storeId: true, status: true, userId: true } }, // userId = DUEÑO de la orden (snapshot Slice 8)
         },
       });
       if (!line) throw new RetailError(RETAIL_ERROR.ORDER_LINE_NOT_FOUND);
@@ -85,7 +85,9 @@ async function runHandoffOp(kind: HandoffKind, input: RunHandoffInput, client: C
       };
       await tx.storeOrderLine.update({ where: { id: lineId }, data: applyHandoff(kind, counters, quantity) });
       await tx.storeOrderLineEvent.create({
-        data: { orderLineId: lineId, type: expectedType, quantity, actorUserId, operationKey }, // PICKED_UP no puebla `note`
+        // Snapshot Slice 8: SOLO en PICKED_UP, tomado del DUEÑO de la orden (`line.order.userId`) dentro de esta
+        // misma tx — NUNCA de `actorUserId` (que es el staff). PICKED_UP no puebla `note`.
+        data: { orderLineId: lineId, type: expectedType, quantity, actorUserId, operationKey, ownerUserIdSnapshot: kind === "PICKUP" ? line.order.userId : null },
       });
       return getLineState(tx, lineId);
     });
@@ -113,6 +115,15 @@ export function pickupOrderLine(lineId: number, quantity: number, actorUserId: s
 export interface HandoffBatchItem { orderLineId: number; quantity: number }
 
 /**
+ * Clave de idempotencia determinística de un ítem de un lote de handoff: `${batchOperationKey}:${segment}:${id}`.
+ * Fuente ÚNICA del formato — la usan tanto el servicio (para crear el evento) como la capa de aplicación (para
+ * reconstruir las claves exactas del pickup y proyectar la colección). No acopla Retail a Collection.
+ */
+export function handoffBatchItemKey(batchOperationKey: string, segment: "prepare" | "pickup", orderLineId: number): string {
+  return `${batchOperationKey}:${segment}:${orderLineId}`;
+}
+
+/**
  * Valida el payload de un lote (PURO, previo a la tx): no vacío, sin líneas duplicadas, cantidades enteras ≥ 1.
  * El alcance del comando es EXACTAMENTE `items` — nunca se recalcula desde la disponibilidad actual.
  */
@@ -129,14 +140,14 @@ function assertValidBatch(items: readonly HandoffBatchItem[]): void {
 async function runHandoffBatch(kind: HandoffKind, orderId: number, items: readonly HandoffBatchItem[], actorUserId: string | null, batchOperationKey: string, client: Client) {
   assertValidBatch(items);
   const expectedType = KIND_EVENT_TYPE[kind];
-  const keyOf = (orderLineId: number) => `${batchOperationKey}:${kind === "PREPARE" ? "prepare" : "pickup"}:${orderLineId}`;
+  const keyOf = (orderLineId: number) => handoffBatchItemKey(batchOperationKey, kind === "PREPARE" ? "prepare" : "pickup", orderLineId);
   // Alcance INMUTABLE: se procesan los items del payload en orden ascendente de línea (determinístico).
   const ordered = [...items].sort((a, b) => a.orderLineId - b.orderLineId);
   try {
     return await client.$transaction(async (tx) => {
       // Lock orden PRIMERO, luego TODAS sus líneas asc (orden de locks estable → sin deadlocks).
       await tx.$queryRaw`SELECT id FROM "StoreOrder" WHERE id = ${orderId} FOR UPDATE`;
-      const order = await tx.storeOrder.findUnique({ where: { id: orderId }, select: { id: true, storeId: true, status: true } });
+      const order = await tx.storeOrder.findUnique({ where: { id: orderId }, select: { id: true, storeId: true, status: true, userId: true } }); // userId = DUEÑO (snapshot Slice 8)
       if (!order) throw new RetailError(RETAIL_ERROR.ORDER_NOT_FOUND);
       await tx.$queryRaw`SELECT id FROM "StoreOrderLine" WHERE "orderId" = ${orderId} ORDER BY id FOR UPDATE`;
 
@@ -159,7 +170,8 @@ async function runHandoffBatch(kind: HandoffKind, orderId: number, items: readon
           preparedQuantity: line.preparedQuantity, pickedUpQuantity: line.pickedUpQuantity,
         };
         await tx.storeOrderLine.update({ where: { id: it.orderLineId }, data: applyHandoff(kind, counters, it.quantity) });
-        await tx.storeOrderLineEvent.create({ data: { orderLineId: it.orderLineId, type: expectedType, quantity: it.quantity, actorUserId, operationKey } });
+        // Snapshot Slice 8: SOLO en PICKED_UP, desde el DUEÑO (`order.userId`) en esta misma tx — nunca `actorUserId`.
+        await tx.storeOrderLineEvent.create({ data: { orderLineId: it.orderLineId, type: expectedType, quantity: it.quantity, actorUserId, operationKey, ownerUserIdSnapshot: kind === "PICKUP" ? order.userId : null } });
       }
       return tx.storeOrderLine.findMany({ where: { orderId }, orderBy: { id: "asc" }, select: LINE_STATE_SELECT });
     });
