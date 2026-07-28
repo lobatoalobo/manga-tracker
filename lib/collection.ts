@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getMangaById, searchMangaList } from "@/lib/anilist";
 import { nationalCoversByAnilist, upcomingForIds, authorsByAnilist } from "@/lib/catalog";
 import { isPlausibleVolume } from "@/lib/volumes";
+import { publisherKey, publisherRegion } from "@/lib/publisher-key";
 import type { TrackedEdition, OwnedVolume } from "@prisma/client";
 
 type EditionRow = TrackedEdition & { ownedVolumes: OwnedVolume[] };
@@ -539,23 +540,6 @@ export async function importEdition(
   });
 }
 
-const PURCHASE_PUBLISHER_KEY: Record<string, string> = {
-  "Ivrea Argentina": "ivrea",
-  "Panini Argentina": "panini",
-  "Ovni Press": "ovni",
-  "Kemuri Ediciones": "kemuri",
-  "Utopía Editorial": "utopia",
-  "Larp Editores": "larp",
-  "Distrito Manga": "distrito",
-  "Planeta Cómic": "planeta",
-  "VIZ Media": "viz",
-};
-
-/** Región de la edición según la editorial (VIZ = internacional). */
-function publisherRegion(publisher: string | null | undefined): "AR" | "INT" {
-  return publisher && /viz/i.test(publisher) ? "INT" : "AR";
-}
-
 type PubRow = { publisher: string; slug: string | null; volumes: number };
 
 /** Ediciones (PublisherEdition) de la obra, ordenadas por conteo. */
@@ -582,7 +566,7 @@ function chooseRow(rows: PubRow[], edition?: string | null): PubRow | null {
 
 /** Key de TrackedEdition para un tomo comprado (coherente con la ficha). */
 function purchaseKey(row: PubRow | null, edition?: string | null): string {
-  if (row) return PURCHASE_PUBLISHER_KEY[row.publisher] ?? "ar";
+  if (row) return publisherKey(row.publisher);
   return publisherRegion(edition) === "INT" ? "viz" : "ar";
 }
 
