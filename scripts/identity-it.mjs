@@ -64,6 +64,7 @@ try {
     "tests/collection-read-collection-adapter.integration.test.ts",
     "tests/collection-read-legacy-adapter.integration.test.ts",
     "tests/collection-read-equivalence.integration.test.ts",
+    "tests/collection-read-share-stat.integration.test.ts",
   ];
   execSync(`npx vitest run --no-file-parallelism ${suites.join(" ")}`, {
     stdio: "inherit",

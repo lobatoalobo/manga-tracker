@@ -39,6 +39,20 @@ export function editionProgress(e: {
   };
 }
 
+/**
+ * Porcentaje de progreso PÚBLICO (Share, ADR-011 / Slice 9 / Checkpoint 7). Comparte el numerador con el stat
+ * "Tomos poseídos": `ownedVolumes` viene del read-side unificado; `totalVolumes` sigue del camino legado rico. NO
+ * hay re-join por volumen ni migración de metadata: es un agregado derivado del mismo numerador que ya muestra la
+ * página. `totalVolumes <= 0` → 0 (sin división por cero). Clamp a 100 = protección de PRESENTACIÓN: una divergencia
+ * legítima por ambigüedad puede dar `ownedVolumes > totalVolumes`; el clamp NO altera el conteo real (`ownedVolumes`
+ * se conserva crudo) ni el dominio ni deduplica unidades. Es independiente de `getCollectionStats.percentage`
+ * (legado, que sirve a `app/collection`): este helper es exclusivo de la Share migrada.
+ */
+export function progressPercentage(ownedVolumes: number, totalVolumes: number): number {
+  if (totalVolumes <= 0) return 0;
+  return Math.min(Math.round((ownedVolumes / totalVolumes) * 100), 100);
+}
+
 export function getCollectionStats(items: CollectionItem[]) {
   const series = new Set(items.map((i) => i.anilistId)).size;
   const editions = items.length;

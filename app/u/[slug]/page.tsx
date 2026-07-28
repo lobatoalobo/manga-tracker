@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { getPublicCollection } from "@/lib/collection";
 import CollectionGrid from "@/components/CollectionGrid";
-import { getCollectionStats } from "@/services/collectionService";
+import { getCollectionStats, progressPercentage } from "@/services/collectionService";
 
 export async function generateMetadata({
   params,
@@ -13,7 +13,8 @@ export async function generateMetadata({
   if (!data) return { title: "Colección" };
   const stats = getCollectionStats(data.items);
   const title = `Colección de ${data.name}`;
-  const desc = `${stats.series} series y ${stats.ownedVolumes} tomos. Mirá la colección de manga de ${data.name} en Nakama.`;
+  // "Tomos poseídos" desde el read-side unificado (ADR-011, Slice 9 / CP7); el resto de stats sigue legado.
+  const desc = `${stats.series} series y ${data.ownedVolumes} tomos. Mirá la colección de manga de ${data.name} en Nakama.`;
   // Portada representativa (la preferida, o la primera) como preview al compartir.
   const cover =
     data.items.find((i) => i.anilistId === data.favoriteId)?.coverImage ||
@@ -37,6 +38,9 @@ export default async function PublicCollectionPage({
   if (!data) notFound();
 
   const stats = getCollectionStats(data.items);
+  // Stat, metadata y barra comparten el MISMO numerador unificado (`data.ownedVolumes`); el denominador
+  // (`totalVolumes`) sigue del camino legado. `progressPercentage` clampa a 100 solo para presentación.
+  const percentage = progressPercentage(data.ownedVolumes, stats.totalVolumes);
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-8">
@@ -48,14 +52,14 @@ export default async function PublicCollectionPage({
         <Stat label="Ediciones" value={stats.editions} />
         <Stat
           label="Tomos"
-          value={`${stats.ownedVolumes} / ${stats.totalVolumes}`}
+          value={`${data.ownedVolumes} / ${stats.totalVolumes}`}
         />
         <div className="flex flex-col justify-center rounded-xl border border-border bg-surface p-4">
-          <p className="text-xs text-muted">Progreso · {stats.percentage}%</p>
+          <p className="text-xs text-muted">Progreso · {percentage}%</p>
           <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-2">
             <div
               className="h-full rounded-full bg-accent transition-all"
-              style={{ width: `${stats.percentage}%` }}
+              style={{ width: `${percentage}%` }}
             />
           </div>
         </div>
