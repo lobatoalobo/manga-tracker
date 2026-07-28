@@ -162,6 +162,23 @@ tras el re-parentado). Esto: preserva trazabilidad y rollback; evita la reaparic
 - ¿El guard de Conferir contra Works absorbidos entra en el mismo lote que Fusionar o después? (Bajo riesgo.)
 - ¿Se normaliza el slug de las ediciones re-parentadas? (Cosmético.)
 
+## Evidencia de implementación (v1 de `absorbWorkInto`, precisiones operativas)
+
+La dependencia de Catálogo se implementó y validó en Postgres real (ver
+`docs/catalog-work-absorption-slice.md`). Precisiones que la implementación fijó, coherentes con este ADR:
+- **Regla de conflicto de contenido:** como `@@unique([publisher, slug])` es global, re-parentar
+  `workId` nunca viola una constraint; el conflicto es **semántico** = sobreviviente y absorbido
+  comparten un slot de edición **`(publisher, language)`** → `CONTENT_CONFLICT_REQUIRES_JUDGMENT`. Un
+  merge limpio (publishers no solapados) procede.
+- **Anti-cadena v1:** el absorbido no puede tener absorciones entrantes (sería un survivor previo) →
+  `INVALID_ABSORBED_STATE`. Junto con "ambos activos", hace inalcanzable un ciclo (por eso no hay
+  resultado `WOULD_CREATE_ABSORPTION_CYCLE`).
+- **`absorbedIntoId != null` = estado normativo** (sin columna duplicada); self-FK `RESTRICT` + CHECK de
+  no-autoabsorción (crudo).
+- **Guard de Conferir contra Works absorbidos:** implementado **amable** (`DESIGNATED_CONTENT_ABSORBED`).
+  La garantía autoritativa declarativa NO es un cambio pequeño (exigiría denormalizar el estado del Work
+  en `CatalogIdentity`) → queda como precondición del futuro coordinador de Fusionar. No es contradicción.
+
 ## Criterio de reversión
 
 Si en la práctica la transacción cruzando dos bounded contexts genera acoplamiento inmanejable (p. ej.

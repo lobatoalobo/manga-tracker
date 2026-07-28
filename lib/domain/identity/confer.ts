@@ -143,6 +143,8 @@ export const CONFER_INVARIANT = {
   CONTENT_CLASS_INCOMPATIBLE: "CONTENT_CLASS_INCOMPATIBLE",
   /** El contenido designado no existe. */
   DESIGNATED_CONTENT_NOT_FOUND: "DESIGNATED_CONTENT_NOT_FOUND",
+  /** El contenido designado fue ABSORBIDO por otro Work (ADR-008): no puede recibir una identidad. */
+  DESIGNATED_CONTENT_ABSORBED: "DESIGNATED_CONTENT_ABSORBED",
   /** El `decisionId` ya existe pero con una intención semántica distinta (reuso divergente). */
   DECISION_ID_REUSED_DIVERGENTLY: "DECISION_ID_REUSED_DIVERGENTLY",
 } as const;

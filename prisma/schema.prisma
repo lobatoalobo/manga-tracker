@@ -467,7 +467,17 @@ model Work {
   // (índice parcial en la migración). Ver docs/identity-confer-slice.md.
   identities CatalogIdentity[]
 
+  // Absorción de contenido (ADR-008): si != null, este Work fue ABSORBIDO por otro y queda
+  // detached (sus ediciones se re-parentaron). `absorbedIntoId != null` ES la fuente normativa
+  // del estado "absorbido" (sin columna duplicada). Self-FK Restrict (perpetuidad: no se borra un
+  // sobreviviente con absorbidos apuntándolo). CHECK de no-autoabsorción en la migración (crudo).
+  // Ver docs/catalog-work-absorption-slice.md.
+  absorbedIntoId Int?
+  absorbedInto   Work?  @relation("WorkAbsorption", fields: [absorbedIntoId], references: [id], onDelete: Restrict)
+  absorbedWorks  Work[] @relation("WorkAbsorption")
+
   @@index([normTitle])
+  @@index([absorbedIntoId])
 }
 
 // Índice de catálogos de las editoriales (poblado por scripts/crawl.ts).
