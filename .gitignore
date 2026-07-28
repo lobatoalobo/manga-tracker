@@ -64,3 +64,6 @@ series-export.csv
 
 # Backups de scripts de split/limpieza de datos (artefactos de runtime, para rollback)
 scripts/.backup-*.json
+
+# ephemeral postgres for identity integration tests
+.tmp-identity-pg/

@@ -462,6 +462,11 @@ model Work {
 
   editions PublisherEdition[]
 
+  // Identidades del catálogo que designan a esta obra (contenido). Relación virtual: la
+  // FK vive en CatalogIdentity.designatedWorkId. A lo sumo UNA identidad ACTIVA por obra
+  // (índice parcial en la migración). Ver docs/identity-confer-slice.md.
+  identities CatalogIdentity[]
+
   @@index([normTitle])
 }
 
@@ -525,6 +530,50 @@ model Volume {
 
   @@unique([editionId, number])
   @@index([isbn])
+}
+
+// Identidad del catálogo (el "handle"): asa durable y delgada que designa un contenido.
+// NO es contenido (no tiene título/autor/sinopsis); esos viven en Work. NO posee sus
+// referencias externas (viven en IdentityExternalReference, propiedad del namespace).
+// Este slice SOLO confiere (nace ACTIVE); Fusionar/Partir/Retirar/redirección NO existen
+// todavía. El handle (`id`, sequence) es fresco por construcción y jamás se reusa (las
+// filas no se borran). Invariantes globales enforzados por índices únicos en la migración
+// (designación única entre ACTIVE = índice parcial; unicidad de referencia). Ver
+// docs/identity-confer-slice.md y el Glosario Normativo del Dominio.
+model CatalogIdentity {
+  id               Int      @id @default(autoincrement()) // el handle
+  state            String   @default("ACTIVE") // ACTIVE (RETIRED/REDIRECTED son conceptuales; no se producen acá)
+  contentClass     String // clase de contenido (coherente con Work.type)
+  designatedWorkId Int // el contenido que designa
+  decisionId       String   @unique // identificador de la Decisión que la confirió
+  // Huella semántica canónica de la Decisión (contenido + clase + referencias semilla como
+  // conjunto ordenado). Permite distinguir "misma decisión" (idempotente) de "mismo decisionId
+  // reusado con intención divergente" (rechazo), sin comparar tablas relacionadas en el replay.
+  decisionFingerprint String
+  createdAt           DateTime @default(now())
+
+  designatedWork Work                        @relation(fields: [designatedWorkId], references: [id], onDelete: Restrict)
+  externalRefs   IdentityExternalReference[]
+
+  // La designación única entre identidades ACTIVE es un índice PARCIAL (WHERE state='ACTIVE')
+  // que Prisma no expresa en el DSL: se crea por SQL crudo en la migración.
+  @@index([designatedWorkId])
+}
+
+// Asociación referencia externa → identidad (propiedad del namespace / Registro, no de
+// Identity — Alternativa B). Una referencia (provider, externalId) resuelve a lo sumo hacia
+// UNA identidad: la unicidad la enforcea `@@unique([provider, externalId])`.
+model IdentityExternalReference {
+  id         Int      @id @default(autoincrement())
+  identityId Int
+  provider   String
+  externalId String
+  createdAt  DateTime @default(now())
+
+  identity CatalogIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, externalId])
+  @@index([identityId])
 }
 
 // Snapshot de las salidas anunciadas en ivrea.com.ar/proximas/ (lanzamiento,
