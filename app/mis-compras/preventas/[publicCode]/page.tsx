@@ -4,8 +4,9 @@ import { auth } from "@/auth";
 import { getCustomerOrder } from "@/lib/retail/orders";
 import { getOrderFulfillmentSummary } from "@/lib/domain/retail/fulfillment";
 import { RetailError } from "@/lib/domain/retail/errors";
-import { formatArsCents, orderStatusLabel, orderFulfillmentLabel, fulfillmentStatusLabel, paymentStatusLabel, paymentMethodLabel } from "@/lib/retail/format";
+import { formatArsCents, orderStatusLabel, orderFulfillmentLabel, fulfillmentStatusLabel, paymentStatusLabel, paymentMethodLabel, orderHandoffLabel } from "@/lib/retail/format";
 import { computeRemainingCents } from "@/lib/domain/retail/payment";
+import { deriveHandoffLine, getOrderHandoffSummary, ORDER_HANDOFF } from "@/lib/domain/retail/handoff";
 import { ORDER_STATUS } from "@/lib/domain/retail/order";
 import CancelOrderButton from "../CancelOrderButton";
 
@@ -96,6 +97,35 @@ export default async function MyOrderDetailPage({ params }: { params: Promise<{ 
           <p className="mt-2 text-xs text-muted">La tienda registró estos pagos. Nakama no procesa el cobro.</p>
         </section>
       )}
+
+      {(() => {
+        // Preparación y retiro (Slice 7): solo lectura. Nunca "entregado" salvo COMPLETED. Sin datos internos.
+        const handoff = getOrderHandoffSummary(order.lines);
+        if (handoff === ORDER_HANDOFF.NOT_STARTED) return null;
+        return (
+          <section className="mt-8">
+            <h2 className="text-lg font-semibold">Preparación y retiro</h2>
+            <div className="mt-3 rounded-xl border border-border p-4 text-sm">
+              <span className={`rounded-full px-3 py-1 text-xs ${handoff === ORDER_HANDOFF.READY_FOR_PICKUP ? "bg-green-500/15 text-green-700" : "bg-surface"}`}>{orderHandoffLabel(handoff)}</span>
+              <ul className="mt-3 space-y-1">
+                {order.lines.map((l) => {
+                  const v = deriveHandoffLine(l);
+                  if (l.preparedQuantity === 0 && l.pickedUpQuantity === 0) return null;
+                  return (
+                    <li key={l.id} className="flex items-center justify-between text-xs">
+                      <span className="min-w-0 truncate">{l.titleSnapshot} {l.volumeNumberSnapshot != null && <span className="font-medium">#{l.volumeNumberSnapshot}</span>}</span>
+                      <span className="shrink-0 text-muted">
+                        {v.pickupableQuantity > 0 && <span className="text-green-700">{v.pickupableQuantity} listo · </span>}
+                        Retiraste {l.pickedUpQuantity} de {l.quantity}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </section>
+        );
+      })()}
 
       {order.notifications.length > 0 && (
         <section className="mt-8">
