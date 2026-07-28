@@ -89,12 +89,60 @@ describe.skipIf(!URL)("EC-1 — caracterización de la lectura legada de colecci
     }
   }
 
+  // --- Seed de catálogo para el enriquecimiento (PR-2): Work + PublisherEdition ---
+  // No están ligados al usuario por FK (el link es lógico por anilistId), así que se limpian aparte.
+  const createdWorkIds: number[] = [];
+
+  async function seedWork(fields: {
+    coverImage?: string | null;
+    author?: string | null;
+    upcoming?: boolean;
+  }): Promise<number> {
+    const w = await prisma.work.create({
+      data: {
+        title: uniq(),
+        normTitle: uniq(),
+        coverImage: fields.coverImage ?? null,
+        author: fields.author ?? null,
+        upcoming: fields.upcoming ?? false,
+      },
+      select: { id: true },
+    });
+    createdWorkIds.push(w.id);
+    return w.id;
+  }
+
+  async function seedPubEdition(o: {
+    anilistId?: number | null;
+    workId: number;
+    volumes: number;
+  }): Promise<void> {
+    await prisma.publisherEdition.create({
+      data: {
+        publisher: "Ed",
+        slug: uniq(),
+        title: uniq(),
+        normTitle: uniq(),
+        url: `https://x/${uniq()}`,
+        volumes: o.volumes,
+        anilistId: o.anilistId ?? null,
+        workId: o.workId,
+      },
+    });
+  }
+
   beforeAll(async () => {
     await prisma.$queryRaw`SELECT 1`;
   });
   afterEach(async () => {
     // Manga/TrackedEdition/OwnedVolume caen por cascade al borrar el usuario (onDelete: Cascade).
     await prisma.user.deleteMany({ where: { email: { contains: "@ec1.dev" } } });
+    // Work/PublisherEdition NO son del usuario (link lógico por anilistId, sin FK) → limpieza explícita.
+    if (createdWorkIds.length) {
+      await prisma.publisherEdition.deleteMany({ where: { workId: { in: createdWorkIds } } });
+      await prisma.work.deleteMany({ where: { id: { in: createdWorkIds } } });
+      createdWorkIds.length = 0;
+    }
   });
   afterAll(async () => {
     await prisma.$disconnect();
@@ -294,5 +342,74 @@ describe.skipIf(!URL)("EC-1 — caracterización de la lectura legada de colecci
     expect(series!.coverImage).toBe("cover-s");
     // OBSERVABLE: ediciones por createdAt asc → panini (más vieja) primero.
     expect(series!.editions.map((e) => e.key)).toEqual(["panini", "ivrea"]);
+  });
+
+  // --- Enriquecimiento (PR-2): override de portada nacional / autor / upcoming ---
+  // Se resuelve vía lib/catalog (Work + PublisherEdition). getCollectionItems es el ÚNICO consumidor con
+  // enriquecimiento; getSeries NO enriquece (devuelve m.coverImage directo, sin autor/upcoming/portada
+  // nacional) → no aplica cobertura de enriquecimiento para getSeries.
+  // ACCIDENTAL (no caracterizado): con varias ediciones con portada para un mismo anilistId, nationalCovers
+  // aplica "primero gana" sin orderBy → el ganador depende de Prisma/PG; no seedeamos ese caso.
+
+  it("override de portada nacional (id positivo): la del Work gana sobre la guardada; sin edición nacional → guardada", async () => {
+    const u = await mkUser();
+    const wid = await seedWork({ coverImage: "nat-cover" });
+    await seedPubEdition({ anilistId: 910001, workId: wid, volumes: 5 });
+    await seedSeries(u, { anilistId: 910001, romajiTitle: "AAConNacional", coverImage: "stored", editions: [{ key: "ivrea", totalVolumes: 5, owned: [1] }] });
+    await seedSeries(u, { anilistId: 910009, romajiTitle: "ZZSinNacional", coverImage: "stored2", editions: [{ key: "e", totalVolumes: 1, owned: [1] }] });
+
+    const items = await getCollectionItems(u);
+    expect(items.find((i) => i.anilistId === 910001)?.coverImage).toBe("nat-cover");
+    expect(items.find((i) => i.anilistId === 910009)?.coverImage).toBe("stored2");
+  });
+
+  it("resolución de autor (id positivo): autor del Work vía su edición; sin autor → null", async () => {
+    const u = await mkUser();
+    const wid = await seedWork({ author: "Autor Uno" });
+    await seedPubEdition({ anilistId: 910002, workId: wid, volumes: 3 });
+    await seedSeries(u, { anilistId: 910002, romajiTitle: "AAConAutor", editions: [{ key: "e", totalVolumes: 3, owned: [1] }] });
+    await seedSeries(u, { anilistId: 910008, romajiTitle: "ZZSinAutor", editions: [{ key: "e", totalVolumes: 1, owned: [1] }] });
+
+    const items = await getCollectionItems(u);
+    expect(items.find((i) => i.anilistId === 910002)?.author).toBe("Autor Uno");
+    expect(items.find((i) => i.anilistId === 910008)?.author).toBeNull();
+  });
+
+  it("anilistId negativo enriquecido: autor directo del Work (id = -anilistId)", async () => {
+    const u = await mkUser();
+    const wid = await seedWork({ author: "Autor Dos" });
+    await seedSeries(u, { anilistId: -wid, romajiTitle: "LocalConAutor", editions: [{ key: "kemuri", totalVolumes: 2, owned: [1] }] });
+
+    const items = await getCollectionItems(u);
+    expect(items.find((i) => i.anilistId === -wid)?.author).toBe("Autor Dos");
+  });
+
+  it("cálculo de upcoming (id positivo): work.upcoming true → true; false → false", async () => {
+    const u = await mkUser();
+    const wUp = await seedWork({ upcoming: true });
+    await seedPubEdition({ anilistId: 910003, workId: wUp, volumes: 4 });
+    const wNo = await seedWork({ upcoming: false });
+    await seedPubEdition({ anilistId: 910004, workId: wNo, volumes: 4 });
+    await seedSeries(u, { anilistId: 910003, romajiTitle: "AAUpcoming", editions: [{ key: "e", totalVolumes: 4, owned: [1] }] });
+    await seedSeries(u, { anilistId: 910004, romajiTitle: "ZZNoUpcoming", editions: [{ key: "e", totalVolumes: 4, owned: [1] }] });
+
+    const items = await getCollectionItems(u);
+    expect(items.find((i) => i.anilistId === 910003)?.upcoming).toBe(true);
+    expect(items.find((i) => i.anilistId === 910004)?.upcoming).toBe(false);
+  });
+
+  it("cálculo de upcoming (id negativo) + guard 'edición ya publicada': upcoming del Work salvo que tenga edición con volumes>0", async () => {
+    const u = await mkUser();
+    // true: Work.upcoming sin edición publicada.
+    const wTrue = await seedWork({ upcoming: true });
+    // false (guard): Work.upcoming pero con una edición publicada (volumes>0) → flag viejo, no cuenta.
+    const wGuard = await seedWork({ upcoming: true });
+    await seedPubEdition({ workId: wGuard, volumes: 3 });
+    await seedSeries(u, { anilistId: -wTrue, romajiTitle: "LocalUpcoming", editions: [{ key: "k", totalVolumes: 1, owned: [1] }] });
+    await seedSeries(u, { anilistId: -wGuard, romajiTitle: "LocalGuard", editions: [{ key: "k", totalVolumes: 1, owned: [1] }] });
+
+    const items = await getCollectionItems(u);
+    expect(items.find((i) => i.anilistId === -wTrue)?.upcoming).toBe(true);
+    expect(items.find((i) => i.anilistId === -wGuard)?.upcoming).toBe(false);
   });
 });
