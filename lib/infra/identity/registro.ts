@@ -139,7 +139,11 @@ export async function conferInTx(db: ConferDb, decision: ConferDecision): Promis
         decisionId: decision.decisionId,
         decisionFingerprint: conferDecisionFingerprint(decision),
         externalRefs: decision.seedReferences.length
-          ? { create: decision.seedReferences.map((r) => ({ provider: r.provider, externalId: r.externalId })) }
+          ? {
+              // `identityState` (ADR-009): detalle de persistencia, SIEMPRE ACTIVE (la identidad
+              // nace ACTIVE en la misma tx). No forma parte de la decisión ni del fingerprint.
+              create: decision.seedReferences.map((r) => ({ provider: r.provider, externalId: r.externalId, identityState: IDENTITY_STATE_ACTIVE })),
+            }
           : undefined,
       },
       select: { id: true, contentClass: true, designatedWorkId: true },

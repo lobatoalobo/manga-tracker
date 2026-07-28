@@ -191,6 +191,8 @@ Carreras del §11 (todas se comprueban con Postgres real, ver §H):
 > tenga referencias apuntándola → **fuerza mover las referencias antes** del cambio de estado. Fusionar
 > conserva los locks `FOR UPDATE` **solo** por su coordinación de grafo (carreras 1–4/9–10), no por este
 > invariante. Cambio a Asociar: **solo traducción de P2003 → `INVALID_IDENTITY_STATE`** (sin lock nuevo).
+> **Fortificación implementada y validada en Postgres real** (29 tests de integración verdes; ver ADR-009
+> "Evidencia observada" y `docs/identity-associate-slice.md`).
 
 **Chains (regla anti-cadena v1):** para no razonar cadenas en la primera slice, **la absorbida debe no
 tener redirecciones entrantes** y el sobreviviente debe estar ACTIVE. Así toda redirección es de **un

@@ -186,3 +186,31 @@ Con el harness efímero existente (`npm run test:identity-it`, `--no-file-parall
 Identity `REDIRECTED` → rechazo traducido; (ii) intento de flipear a `REDIRECTED` con refs sin mover →
 falla (orden forzado); (iii) carrera Asociar-vs-Fusionar (matriz #1/#5) con `Promise.all`; (iv) ausencia
 de deadlock con locks ordenados (matriz #8); (v) idempotencia de Asociar esperando lock (#7).
+
+## Evidencia observada (PostgreSQL 18.4 efímero) — validación de la fortificación de Asociar
+
+La migración `20260722020000` aplica limpiamente (la FK COMPUESTA referencia la CONSTRAINT
+`UNIQUE(id, state)` — por eso se usa `ADD CONSTRAINT ... UNIQUE`, no un índice suelto). Metadata real:
+- **FK compuesta** violada por un `create` de Prisma: `code='P2003'`,
+  `meta={ modelName, constraint: 'IdentityExternalReference_identity_active_fkey' }` → el clasificador
+  matchea por `meta.constraint`. Confirmado.
+- **CHECK** (`identityState != 'ACTIVE'` por write directo/raw) → rechazado. Confirmado.
+- **ON UPDATE RESTRICT** (flip de estado con referencias presentes) → `"Key (id, state)=(…, ACTIVE) is
+  referenced from IdentityExternalReference"`. Confirmado.
+
+Resultados: `npm run test:identity-it` → **29 passed** (Conferir 11 + Asociar 9 + integridad 9).
+
+**Confirmación de las afirmaciones de este ADR (todas sostenidas en Postgres real):**
+- La FK compuesta garantiza el invariante **sin trigger** — CONFIRMADO (rechaza incluso writes directos).
+- Asociar **no necesita `FOR UPDATE`** — CONFIRMADO (la carrera preserva el invariante vía FK; Asociar
+  siempre devuelve un resultado semántico, no lanza).
+- `ON UPDATE RESTRICT` **fuerza mover las referencias antes de redirigir** — CONFIRMADO (el flip con
+  referencia presente falla; mover-luego-flipear funciona).
+- **`READ COMMITTED` es suficiente** para esta interacción — CONFIRMADO (isolation default; la carrera
+  no produce anomalía).
+- El resultado concurrente **siempre preserva la validez del namespace** — CONFIRMADO (nunca referencia
+  + Identity REDIRECTED).
+- **Compatible con el UPDATE masivo futuro de Fusionar** — CONFIRMADO (el patrón mover-refs (`UPDATE …
+  WHERE identityId=src`) → flipear-estado se ejecuta sin violar constraints intermedios).
+
+Ninguna afirmación fue refutada. No se requirió trigger ni lock en Asociar.

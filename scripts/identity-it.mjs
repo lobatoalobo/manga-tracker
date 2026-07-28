@@ -43,7 +43,11 @@ try {
   // Lista explícita de suites de integración de identidad (vitest no expande globs en el arg).
   // `--no-file-parallelism`: comparten UNA base efímera y cada archivo limpia globalmente en
   // afterEach; correrlos en paralelo haría que una limpieza borre datos en vuelo de la otra.
-  const suites = ["tests/identity-confer.integration.test.ts", "tests/identity-associate.integration.test.ts"];
+  const suites = [
+    "tests/identity-confer.integration.test.ts",
+    "tests/identity-associate.integration.test.ts",
+    "tests/identity-reference-integrity.integration.test.ts",
+  ];
   execSync(`npx vitest run --no-file-parallelism ${suites.join(" ")}`, {
     stdio: "inherit",
     cwd: root,

@@ -568,6 +568,13 @@ model IdentityExternalReference {
   identityId Int
   provider   String
   externalId String
+  // Estado denormalizado del destino, SIEMPRE 'ACTIVE' (ADR-009). Es la mitad "estado" de la FK
+  // COMPUESTA `(identityId, identityState) → CatalogIdentity(id, state)` (cruda en la migración,
+  // ON UPDATE RESTRICT + CHECK = 'ACTIVE'), que garantiza declarativamente que una referencia solo
+  // resuelve hacia una Identity ACTIVE y fuerza mover las referencias antes de redirigir. NO es
+  // sincronización manual del estado real: es un detalle de persistencia (default en Conferir,
+  // constante en Asociar), y la FK es la garantía. No forma parte de la decisión ni del fingerprint.
+  identityState String @default("ACTIVE")
   // Decisión Asociar que creó esta referencia (idempotencia + reuso divergente). NULL en las
   // referencias semilla creadas durante Conferir (su procedencia es la decisión de la identidad).
   // El índice único permite múltiples NULL (Postgres trata NULL como distinto).
