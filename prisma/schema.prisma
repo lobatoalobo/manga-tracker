@@ -40,6 +40,8 @@ model User {
   // Retail: membresías comerciales (OWNER/STAFF) de tiendas que administra. Relación VIRTUAL (la FK vive
   // en StoreMember.userId); no agrega columnas a User. Ver docs/retail-slice-1-store-commerce.md.
   storeMemberships  StoreMember[]
+  // Retail: campañas de preventa que creó (ref de auditoría). VIRTUAL. Ver docs/retail-slice-2-preorder-campaigns.md.
+  createdCampaigns  PreorderCampaign[]
 }
 
 // Silenciar notis de UNA serie puntual (override del toggle global "tomos
@@ -541,6 +543,10 @@ model Volume {
   coverImage     String?
   updatedAt      DateTime @updatedAt
 
+  // Back-relation SOLO de persistencia del ORM (la exige Prisma al declarar PreorderOffer.volume). NO es
+  // una dependencia del dominio Catálogo→Retail: no la use ningún caso de uso de Catálogo (ver Retail).
+  preorderOffers PreorderOffer[]
+
   @@unique([editionId, number])
   @@index([isbn])
 }
@@ -692,6 +698,9 @@ model Store {
   // VIRTUAL (la FK vive en StoreCommerceProfile.storeId); no agrega columnas a Store. Ver
   // docs/retail-slice-1-store-commerce.md.
   commerceProfile StoreCommerceProfile?
+  // Retail: campañas de preventa (actividad histórica). Cuelgan de Store (identidad durable), no del perfil.
+  // VIRTUAL. FK con onDelete: Restrict → una tienda con campañas no se borra. Ver docs/retail-slice-2-*.
+  preorderCampaigns PreorderCampaign[]
 
   @@index([status])
 }
@@ -735,6 +744,71 @@ model StoreMember {
 
   @@unique([profileId, userId])
   @@index([userId])
+}
+
+// ============================================================================
+// Retail / Preventas — Slice 2: campañas de preventa + ofertas (manual).
+// Actividad HISTÓRICA: cuelga de `Store` (identidad durable), NO del perfil comercial. El catálogo NUNCA
+// depende de Retail a nivel de DOMINIO. La FK `PreorderOffer.volume → Volume` está modelada en Prisma (con
+// back-relation mínima `Volume.preorderOffers`): es solo metadata de PERSISTENCIA del ORM, sin drift entre
+// schema y migración; ningún caso de uso de Catálogo la navega. Ver docs/retail-slice-2-preorder-campaigns.md.
+// ============================================================================
+
+// Una preventa semanal de una tienda. `status` = historia explícita; el tiempo (opensAt/closesAt) solo
+// decide disponibilidad pública (sin cron). Estados: DRAFT | PUBLISHED | CLOSED | CANCELLED.
+model PreorderCampaign {
+  id              Int       @id @default(autoincrement())
+  storeId         Int
+  title           String
+  description     String?
+  weekLabel       String?
+  status          String    @default("DRAFT")
+  opensAt         DateTime?
+  closesAt        DateTime?
+  publishedAt     DateTime?
+  closedAt        DateTime?
+  createdByUserId String? // ref de auditoría; nullable + SetNull para no perder la campaña si el creador borra su cuenta
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  store     Store           @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  createdBy User?           @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  offers    PreorderOffer[]
+
+  @@index([storeId])
+  @@index([status])
+  @@index([storeId, status])
+  @@index([publishedAt])
+  @@index([opensAt])
+  @@index([closesAt])
+}
+
+// Un tomo REAL del catálogo ofrecido en una campaña. `volume` → Volume (RESTRICT): no se borra un Volume
+// con ofertas. La relación es de PERSISTENCIA del ORM (Retail depende de Catálogo), no una dependencia de
+// dominio Catálogo→Retail: ningún caso de uso de Catálogo importa Retail ni usa `Volume.preorderOffers`.
+// Snapshots = display histórico estable. Precios en centavos ARS (Int, no Float). Estados: ACTIVE | HIDDEN
+// | CANCELLED.
+model PreorderOffer {
+  id                   Int      @id @default(autoincrement())
+  campaignId           Int
+  volumeId             Int
+  titleSnapshot        String
+  volumeNumberSnapshot Int?
+  publisherSnapshot    String?
+  isbnSnapshot         String?
+  listPriceCents       Int
+  preorderPriceCents   Int
+  status               String   @default("ACTIVE")
+  sortOrder            Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  campaign PreorderCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  volume   Volume           @relation(fields: [volumeId], references: [id], onDelete: Restrict)
+
+  @@unique([campaignId, volumeId])
+  @@index([campaignId])
+  @@index([volumeId])
 }
 
 // Obra de un autor independiente/local, subida por un usuario y moderada por

@@ -67,3 +67,6 @@ scripts/.backup-*.json
 
 # ephemeral postgres for identity integration tests
 .tmp-identity-pg/
+
+# Retail: Excel comerciales reales usados como evidencia de auditoría (no versionar)
+docs/crumb/
