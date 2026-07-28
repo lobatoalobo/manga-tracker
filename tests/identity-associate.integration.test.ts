@@ -121,4 +121,17 @@ describe.skipIf(!URL)("integración — Asociar (base real)", () => {
     expect(r).toMatchObject({ kind: "REJECTED", invariant: "INVALID_IDENTITY_STATE" });
     expect(await prisma.identityExternalReference.count({ where: { identityId: retired } })).toBe(0);
   });
+
+  it("índice único sobre decisionId: semillas de Conferir (decisionId NULL) coexisten entre sí y con una asociación (no-NULL)", async () => {
+    const h = await makeIdentity();
+    // Semillas estilo Conferir: decisionId NULL (el índice único trata cada NULL como distinto ⇒ múltiples NULL conviven).
+    await prisma.identityExternalReference.create({ data: { identityId: h, provider: "mangaupdates", externalId: uniq() } });
+    await prisma.identityExternalReference.create({ data: { identityId: h, provider: "mangadex", externalId: uniq() } });
+    // Asociación con decisionId NO nulo bajo el MISMO índice.
+    const r = await registro.associate(decide(h));
+    expect(r.kind).toBe("EXECUTED");
+    // Coexisten sin violar el índice único: 2 filas NULL + 1 no-NULL.
+    expect(await prisma.identityExternalReference.count({ where: { identityId: h, decisionId: null } })).toBe(2);
+    expect(await prisma.identityExternalReference.count({ where: { identityId: h, decisionId: { not: null } } })).toBe(1);
+  });
 });
