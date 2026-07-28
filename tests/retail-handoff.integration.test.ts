@@ -291,4 +291,44 @@ describe.skipIf(!URL)("integración — Preparación y retiro (Slice 7, base rea
     const { lineIds } = await arrivedOrder(storeId, owner, [{ qty: 3, arrive: 0 }]);
     expect(await countsOf(lineIds[0])).toMatchObject({ preparedQuantity: 0, pickedUpQuantity: 0 });
   });
+
+  // --- Snapshot del dueño en PICKED_UP (Slice 8, seam de colección) ----------------------------------------
+  // Completitud: todo PICKED_UP nace con `ownerUserIdSnapshot` = DUEÑO de la orden (nunca el staff/actor);
+  // PREPARED lo deja en null. Es la premisa que hace autosuficiente al hecho publicado (ADR-010 §D1.b).
+  const snapOf = (lineId: number, type: string) =>
+    prisma.storeOrderLineEvent.findMany({ where: { orderLineId: lineId, type }, select: { ownerUserIdSnapshot: true, actorUserId: true }, orderBy: { id: "asc" } });
+
+  it("Slice 8: pickup individual → snapshot = dueño de la orden, no el actor/staff", async () => {
+    const { owner, storeId } = await commerceStore();
+    const { client, lineIds } = await arrivedOrder(storeId, owner, [{ qty: 2, arrive: 2 }]);
+    await prepareOrderLine(lineIds[0], 2, owner, key(), prisma);
+    await pickupOrderLine(lineIds[0], 2, owner, key(), prisma);
+    const picked = await snapOf(lineIds[0], "PICKED_UP");
+    expect(picked).toHaveLength(1);
+    expect(client).not.toBe(owner); // el dueño (cliente) ≠ el staff que registra el retiro
+    expect(picked[0].actorUserId).toBe(owner); // actor = staff…
+    expect(picked[0].ownerUserIdSnapshot).toBe(client); // …pero el snapshot es el DUEÑO
+  });
+
+  it("Slice 8: pickup batch → cada PICKED_UP lleva el snapshot del dueño", async () => {
+    const { owner, storeId } = await commerceStore();
+    const { order, client, lineIds } = await arrivedOrder(storeId, owner, [{ qty: 1, arrive: 1 }, { qty: 2, arrive: 2 }]);
+    const items = lineIds.map((id, i) => ({ orderLineId: id, quantity: i === 0 ? 1 : 2 }));
+    await prepareOrderLines(order.id, items, owner, key(), prisma);
+    await pickupOrderLines(order.id, items, owner, key(), prisma);
+    for (const id of lineIds) {
+      const picked = await snapOf(id, "PICKED_UP");
+      expect(picked).toHaveLength(1);
+      expect(picked[0].ownerUserIdSnapshot).toBe(client);
+    }
+  });
+
+  it("Slice 8: PREPARED guarda snapshot nulo", async () => {
+    const { owner, storeId } = await commerceStore();
+    const { lineIds } = await arrivedOrder(storeId, owner, [{ qty: 2, arrive: 2 }]);
+    await prepareOrderLine(lineIds[0], 2, owner, key(), prisma);
+    const prepared = await snapOf(lineIds[0], "PREPARED");
+    expect(prepared).toHaveLength(1);
+    expect(prepared[0].ownerUserIdSnapshot).toBeNull();
+  });
 });

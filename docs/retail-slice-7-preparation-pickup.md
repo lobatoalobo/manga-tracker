@@ -116,12 +116,14 @@ En la rama `PICKUP` de `runHandoffOp` queda marcado el punto único donde iría 
 pago. La UI muestra `paymentStatus`/saldo de forma **informativa** reutilizando la lectura de Slice 6. El
 predicado (orden completa vs allocation por unidades entregadas) se decidirá con evidencia del piloto.
 
-## Seam futuro de colección (Slice 8, no implementado)
+## Seam de colección (Slice 8, IMPLEMENTADO)
 
-El evento `PICKED_UP` es el disparador de la futura colección automática: lleva `orderLineId` (⇒ `volumeId` vía
-línea, `userId` vía orden), `quantity`, timestamp y `operationKey` único. Con eso Slice 8 podrá materializar
-`OwnedVolume`/`Purchase` idempotentemente, soportando retiro parcial y múltiples retiros. La Slice 7 **no
-escribe** en la colección.
+El evento `PICKED_UP` es el disparador de la colección automática: lleva `orderLineId` (⇒ `volumeId` vía línea),
+`quantity`, `createdAt`, `operationKey` único y —agregado por Slice 8— `ownerUserIdSnapshot` (snapshot estable
+del dueño, que hace al hecho autosuficiente). Slice 8 lo proyecta idempotentemente a un modelo de posesión
+**propio** (`Acquisition` + `OwnershipPosition`), con retiros parciales y múltiples, intento inmediato + barrido
+durable. **No** usa `OwnedVolume`/`Purchase` (eje de identidad incompatible). Retail sigue sin escribir la
+colección: la orquestación vive en la server action. Ver `docs/retail-slice-8-collection-projection.md` y ADR-010.
 
 ## Alcance excluido
 

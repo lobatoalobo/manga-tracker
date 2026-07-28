@@ -8,7 +8,8 @@
  */
 import { revalidatePath } from "next/cache";
 import { requireUserId } from "@/auth";
-import { prepareOrderLine, pickupOrderLine, prepareOrderLines, pickupOrderLines, type HandoffBatchItem } from "@/lib/retail/handoff";
+import { prepareOrderLine, pickupOrderLine, prepareOrderLines, pickupOrderLines, handoffBatchItemKey, type HandoffBatchItem } from "@/lib/retail/handoff";
+import { projectPickupImmediate } from "@/lib/collection-context/projection";
 import { RetailError } from "@/lib/domain/retail/errors";
 import { StoreAuthError } from "@/lib/domain/store/authorize";
 
@@ -38,6 +39,9 @@ export async function pickupLineAction(slug: string, campaignId: number, orderId
   try {
     const userId = await requireUserId();
     await pickupOrderLine(lineId, quantity, userId, operationKey);
+    // Colección automática (Slice 8): proyección inmediata best-effort DESPUÉS del commit de Retail. Procesa solo
+    // el evento de esta acción (su operationKey exacta). `projectPickupImmediate` NUNCA lanza → no afecta el pickup.
+    await projectPickupImmediate([operationKey]);
     revalidate(slug, campaignId, orderId);
     return { ok: true };
   } catch (err) {
@@ -60,6 +64,9 @@ export async function pickupBatchAction(slug: string, campaignId: number, orderI
   try {
     const userId = await requireUserId();
     await pickupOrderLines(orderId, items, userId, batchOperationKey);
+    // Colección automática (Slice 8): proyección inmediata best-effort post-commit. Reconstruye las claves EXACTAS
+    // del lote (`handoffBatchItemKey`, misma fuente que el servicio) → procesa solo estos eventos. Nunca lanza.
+    await projectPickupImmediate(items.map((it) => handoffBatchItemKey(batchOperationKey, "pickup", it.orderLineId)));
     revalidate(slug, campaignId, orderId);
     return { ok: true };
   } catch (err) {
