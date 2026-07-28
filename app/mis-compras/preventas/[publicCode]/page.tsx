@@ -1,0 +1,65 @@
+import Link from "next/link";
+import { redirect, notFound } from "next/navigation";
+import { auth } from "@/auth";
+import { getCustomerOrder } from "@/lib/retail/orders";
+import { RetailError } from "@/lib/domain/retail/errors";
+import { formatArsCents, orderStatusLabel } from "@/lib/retail/format";
+import { ORDER_STATUS } from "@/lib/domain/retail/order";
+import CancelOrderButton from "../CancelOrderButton";
+
+export const metadata = { title: "Reserva · Nakama" };
+
+/** Detalle de una reserva del cliente (§22). Verifica propiedad; sin controles de pago/retiro. */
+export default async function MyOrderDetailPage({ params }: { params: Promise<{ publicCode: string }> }) {
+  const { publicCode } = await params;
+  const session = await auth();
+  if (!session?.user?.id) redirect(`/api/auth/signin?callbackUrl=/mis-compras/preventas/${publicCode}`);
+
+  let order;
+  try {
+    order = await getCustomerOrder(publicCode, session.user.id);
+  } catch (err) {
+    if (err instanceof RetailError) notFound(); // ORDER_NOT_FOUND / ORDER_ACCESS_DENIED → 404 (no filtra existencia)
+    throw err;
+  }
+
+  const fmtDate = (d: Date | null) => (d ? new Date(d).toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" }) : "—");
+
+  return (
+    <main className="mx-auto max-w-2xl px-5 py-8">
+      <Link href="/mis-compras/preventas" className="text-sm text-accent hover:underline">← Mis preventas</Link>
+      <div className="mt-4 flex items-center justify-between">
+        <div>
+          <p className="text-sm text-muted">{order.store.name}</p>
+          <h1 className="text-2xl font-bold">{order.campaign.title}</h1>
+          {order.campaign.weekLabel && <p className="text-sm text-muted">{order.campaign.weekLabel}</p>}
+        </div>
+        <span className="rounded-full bg-surface px-3 py-1 text-sm">{orderStatusLabel(order.status)}</span>
+      </div>
+      <p className="mt-1 text-xs text-muted">Código {order.publicCode} · {fmtDate(order.createdAt)}</p>
+
+      <ul className="mt-6 divide-y divide-border rounded-xl border border-border">
+        {order.lines.map((l) => (
+          <li key={l.id} className="flex items-center justify-between px-4 py-3 text-sm">
+            <span className="min-w-0">
+              <span className="block truncate">{l.titleSnapshot} {l.volumeNumberSnapshot != null && <span className="font-medium">#{l.volumeNumberSnapshot}</span>}</span>
+              {l.publisherSnapshot && <span className="block text-xs text-muted">{l.publisherSnapshot}</span>}
+            </span>
+            <span className="flex shrink-0 items-center gap-3">
+              <span className="text-muted">{l.quantity} × {formatArsCents(l.unitPreorderPriceCents)}</span>
+              <span className="font-semibold">{formatArsCents(l.lineTotalCents)}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-4 flex items-center justify-between">
+        <span className="text-sm text-muted">{order.lines.reduce((s, l) => s + l.quantity, 0)} unidades</span>
+        <span className="text-lg font-bold">Total {formatArsCents(order.totalCents)}</span>
+      </div>
+
+      <p className="mt-4 text-xs text-muted">La reserva no es un pago. Coordiná el pago y el retiro con la tienda.</p>
+      {order.status === ORDER_STATUS.RESERVED && <CancelOrderButton publicCode={order.publicCode} />}
+    </main>
+  );
+}

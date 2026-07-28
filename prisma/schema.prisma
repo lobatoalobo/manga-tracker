@@ -42,6 +42,10 @@ model User {
   storeMemberships  StoreMember[]
   // Retail: campañas de preventa que creó (ref de auditoría). VIRTUAL. Ver docs/retail-slice-2-preorder-campaigns.md.
   createdCampaigns  PreorderCampaign[]
+  // Retail: reservas del usuario como CLIENTE y las que canceló (auditoría). VIRTUALES (FK en StoreOrder).
+  // Ver docs/retail-slice-3-preorder-orders.md.
+  storeOrders          StoreOrder[] @relation("customerOrders")
+  cancelledStoreOrders StoreOrder[] @relation("cancelledOrders")
 }
 
 // Silenciar notis de UNA serie puntual (override del toggle global "tomos
@@ -543,9 +547,10 @@ model Volume {
   coverImage     String?
   updatedAt      DateTime @updatedAt
 
-  // Back-relation SOLO de persistencia del ORM (la exige Prisma al declarar PreorderOffer.volume). NO es
-  // una dependencia del dominio Catálogo→Retail: no la use ningún caso de uso de Catálogo (ver Retail).
+  // Back-relations SOLO de persistencia del ORM (las exige Prisma al declarar las FKs en Retail). NO son
+  // una dependencia del dominio Catálogo→Retail: no las use ningún caso de uso de Catálogo (ver Retail).
   preorderOffers PreorderOffer[]
+  storeOrderLines StoreOrderLine[]
 
   @@unique([editionId, number])
   @@index([isbn])
@@ -701,6 +706,9 @@ model Store {
   // Retail: campañas de preventa (actividad histórica). Cuelgan de Store (identidad durable), no del perfil.
   // VIRTUAL. FK con onDelete: Restrict → una tienda con campañas no se borra. Ver docs/retail-slice-2-*.
   preorderCampaigns PreorderCampaign[]
+  // Retail: reservas de clientes (actividad histórica). VIRTUAL. FK Restrict → una tienda con órdenes no se
+  // borra. Ver docs/retail-slice-3-preorder-orders.md.
+  orders            StoreOrder[]
 
   @@index([status])
 }
@@ -774,6 +782,7 @@ model PreorderCampaign {
   store     Store           @relation(fields: [storeId], references: [id], onDelete: Restrict)
   createdBy User?           @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
   offers    PreorderOffer[]
+  orders    StoreOrder[] // reservas sobre la campaña (Restrict: una campaña con órdenes no se borra)
 
   @@index([storeId])
   @@index([status])
@@ -803,11 +812,83 @@ model PreorderOffer {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  campaign PreorderCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  volume   Volume           @relation(fields: [volumeId], references: [id], onDelete: Restrict)
+  campaign   PreorderCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  volume     Volume           @relation(fields: [volumeId], references: [id], onDelete: Restrict)
+  orderLines StoreOrderLine[] // líneas de reserva que congelaron esta oferta (Restrict: no se borra si hay líneas)
 
   @@unique([campaignId, volumeId])
   @@index([campaignId])
+  @@index([volumeId])
+}
+
+// ============================================================================
+// Retail / Preventas — Slice 3: reservas (StoreOrder + StoreOrderLine).
+// Una StoreOrder es la reserva de un cliente autenticado sobre una campaña PUBLISHED y abierta. NO es una
+// Purchase (compra personal histórica): pertenece al dominio Retail, no hereda su semántica ni estados.
+// Cuelga de `Store` (identidad durable), NUNCA del perfil comercial. Las líneas guardan snapshots y precios
+// históricos propios: un cambio futuro de catálogo/oferta NO altera una orden ya creada. Estados de esta
+// slice: RESERVED | CANCELLED (pago/llegada/retiro son slices posteriores). Ver docs/retail-slice-3-preorder-orders.md.
+// ============================================================================
+
+// Reserva de preventa de un cliente. Aggregate root de sus líneas. `publicCode` legible/no enumerable para
+// que cliente y tienda la referencien (no autoriza: la lectura verifica userId o membresía). `totalCents` es
+// la suma de las líneas, calculada en el servidor. Una sola orden por (campaignId, userId) — cancelar es
+// definitivo (unicidad total; volver a reservar tras cancelar queda para una decisión futura).
+model StoreOrder {
+  id                   Int      @id @default(autoincrement())
+  publicCode           String   @unique
+  storeId              Int
+  campaignId           Int
+  userId               String? // dueño de la orden; nullable + SetNull para preservar el historial si borra su cuenta
+  status               String   @default("RESERVED")
+  customerNameSnapshot String? // nombre/email del cliente al reservar (la tienda los necesita para cumplir); no se inventa más PII
+  customerEmailSnapshot String?
+  totalCents           Int      @default(0)
+  cancelledAt          DateTime?
+  cancelledByUserId    String? // quién canceló (cliente o miembro); ref de auditoría (SetNull)
+  cancellationReason   String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  store       Store            @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  campaign    PreorderCampaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  user        User?            @relation("customerOrders", fields: [userId], references: [id], onDelete: SetNull)
+  cancelledBy User?            @relation("cancelledOrders", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
+  lines       StoreOrderLine[]
+
+  @@unique([campaignId, userId]) // una orden por usuario/campaña (idempotencia natural de la reserva)
+  @@index([userId])
+  @@index([storeId])
+  @@index([campaignId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([storeId, status])
+}
+
+// Una línea de reserva: un tomo (vía su oferta) con cantidad y precios/snapshots CONGELADOS al reservar. No
+// se re-resuelve desde el catálogo: la orden muestra sus líneas aunque el catálogo cambie luego.
+model StoreOrderLine {
+  id                     Int      @id @default(autoincrement())
+  orderId                Int
+  offerId                Int
+  volumeId               Int
+  quantity               Int
+  unitListPriceCents     Int
+  unitPreorderPriceCents Int
+  lineTotalCents         Int
+  titleSnapshot          String
+  volumeNumberSnapshot   Int?
+  publisherSnapshot      String?
+  isbnSnapshot           String?
+  createdAt              DateTime @default(now())
+
+  order  StoreOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  offer  PreorderOffer @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  volume Volume        @relation(fields: [volumeId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, offerId]) // una línea por oferta dentro de la orden (las repetidas se consolidan antes)
+  @@index([orderId])
+  @@index([offerId])
   @@index([volumeId])
 }
 

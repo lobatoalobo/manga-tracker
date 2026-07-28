@@ -1,23 +1,28 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { auth } from "@/auth";
 import { getPublicCampaign } from "@/lib/retail/public";
 import { formatArsCents } from "@/lib/retail/format";
+import ReserveForm from "./ReserveForm";
 
 export const metadata = { title: "Preventa · Nakama" };
 
 const AVAILABILITY_LABEL: Record<string, string> = {
-  OPEN: "Reservas próximamente", // Slice 3 habilitará reservar; por ahora CTA informativo
+  OPEN: "Preventa abierta",
   NOT_YET: "Aún no abrió",
   ENDED: "Cerró",
   CLOSED: "Campaña cerrada",
 };
 
-/** Página PÚBLICA de lectura de una campaña publicada (§16). Sin botón de reservar (Slice 3). */
+/** Página PÚBLICA de una campaña publicada (§16/§21). Si está abierta y hay sesión, permite reservar. */
 export default async function PublicCampaignPage({ params }: { params: Promise<{ slug: string; campaignId: string }> }) {
   const { slug, campaignId } = await params;
   const c = await getPublicCampaign(slug, Number(campaignId));
   if (!c) notFound(); // DRAFT/CANCELLED/tienda deshabilitada/otra tienda → 404
 
+  const session = await auth();
+  const authed = !!session?.user?.id;
+  const isOpen = c.availability === "OPEN";
   const fmtDate = (d: Date | null) => (d ? new Date(d).toLocaleDateString("es-AR", { day: "numeric", month: "long" }) : null);
 
   return (
@@ -36,21 +41,28 @@ export default async function PublicCampaignPage({ params }: { params: Promise<{
         )}
       </div>
 
-      <ul className="mt-6 divide-y divide-border rounded-xl border border-border">
-        {c.offers.map((o) => (
-          <li key={o.id} className="flex items-center justify-between px-4 py-3 text-sm">
-            <span>{o.title} {o.volumeNumber != null && <span className="font-medium">#{o.volumeNumber}</span>} {o.publisher && <span className="text-muted">· {o.publisher}</span>}</span>
-            <span className="flex items-center gap-2">
-              {o.discountPercent > 0 && <span className="text-muted line-through">{formatArsCents(o.listPriceCents)}</span>}
-              <span className="font-semibold">{formatArsCents(o.preorderPriceCents)}</span>
-              {o.discountPercent > 0 && <span className="text-xs text-green-600">-{o.discountPercent}%</span>}
-            </span>
-          </li>
-        ))}
-        {c.offers.length === 0 && <li className="px-4 py-3 text-sm text-muted">Sin ofertas activas.</li>}
-      </ul>
-
-      <p className="mt-6 text-center text-sm text-muted">Las reservas estarán disponibles próximamente.</p>
+      {isOpen && c.offers.length > 0 ? (
+        <ReserveForm campaignId={Number(campaignId)} offers={c.offers} authed={authed} loginHref={`/api/auth/signin?callbackUrl=/tiendas/${slug}/preventas/${campaignId}`} />
+      ) : (
+        <>
+          <ul className="mt-6 divide-y divide-border rounded-xl border border-border">
+            {c.offers.map((o) => (
+              <li key={o.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                <span>{o.title} {o.volumeNumber != null && <span className="font-medium">#{o.volumeNumber}</span>} {o.publisher && <span className="text-muted">· {o.publisher}</span>}</span>
+                <span className="flex items-center gap-2">
+                  {o.discountPercent > 0 && <span className="text-muted line-through">{formatArsCents(o.listPriceCents)}</span>}
+                  <span className="font-semibold">{formatArsCents(o.preorderPriceCents)}</span>
+                  {o.discountPercent > 0 && <span className="text-xs text-green-600">-{o.discountPercent}%</span>}
+                </span>
+              </li>
+            ))}
+            {c.offers.length === 0 && <li className="px-4 py-3 text-sm text-muted">Sin ofertas activas.</li>}
+          </ul>
+          <p className="mt-6 text-center text-sm text-muted">
+            {c.availability === "NOT_YET" ? "La preventa todavía no abrió." : "La preventa no está abierta."}
+          </p>
+        </>
+      )}
     </main>
   );
 }
