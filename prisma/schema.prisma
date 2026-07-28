@@ -37,6 +37,9 @@ model User {
   notifPref         NotificationPref?
   pushSubs          PushSubscription[]
   seriesMutes       SeriesNotifMute[]
+  // Retail: membresías comerciales (OWNER/STAFF) de tiendas que administra. Relación VIRTUAL (la FK vive
+  // en StoreMember.userId); no agrega columnas a User. Ver docs/retail-slice-1-store-commerce.md.
+  storeMemberships  StoreMember[]
 }
 
 // Silenciar notis de UNA serie puntual (override del toggle global "tomos
@@ -685,7 +688,53 @@ model Store {
   submittedBy String? // userId que la propuso (si vino de la comunidad)
   createdAt   DateTime @default(now())
 
+  // Retail: capacidad comercial OPCIONAL (una tienda del directorio puede no ser comercial). Relación
+  // VIRTUAL (la FK vive en StoreCommerceProfile.storeId); no agrega columnas a Store. Ver
+  // docs/retail-slice-1-store-commerce.md.
+  commerceProfile StoreCommerceProfile?
+
   @@index([status])
+}
+
+// ============================================================================
+// Retail / Preventas — dominio comercial (Slice 1: infraestructura de tienda).
+// SATÉLITE aditivo del directorio `Store`: NO modifica su tabla (solo relaciones virtuales). Todavía
+// NO hay campañas/ofertas/órdenes/reservas. Ver docs/retail-slice-1-store-commerce.md.
+// ============================================================================
+
+// Capacidad comercial de una tienda (1:1 con Store). Su ausencia = tienda no comercial. Aporta el `slug`
+// direccionable de las rutas comerciales y los datos que las preventas futuras usarán (pago/retiro/WA).
+model StoreCommerceProfile {
+  id                  Int      @id @default(autoincrement())
+  storeId             Int      @unique
+  slug                String   @unique // llave de ruta comercial: /tiendas/<slug>/admin
+  enabled             Boolean  @default(false) // capacidad comercial activa (pausable)
+  whatsapp            String?
+  paymentAlias        String?
+  paymentInstructions String?
+  pickupInstructions  String?
+  publicDescription   String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  store   Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  members StoreMember[]
+}
+
+// Quién administra la operación comercial de una tienda. Los CLIENTES nunca son miembros. Sin permisos
+// granulares todavía: rol OWNER | STAFF. Cuelga del perfil comercial (agregar miembros presupone perfil).
+model StoreMember {
+  id        Int      @id @default(autoincrement())
+  profileId Int
+  userId    String
+  role      String // OWNER | STAFF
+  createdAt DateTime @default(now())
+
+  profile StoreCommerceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  user    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, userId])
+  @@index([userId])
 }
 
 // Obra de un autor independiente/local, subida por un usuario y moderada por
