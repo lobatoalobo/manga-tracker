@@ -4,6 +4,7 @@ import { requireStoreMember } from "@/lib/storeAuth";
 import { StoreAuthError, STORE_ROLE } from "@/lib/domain/store/authorize";
 import { getStoreOrder } from "@/lib/retail/orders";
 import { getOrderArrivalNotificationPreview, listOrderNotifications } from "@/lib/retail/notifications";
+import { getOrderPaymentSummary } from "@/lib/retail/payments";
 import { getOrderFulfillmentSummary } from "@/lib/domain/retail/fulfillment";
 import { RetailError } from "@/lib/domain/retail/errors";
 import { formatArsCents, orderStatusLabel, orderFulfillmentLabel, lineEventTypeLabel } from "@/lib/retail/format";
@@ -11,6 +12,7 @@ import { ORDER_STATUS } from "@/lib/domain/retail/order";
 import StoreCancelButton from "./StoreCancelButton";
 import LineFulfillmentControls from "./LineFulfillmentControls";
 import ArrivalNotifications from "./ArrivalNotifications";
+import Payments from "./Payments";
 
 export const metadata = { title: "Orden · Admin · Nakama" };
 
@@ -38,7 +40,12 @@ export default async function StoreOrderDetailPage({ params }: { params: Promise
 
   const summary = getOrderFulfillmentSummary(order.lines);
   const fmt = (d: Date | null) => (d ? new Date(d).toLocaleString("es-AR") : "—");
-  const canCancelOrder = order.status === ORDER_STATUS.RESERVED && order.lines.every((l) => l.orderedQuantity === 0 && l.arrivedQuantity === 0);
+
+  // Pagos (Slice 6): resumen + historial. §9: una orden con pagos NO se cancela (simetría con "cancelada no paga").
+  const payment = await getOrderPaymentSummary(order.id, ctx.userId);
+  const canCancelOrder =
+    order.status === ORDER_STATUS.RESERVED && payment.paidCents === 0 &&
+    order.lines.every((l) => l.orderedQuantity === 0 && l.arrivedQuantity === 0);
 
   // Avisos de llegada (Slice 5): preview de pendientes + historial. Solo si la orden no está cancelada.
   const [preview, notifications] = order.status === ORDER_STATUS.CANCELLED
@@ -101,7 +108,20 @@ export default async function StoreOrderDetailPage({ params }: { params: Promise
       )}
       {canCancelOrder && <StoreCancelButton slug={slug} campaignId={cId} orderId={order.id} />}
       {order.status === ORDER_STATUS.RESERVED && !canCancelOrder && (
-        <p className="mt-6 text-xs text-muted">La operación de proveedor ya comenzó: cancelá unidades por línea; no se puede cancelar la orden completa.</p>
+        <p className="mt-6 text-xs text-muted">
+          {payment.paidCents > 0
+            ? "La orden tiene pagos registrados: no se puede cancelar (disponible cuando exista devoluciones)."
+            : "La operación de proveedor ya comenzó: cancelá unidades por línea; no se puede cancelar la orden completa."}
+        </p>
+      )}
+
+      {(order.status !== ORDER_STATUS.CANCELLED || payment.payments.length > 0) && (
+        <Payments
+          slug={slug} campaignId={cId} orderId={order.id}
+          canRegister={order.status !== ORDER_STATUS.CANCELLED}
+          summary={{ totalCents: payment.totalCents, paidCents: payment.paidCents, remainingCents: payment.remainingCents, paymentStatus: payment.paymentStatus }}
+          payments={payment.payments.map((p) => ({ id: p.id, amountCents: p.amountCents, method: p.method, paidAt: p.paidAt.toISOString(), confirmedByUserId: p.confirmedByUserId, note: p.note, createdAt: p.createdAt.toISOString() }))}
+        />
       )}
 
       {preview && (

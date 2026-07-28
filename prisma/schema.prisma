@@ -53,6 +53,8 @@ model User {
   // Retail: avisos de llegada (Slice 5) que creó o envió (auditoría). VIRTUALES. Ver docs/retail-slice-5-*.
   createdNotifications StoreOrderNotification[] @relation("notifCreatedBy")
   sentNotifications    StoreOrderNotification[] @relation("notifSentBy")
+  // Retail: pagos manuales (Slice 6) que confirmó (auditoría). VIRTUAL. Ver docs/retail-slice-6-*.
+  confirmedPayments StorePayment[] @relation("paymentConfirmedBy")
 }
 
 // Silenciar notis de UNA serie puntual (override del toggle global "tomos
@@ -854,6 +856,10 @@ model StoreOrder {
   cancelledAt          DateTime?
   cancelledByUserId    String? // quién canceló (cliente o miembro); ref de auditoría (SetNull)
   cancellationReason   String?
+  // Proyección de pago (Slice 6): DERIVADA del ledger de StorePayment (Σ CONFIRMED) contra `totalCents`
+  // congelado. La verdad es el ledger; estos campos se recomputan transaccionalmente. Ver docs/retail-slice-6-*.
+  paidCents            Int      @default(0)
+  paymentStatus        String   @default("UNPAID") // UNPAID | PARTIALLY_PAID | PAID | OVERPAID
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
@@ -863,6 +869,7 @@ model StoreOrder {
   cancelledBy User?            @relation("cancelledOrders", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
   lines       StoreOrderLine[]
   notifications StoreOrderNotification[] // avisos de llegada (Restrict: una orden con avisos no se borra)
+  payments      StorePayment[]           // pagos manuales (Restrict: una orden con pagos no se borra)
 
   @@unique([campaignId, userId]) // una orden por usuario/campaña (idempotencia natural de la reserva)
   @@index([userId])
@@ -871,6 +878,8 @@ model StoreOrder {
   @@index([status])
   @@index([createdAt])
   @@index([storeId, status])
+  @@index([paymentStatus]) // filtro de pago (Slice 6)
+  @@index([storeId, paymentStatus]) // tablero de pagos por tienda
 }
 
 // Una línea de reserva: un tomo (vía su oferta) con cantidad y precios/snapshots CONGELADOS al reservar. No
@@ -996,6 +1005,43 @@ model StoreOrderNotificationItem {
   @@unique([notificationId, orderLineId])
   @@index([orderLineId])
   @@index([notificationId])
+}
+
+// ============================================================================
+// Retail / Preventas — Slice 6: pagos manuales (StorePayment).
+// LEDGER append-only de dinero. El pago es un EJE ORTOGONAL a `order.status` y al cumplimiento por línea: la
+// tienda registra un pago que YA verificó (transferencia/efectivo por fuera); Nakama no procesa ni cobra. La
+// verdad del dinero es este ledger; `StoreOrder.paidCents`/`paymentStatus` son una proyección DERIVADA de los
+// movimientos CONFIRMED, comparada contra `StoreOrder.totalCents` congelado. En esta slice solo se crean
+// movimientos CONFIRMED; VOIDED queda reservado/documentado (sin operación que lo produzca): no se editan, no
+// se borran, no se anulan. VOID/REFUND/ADJUSTMENT son de la futura slice de correcciones. Ver
+// docs/retail-slice-6-manual-payments.md.
+// ============================================================================
+
+// Un pago manual confirmado contra una orden. `amountCents` es magnitud positiva (centavos ARS).
+// `recordOperationKey` (única) da idempotencia al registro. `note` es INTERNA (nunca al cliente ni a logs).
+model StorePayment {
+  id                Int      @id @default(autoincrement())
+  orderId           Int
+  status            String   @default("CONFIRMED") // CONFIRMED | VOIDED (VOIDED reservado; sin operación en esta slice)
+  amountCents       Int // magnitud positiva; entero ≥ 1
+  method            String // TRANSFER | CASH | MERCADOPAGO | OTHER
+  note              String? // nota interna opcional (sensible)
+  paidAt            DateTime // cuándo pagó el cliente según la tienda (puede diferir de createdAt)
+  confirmedByUserId String?
+  recordOperationKey String // idempotencia del registro
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  order       StoreOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  confirmedBy User?      @relation("paymentConfirmedBy", fields: [confirmedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([recordOperationKey])
+  @@index([orderId])
+  @@index([status])
+  @@index([method])
+  @@index([paidAt])
+  @@index([createdAt])
 }
 
 // Obra de un autor independiente/local, subida por un usuario y moderada por

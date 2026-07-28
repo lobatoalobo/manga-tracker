@@ -4,6 +4,18 @@ export function formatArsCents(cents: number): string {
   return "$" + pesos.toLocaleString("es-AR", { minimumFractionDigits: pesos % 1 === 0 ? 0 : 2, maximumFractionDigits: 2 });
 }
 
+/**
+ * Convierte un monto en PESOS (texto del formulario) a CENTAVOS enteros. Acepta coma o punto decimal y
+ * separadores de miles con punto/espacio. Devuelve `null` si no es un número válido > 0 (la validación de
+ * dominio vuelve a chequear el entero ≥ 1). PURO.
+ */
+export function pesosToCents(raw: string): number | null {
+  const cleaned = (raw ?? "").trim().replace(/\s/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".");
+  if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) return null;
+  const cents = Math.round(Number(cleaned) * 100);
+  return Number.isInteger(cents) && cents > 0 ? cents : null;
+}
+
 /** Mensajes en español para los códigos de error de dominio (para la UI). */
 export const RETAIL_ERROR_LABEL: Record<string, string> = {
   CAMPAIGN_NOT_FOUND: "La campaña no existe.",
@@ -49,6 +61,12 @@ export const RETAIL_ERROR_LABEL: Record<string, string> = {
   INVALID_NOTIFICATION_QUANTITY: "Cantidad inválida para el aviso.",
   ARRIVAL_ALREADY_NOTIFIED: "Esas unidades ya fueron informadas.",
   ARRIVAL_NOTIFICATION_EXCEEDS_PENDING: "Supera las unidades llegadas sin informar.",
+  // Pagos manuales (Slice 6)
+  PAYMENT_NOT_FOUND: "El pago no existe.",
+  INVALID_PAYMENT_AMOUNT: "Monto de pago inválido.",
+  INVALID_PAYMENT_METHOD: "Método de pago inválido.",
+  PAYMENT_OPERATION_KEY_CONFLICT: "Ese registro cambió; reintentá.",
+  ORDER_HAS_PAYMENTS: "La orden tiene pagos registrados; no se puede cancelar (disponible cuando exista devoluciones).",
   FORBIDDEN_ROLE: "Tu rol no permite esta acción.",
   NOT_A_MEMBER: "No sos miembro de esta tienda.",
   STORE_DISABLED: "La tienda está deshabilitada.",
@@ -113,4 +131,26 @@ export const NOTIFICATION_STATUS_LABEL: Record<string, string> = {
 };
 export function notificationStatusLabel(status: string): string {
   return NOTIFICATION_STATUS_LABEL[status] ?? status;
+}
+
+/** Etiquetas del estado de pago DERIVADO de una orden (Slice 6). */
+export const PAYMENT_STATUS_LABEL: Record<string, string> = {
+  UNPAID: "Sin pagar",
+  PARTIALLY_PAID: "Pago parcial",
+  PAID: "Pagado",
+  OVERPAID: "Sobrepago",
+};
+export function paymentStatusLabel(status: string): string {
+  return PAYMENT_STATUS_LABEL[status] ?? status;
+}
+
+/** Etiquetas de método de pago (Slice 6). */
+export const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  TRANSFER: "Transferencia",
+  CASH: "Efectivo",
+  MERCADOPAGO: "Mercado Pago",
+  OTHER: "Otro",
+};
+export function paymentMethodLabel(method: string): string {
+  return PAYMENT_METHOD_LABEL[method] ?? method;
 }
