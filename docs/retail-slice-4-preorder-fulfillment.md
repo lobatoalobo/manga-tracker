@@ -24,6 +24,12 @@ usa **SetNull**.
 `operationKey` (único), `note?`, `createdAt`. No copia snapshots comerciales (ya viven en la línea). No se
 edita ni borra desde la UI.
 
+**Append-only (invariante).** `StoreOrderLineEvent` es estrictamente append-only: ningún flujo hace `UPDATE`
+ni `DELETE` de un evento existente (ni por Prisma ni por SQL crudo) — sobre la tabla sólo hay `create` +
+lecturas. La historia operativa es **inmutable**; **toda corrección se representa agregando un nuevo evento**
+explícito y auditado (p. ej. un `CANCELLED`), nunca editando ni borrando los previos. Los slices posteriores
+que reutilizan el ledger (avisos, pagos, preparación/retiro) quedan sujetos a **esta misma regla**.
+
 ## State machine y derivación (§4/§8)
 
 Estados de línea: `RESERVED | ORDERED | ARRIVED | CANCELLED`. Se **derivan** de los contadores:
