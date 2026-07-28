@@ -61,11 +61,17 @@ try {
     "tests/collection-immediate.integration.test.ts",
     "tests/collection-sweep.integration.test.ts",
     "tests/collection-read-audit.integration.test.ts",
+    "tests/collection-read-collection-adapter.integration.test.ts",
+    "tests/collection-read-legacy-adapter.integration.test.ts",
+    "tests/collection-read-equivalence.integration.test.ts",
+    "tests/collection-read-share-stat.integration.test.ts",
   ];
   execSync(`npx vitest run --no-file-parallelism ${suites.join(" ")}`, {
     stdio: "inherit",
     cwd: root,
-    env: { ...process.env, IDENTITY_TEST_DATABASE_URL: url },
+    // `DATABASE_URL` también apunta a la base efímera: los tests que usan el `prisma` global (p. ej. la equivalencia
+    // llama a `getCollectionItems`, que usa `@/lib/prisma`) deben leer de la MISMA base que el client explícito.
+    env: { ...process.env, IDENTITY_TEST_DATABASE_URL: url, DATABASE_URL: url },
   });
 } catch (err) {
   failed = true;
