@@ -168,17 +168,27 @@ export async function getCampaignFulfillment(campaignId: number, actorUserId: st
   // Solo líneas de órdenes NO canceladas cuentan como demanda real de la campaña.
   const lines = await client.storeOrderLine.findMany({
     where: { order: { campaignId, status: { not: ORDER_STATUS.CANCELLED } } },
-    select: { offerId: true, quantity: true, orderedQuantity: true, arrivedQuantity: true, cancelledQuantity: true, titleSnapshot: true, volumeNumberSnapshot: true },
+    select: { id: true, offerId: true, quantity: true, orderedQuantity: true, arrivedQuantity: true, cancelledQuantity: true, titleSnapshot: true, volumeNumberSnapshot: true },
   });
+  // Unidades ya INFORMADAS por línea (ítems de avisos SENT); "llegó sin informar" = arrived − informado (§22).
+  const notifiedItems = await client.storeOrderNotificationItem.findMany({
+    where: { orderLine: { order: { campaignId, status: { not: ORDER_STATUS.CANCELLED } } }, notification: { status: "SENT", type: "ARRIVAL" } },
+    select: { orderLineId: true, quantity: true },
+  });
+  const notifiedByLine = new Map<number, number>();
+  for (const it of notifiedItems) notifiedByLine.set(it.orderLineId, (notifiedByLine.get(it.orderLineId) ?? 0) + it.quantity);
 
-  const byOffer = new Map<number, { offerId: number; title: string; volumeNumber: number | null; reserved: number; ordered: number; arrived: number; cancelled: number; pending: number; orderCount: number }>();
+  const byOffer = new Map<number, { offerId: number; title: string; volumeNumber: number | null; reserved: number; ordered: number; arrived: number; cancelled: number; pending: number; notified: number; arrivedNotInformed: number; orderCount: number }>();
   for (const l of lines) {
-    const row = byOffer.get(l.offerId) ?? { offerId: l.offerId, title: l.titleSnapshot, volumeNumber: l.volumeNumberSnapshot, reserved: 0, ordered: 0, arrived: 0, cancelled: 0, pending: 0, orderCount: 0 };
+    const row = byOffer.get(l.offerId) ?? { offerId: l.offerId, title: l.titleSnapshot, volumeNumber: l.volumeNumberSnapshot, reserved: 0, ordered: 0, arrived: 0, cancelled: 0, pending: 0, notified: 0, arrivedNotInformed: 0, orderCount: 0 };
+    const notified = notifiedByLine.get(l.id) ?? 0;
     row.reserved += l.quantity;
     row.ordered += l.orderedQuantity;
     row.arrived += l.arrivedQuantity;
     row.cancelled += l.cancelledQuantity;
     row.pending += pendingQuantity(l);
+    row.notified += notified;
+    row.arrivedNotInformed += Math.max(0, l.arrivedQuantity - notified);
     row.orderCount += 1;
     byOffer.set(l.offerId, row);
   }

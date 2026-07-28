@@ -69,6 +69,20 @@ export default async function MyOrderDetailPage({ params }: { params: Promise<{ 
 
       <p className="mt-4 text-xs text-muted">La reserva no es un pago. Coordiná el pago y el retiro con la tienda.</p>
       {order.status === ORDER_STATUS.RESERVED && <CancelOrderButton publicCode={order.publicCode} />}
+
+      {order.notifications.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold">Avisos de la tienda</h2>
+          <ul className="mt-3 space-y-3">
+            {order.notifications.map((n) => (
+              <li key={n.id} className="rounded-xl border border-border p-4">
+                <p className="text-xs text-muted">{n.sentAt ? new Date(n.sentAt).toLocaleString("es-AR") : ""}</p>
+                <pre className="mt-1 whitespace-pre-wrap text-sm">{n.messageSnapshot}</pre>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </main>
   );
 }

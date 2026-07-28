@@ -33,7 +33,10 @@ export default async function CampaignFulfillmentPage({ params }: { params: Prom
     <main className="mx-auto max-w-3xl px-5 py-8">
       <div className="flex items-center justify-between">
         <Link href={`/tiendas/${slug}/admin/preventas/${id}`} className="text-sm text-accent hover:underline">← Campaña</Link>
-        <Link href={`/tiendas/${slug}/admin/preventas/${id}/ordenes`} className="text-sm text-accent hover:underline">Órdenes →</Link>
+        <span className="flex gap-4">
+          <Link href={`/tiendas/${slug}/admin/preventas/${id}/ordenes`} className="text-sm text-accent hover:underline">Órdenes →</Link>
+          <Link href={`/tiendas/${slug}/admin/preventas/${id}/avisos`} className="text-sm text-accent hover:underline">Avisos →</Link>
+        </span>
       </div>
       <h1 className="mt-4 mb-6 text-2xl font-bold">Cumplimiento · {data.campaign.title}</h1>
 
@@ -45,6 +48,8 @@ export default async function CampaignFulfillmentPage({ params }: { params: Prom
               <th className="px-2 py-2 text-right">Reserv.</th>
               <th className="px-2 py-2 text-right">Pedido</th>
               <th className="px-2 py-2 text-right">Llegó</th>
+              <th className="px-2 py-2 text-right">Informado</th>
+              <th className="px-2 py-2 text-right">Sin informar</th>
               <th className="px-2 py-2 text-right">Cancel.</th>
               <th className="px-2 py-2 text-right">Pend.</th>
               <th className="px-2 py-2 text-right">Órdenes</th>
@@ -57,13 +62,15 @@ export default async function CampaignFulfillmentPage({ params }: { params: Prom
                 <td className="px-2 py-2 text-right">{o.reserved}</td>
                 <td className="px-2 py-2 text-right">{o.ordered}</td>
                 <td className="px-2 py-2 text-right text-green-700">{o.arrived}</td>
+                <td className="px-2 py-2 text-right">{o.notified}</td>
+                <td className="px-2 py-2 text-right font-medium text-amber-700">{o.arrivedNotInformed}</td>
                 <td className="px-2 py-2 text-right">{o.cancelled}</td>
                 <td className="px-2 py-2 text-right font-medium">{o.pending}</td>
                 <td className="px-2 py-2 text-right text-muted">{o.orderCount}</td>
               </tr>
             ))}
             {data.offers.length === 0 && (
-              <tr><td colSpan={7} className="px-3 py-3 text-muted">Todavía no hay demanda (sin órdenes activas).</td></tr>
+              <tr><td colSpan={9} className="px-3 py-3 text-muted">Todavía no hay demanda (sin órdenes activas).</td></tr>
             )}
           </tbody>
         </table>

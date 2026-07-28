@@ -39,6 +39,16 @@ export const RETAIL_ERROR_LABEL: Record<string, string> = {
   ORDER_FULFILLMENT_STARTED: "La operación de proveedor ya comenzó; cancelá las líneas pendientes.",
   CAMPAIGN_HAS_ACTIVE_ORDERS: "La campaña tiene órdenes activas.",
   OPERATION_KEY_CONFLICT: "Esa operación cambió; reintentá.",
+  // Avisos de llegada (Slice 5)
+  NOTIFICATION_NOT_FOUND: "El aviso no existe.",
+  NOTIFICATION_ACCESS_DENIED: "No tenés acceso a este aviso.",
+  NOTIFICATION_NOT_EDITABLE: "El aviso no se puede editar en su estado actual.",
+  NOTIFICATION_ALREADY_SENT: "El aviso ya fue enviado.",
+  NOTIFICATION_OPERATION_KEY_CONFLICT: "Ese envío cambió; reintentá.",
+  EMPTY_NOTIFICATION: "Elegí al menos una línea con unidades por informar.",
+  INVALID_NOTIFICATION_QUANTITY: "Cantidad inválida para el aviso.",
+  ARRIVAL_ALREADY_NOTIFIED: "Esas unidades ya fueron informadas.",
+  ARRIVAL_NOTIFICATION_EXCEEDS_PENDING: "Supera las unidades llegadas sin informar.",
   FORBIDDEN_ROLE: "Tu rol no permite esta acción.",
   NOT_A_MEMBER: "No sos miembro de esta tienda.",
   STORE_DISABLED: "La tienda está deshabilitada.",
@@ -93,4 +103,14 @@ export const LINE_EVENT_TYPE_LABEL: Record<string, string> = {
 };
 export function lineEventTypeLabel(type: string): string {
   return LINE_EVENT_TYPE_LABEL[type] ?? type;
+}
+
+/** Etiquetas de estado de un aviso de llegada (Slice 5). */
+export const NOTIFICATION_STATUS_LABEL: Record<string, string> = {
+  DRAFT: "Borrador",
+  SENT: "Enviado",
+  CANCELLED: "Cancelado",
+};
+export function notificationStatusLabel(status: string): string {
+  return NOTIFICATION_STATUS_LABEL[status] ?? status;
 }

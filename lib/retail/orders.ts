@@ -174,7 +174,7 @@ const ORDER_LINE_SELECT = {
  * orden actualizada. `who` es el actor (cliente o miembro) para la auditoría.
  */
 async function cancelWholeOrder(
-  tx: Pick<PrismaClient, "storeOrderLine" | "storeOrderLineEvent" | "storeOrder">,
+  tx: Pick<PrismaClient, "storeOrderLine" | "storeOrderLineEvent" | "storeOrder" | "storeOrderNotification">,
   orderId: number, who: string, reason: string | null, now: Date,
 ) {
   const lines = await tx.storeOrderLine.findMany({
@@ -182,6 +182,8 @@ async function cancelWholeOrder(
     select: { id: true, quantity: true, orderedQuantity: true, arrivedQuantity: true, cancelledQuantity: true, cancelledAt: true },
   });
   assertNoFulfillmentStarted(lines); // rechaza si ya se pidió/llegó algo → ORDER_FULFILLMENT_STARTED
+  // §15: los avisos DRAFT (aún no enviados) se cancelan automáticamente; los SENT se conservan (historial).
+  await tx.storeOrderNotification.updateMany({ where: { orderId, status: "DRAFT" }, data: { status: "CANCELLED", cancelledAt: now } });
   const trimmed = reason?.trim()?.slice(0, 280) || null;
   for (const l of lines) {
     const pending = pendingQuantity(l);
@@ -230,6 +232,12 @@ export async function getCustomerOrder(publicCode: string, actorUserId: string |
       store: { select: { name: true, commerceProfile: { select: { slug: true } } } },
       campaign: { select: { id: true, title: true, weekLabel: true, status: true, opensAt: true, closesAt: true } },
       lines: { orderBy: { id: "asc" }, select: ORDER_LINE_SELECT },
+      // Avisos SENT visibles al cliente (§21): fecha, mensaje e ítems. Nunca DRAFT/CANCELLED ni datos internos.
+      notifications: {
+        where: { status: "SENT" },
+        orderBy: { sentAt: "desc" },
+        select: { id: true, messageSnapshot: true, sentAt: true, items: { select: { quantity: true, orderLine: { select: { titleSnapshot: true, volumeNumberSnapshot: true } } } } },
+      },
     },
   });
   if (!order) throw new RetailError(RETAIL_ERROR.ORDER_NOT_FOUND);
