@@ -27,8 +27,10 @@ import {
   type OrderStatus,
   type RequestedLine,
 } from "@/lib/domain/retail/order";
+import { LINE_EVENT_TYPE, deriveFulfillmentStatus, assertNoFulfillmentStarted, pendingQuantity } from "@/lib/domain/retail/fulfillment";
 import { RetailError, RETAIL_ERROR } from "@/lib/domain/retail/errors";
 import { generatePublicCode } from "@/lib/retail/publicCode";
+import { randomUUID } from "node:crypto";
 
 type Client = PrismaClient;
 
@@ -161,7 +163,47 @@ export async function createStoreOrder(input: CreateOrderInput, actorUserId: str
 const ORDER_LINE_SELECT = {
   id: true, offerId: true, volumeId: true, quantity: true, unitListPriceCents: true, unitPreorderPriceCents: true,
   lineTotalCents: true, titleSnapshot: true, volumeNumberSnapshot: true, publisherSnapshot: true, isbnSnapshot: true,
+  // Cumplimiento (Slice 4): el cliente y la tienda ven el estado operativo por línea.
+  fulfillmentStatus: true, orderedQuantity: true, arrivedQuantity: true, cancelledQuantity: true,
+  orderedAt: true, arrivedAt: true, cancelledAt: true,
 } as const;
+
+/**
+ * Cancela una orden COMPLETA (uso interno, bajo lock): exige que ninguna línea tenga operación física
+ * iniciada (§12) y luego cancela todas sus líneas por completo, registrando un evento por línea. Devuelve la
+ * orden actualizada. `who` es el actor (cliente o miembro) para la auditoría.
+ */
+async function cancelWholeOrder(
+  tx: Pick<PrismaClient, "storeOrderLine" | "storeOrderLineEvent" | "storeOrder">,
+  orderId: number, who: string, reason: string | null, now: Date,
+) {
+  const lines = await tx.storeOrderLine.findMany({
+    where: { orderId },
+    select: { id: true, quantity: true, orderedQuantity: true, arrivedQuantity: true, cancelledQuantity: true, cancelledAt: true },
+  });
+  assertNoFulfillmentStarted(lines); // rechaza si ya se pidió/llegó algo → ORDER_FULFILLMENT_STARTED
+  const trimmed = reason?.trim()?.slice(0, 280) || null;
+  for (const l of lines) {
+    const pending = pendingQuantity(l);
+    if (pending <= 0) continue; // ya terminal (defensivo: no debería pasar sin fulfillment iniciado)
+    const cancelledQuantity = l.cancelledQuantity + pending;
+    const next = { quantity: l.quantity, orderedQuantity: l.orderedQuantity, arrivedQuantity: l.arrivedQuantity, cancelledQuantity };
+    await tx.storeOrderLine.update({
+      where: { id: l.id },
+      data: {
+        cancelledQuantity, fulfillmentStatus: deriveFulfillmentStatus(next),
+        cancelledAt: l.cancelledAt ?? now, cancelledBy: { connect: { id: who } }, cancellationReason: trimmed,
+      },
+    });
+    await tx.storeOrderLineEvent.create({
+      data: { orderLineId: l.id, type: LINE_EVENT_TYPE.CANCELLED, quantity: pending, actorUserId: who, operationKey: randomUUID(), note: trimmed },
+    });
+  }
+  return tx.storeOrder.update({
+    where: { id: orderId },
+    data: { status: ORDER_STATUS.CANCELLED, cancelledAt: now, cancelledByUserId: who, cancellationReason: trimmed },
+  });
+}
 
 /** Lista las órdenes del cliente (las suyas). Datos mínimos + tienda/campaña + conteo de unidades. */
 export async function listCustomerOrders(actorUserId: string | null, client: Client = prisma) {
@@ -219,7 +261,8 @@ export async function cancelCustomerOrder(publicCode: string, actorUserId: strin
       now,
     );
     assertCustomerCancellable(order.status as OrderStatus, campaignOpen);
-    return tx.storeOrder.update({ where: { id: order.id }, data: { status: ORDER_STATUS.CANCELLED, cancelledAt: now, cancelledByUserId: userId } });
+    // §12: el cliente solo cancela si NINGUNA unidad se pidió/llegó (lo valida cancelWholeOrder).
+    return cancelWholeOrder(tx, order.id, userId, null, now);
   });
 }
 
@@ -261,8 +304,15 @@ export async function getStoreOrder(orderId: number, actorUserId: string | null,
     select: {
       id: true, publicCode: true, storeId: true, status: true, totalCents: true, createdAt: true, cancelledAt: true, cancellationReason: true,
       customerNameSnapshot: true, customerEmailSnapshot: true,
-      campaign: { select: { id: true, title: true, weekLabel: true } },
-      lines: { orderBy: { id: "asc" }, select: ORDER_LINE_SELECT },
+      campaign: { select: { id: true, title: true, weekLabel: true, status: true } },
+      lines: {
+        orderBy: { id: "asc" },
+        select: {
+          ...ORDER_LINE_SELECT,
+          cancellationReason: true,
+          events: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, type: true, quantity: true, actorUserId: true, note: true, createdAt: true } },
+        },
+      },
     },
   });
   if (!order) throw new RetailError(RETAIL_ERROR.ORDER_NOT_FOUND);
@@ -277,10 +327,7 @@ export async function cancelStoreOrder(orderId: number, actorUserId: string | nu
     const order = await lockOrder(tx, orderId);
     await authorizeStoreOrderAccess(tx, order.storeId, actor);
     assertStoreCancellable(order.status as OrderStatus);
-    const trimmed = reason?.trim();
-    return tx.storeOrder.update({
-      where: { id: order.id },
-      data: { status: ORDER_STATUS.CANCELLED, cancelledAt: now, cancelledByUserId: actor, cancellationReason: trimmed ? trimmed.slice(0, 280) : null },
-    });
+    // §12 (MVP seguro): rechaza si la operación física ya comenzó; la tienda debe cancelar las líneas antes.
+    return cancelWholeOrder(tx, order.id, actor, reason, now);
   });
 }

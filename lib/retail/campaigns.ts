@@ -16,6 +16,7 @@ import {
   type CampaignStatus,
 } from "@/lib/domain/retail/campaign";
 import { OFFER_STATUS } from "@/lib/domain/retail/offer";
+import { ORDER_STATUS } from "@/lib/domain/retail/order";
 import { CAMPAIGN_ACTION } from "@/lib/domain/retail/policy";
 import { RetailError, RETAIL_ERROR } from "@/lib/domain/retail/errors";
 import { authorizeCampaignAction } from "@/lib/retail/auth";
@@ -142,7 +143,11 @@ export async function closePreorderCampaign(campaignId: number, actorUserId: str
   });
 }
 
-/** CANCELA una campaña (conserva historial). Idempotente si ya CANCELLED. */
+/**
+ * CANCELA una campaña (conserva historial). Idempotente si ya CANCELLED. §18: NO se puede cancelar una
+ * campaña con órdenes activas (RESERVED) — la tienda debe resolver primero esas órdenes/líneas; sin órdenes
+ * activas, cancela normalmente. No hace cancelación masiva automática.
+ */
 export async function cancelPreorderCampaign(campaignId: number, actorUserId: string | null, client: Client = prisma, now: Date = new Date()) {
   return client.$transaction(async (tx) => {
     const c = requireCampaign(await lockCampaign(tx, campaignId));
@@ -150,6 +155,8 @@ export async function cancelPreorderCampaign(campaignId: number, actorUserId: st
     const status = c.status as CampaignStatus;
     if (status === CAMPAIGN_STATUS.CANCELLED) return tx.preorderCampaign.findUnique({ where: { id: campaignId } }); // idempotente
     assertCampaignTransition(status, CAMPAIGN_STATUS.CANCELLED);
+    const activeOrders = await tx.storeOrder.count({ where: { campaignId, status: { not: ORDER_STATUS.CANCELLED } } });
+    if (activeOrders > 0) throw new RetailError(RETAIL_ERROR.CAMPAIGN_HAS_ACTIVE_ORDERS, "la campaña tiene órdenes activas; cancelalas primero");
     return tx.preorderCampaign.update({ where: { id: campaignId }, data: { status: CAMPAIGN_STATUS.CANCELLED, closedAt: now } });
   });
 }

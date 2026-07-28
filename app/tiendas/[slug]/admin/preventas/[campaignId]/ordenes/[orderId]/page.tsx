@@ -3,14 +3,16 @@ import { notFound } from "next/navigation";
 import { requireStoreMember } from "@/lib/storeAuth";
 import { StoreAuthError, STORE_ROLE } from "@/lib/domain/store/authorize";
 import { getStoreOrder } from "@/lib/retail/orders";
+import { getOrderFulfillmentSummary } from "@/lib/domain/retail/fulfillment";
 import { RetailError } from "@/lib/domain/retail/errors";
-import { formatArsCents, orderStatusLabel } from "@/lib/retail/format";
+import { formatArsCents, orderStatusLabel, orderFulfillmentLabel, lineEventTypeLabel } from "@/lib/retail/format";
 import { ORDER_STATUS } from "@/lib/domain/retail/order";
 import StoreCancelButton from "./StoreCancelButton";
+import LineFulfillmentControls from "./LineFulfillmentControls";
 
 export const metadata = { title: "Orden · Admin · Nakama" };
 
-/** Detalle admin de una orden (§23): cliente, líneas, cantidades, precios, total. Aísla por storeId real. */
+/** Detalle admin de una orden (§15): cliente, líneas con cumplimiento por cantidad, historial y acciones. */
 export default async function StoreOrderDetailPage({ params }: { params: Promise<{ slug: string; campaignId: string; orderId: string }> }) {
   const { slug, campaignId, orderId } = await params;
   const cId = Number(campaignId);
@@ -30,46 +32,70 @@ export default async function StoreOrderDetailPage({ params }: { params: Promise
     if (err instanceof StoreAuthError || err instanceof RetailError) notFound();
     throw err;
   }
-  if (order.storeId !== ctx.profileRow.storeId) notFound(); // aislamiento entre tiendas
+  if (order.storeId !== ctx.profileRow.storeId) notFound();
 
-  const fmtDate = (d: Date | null) => (d ? new Date(d).toLocaleString("es-AR") : "—");
+  const summary = getOrderFulfillmentSummary(order.lines);
+  const fmt = (d: Date | null) => (d ? new Date(d).toLocaleString("es-AR") : "—");
+  const canCancelOrder = order.status === ORDER_STATUS.RESERVED && order.lines.every((l) => l.orderedQuantity === 0 && l.arrivedQuantity === 0);
 
   return (
     <main className="mx-auto max-w-2xl px-5 py-8">
-      <Link href={`/tiendas/${slug}/admin/preventas/${cId}/ordenes`} className="text-sm text-accent hover:underline">← Órdenes</Link>
+      <div className="flex items-center justify-between">
+        <Link href={`/tiendas/${slug}/admin/preventas/${cId}/ordenes`} className="text-sm text-accent hover:underline">← Órdenes</Link>
+        <Link href={`/tiendas/${slug}/admin/preventas/${cId}/cumplimiento`} className="text-sm text-accent hover:underline">Cumplimiento →</Link>
+      </div>
       <div className="mt-4 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">{order.customerNameSnapshot ?? "Cliente"}</h1>
           {order.customerEmailSnapshot && <p className="text-sm text-muted">{order.customerEmailSnapshot}</p>}
         </div>
-        <span className="rounded-full bg-surface px-3 py-1 text-sm">{orderStatusLabel(order.status)}</span>
+        <div className="flex flex-col items-end gap-1">
+          <span className="rounded-full bg-surface px-3 py-1 text-sm">{orderStatusLabel(order.status)}</span>
+          <span className="text-xs text-muted">{orderFulfillmentLabel(summary)}</span>
+        </div>
       </div>
-      <p className="mt-1 text-xs text-muted">{order.campaign.title} · Código {order.publicCode} · {fmtDate(order.createdAt)}</p>
+      <p className="mt-1 text-xs text-muted">{order.campaign.title} · Código {order.publicCode} · {fmt(order.createdAt)}</p>
 
-      <ul className="mt-6 divide-y divide-border rounded-xl border border-border">
+      <div className="mt-6 space-y-4">
         {order.lines.map((l) => (
-          <li key={l.id} className="flex items-center justify-between px-4 py-3 text-sm">
-            <span className="min-w-0">
-              <span className="block truncate">{l.titleSnapshot} {l.volumeNumberSnapshot != null && <span className="font-medium">#{l.volumeNumberSnapshot}</span>}</span>
-              {l.publisherSnapshot && <span className="block text-xs text-muted">{l.publisherSnapshot}{l.isbnSnapshot ? ` · ${l.isbnSnapshot}` : ""}</span>}
-            </span>
-            <span className="flex shrink-0 items-center gap-3">
-              <span className="text-muted">{l.quantity} × {formatArsCents(l.unitPreorderPriceCents)}</span>
-              <span className="font-semibold">{formatArsCents(l.lineTotalCents)}</span>
-            </span>
-          </li>
+          <div key={l.id} className="space-y-2">
+            {order.status === ORDER_STATUS.RESERVED ? (
+              <LineFulfillmentControls
+                slug={slug} campaignId={cId} orderId={order.id}
+                line={{ id: l.id, title: l.titleSnapshot, volumeNumber: l.volumeNumberSnapshot, quantity: l.quantity, orderedQuantity: l.orderedQuantity, arrivedQuantity: l.arrivedQuantity, cancelledQuantity: l.cancelledQuantity, fulfillmentStatus: l.fulfillmentStatus }}
+              />
+            ) : (
+              <div className="rounded-xl border border-border p-4 text-sm">
+                <span className="font-medium">{l.titleSnapshot} {l.volumeNumberSnapshot != null && <span>#{l.volumeNumberSnapshot}</span>}</span>
+                <p className="mt-1 text-xs text-muted">Reservado {l.quantity} · Llegó {l.arrivedQuantity} · Cancelado {l.cancelledQuantity}</p>
+              </div>
+            )}
+            {l.events.length > 0 && (
+              <details className="px-2 text-xs text-muted">
+                <summary className="cursor-pointer">Historial ({l.events.length})</summary>
+                <ul className="mt-1 space-y-1">
+                  {l.events.map((e) => (
+                    <li key={e.id}>{fmt(e.createdAt)} · {lineEventTypeLabel(e.type)} ×{e.quantity}{e.note ? ` · ${e.note}` : ""}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
         ))}
-      </ul>
+      </div>
 
       <div className="mt-4 flex items-center justify-between">
-        <span className="text-sm text-muted">{order.lines.reduce((s, l) => s + l.quantity, 0)} unidades</span>
+        <span className="text-sm text-muted">{order.lines.reduce((s, l) => s + l.quantity, 0)} unidades reservadas</span>
         <span className="text-lg font-bold">Total {formatArsCents(order.totalCents)}</span>
       </div>
 
       {order.status === ORDER_STATUS.CANCELLED && (
-        <p className="mt-4 text-sm text-muted">Cancelada {fmtDate(order.cancelledAt)}{order.cancellationReason ? ` · ${order.cancellationReason}` : ""}</p>
+        <p className="mt-4 text-sm text-muted">Orden cancelada {fmt(order.cancelledAt)}{order.cancellationReason ? ` · ${order.cancellationReason}` : ""}</p>
       )}
-      {order.status === ORDER_STATUS.RESERVED && <StoreCancelButton slug={slug} campaignId={cId} orderId={order.id} />}
+      {canCancelOrder && <StoreCancelButton slug={slug} campaignId={cId} orderId={order.id} />}
+      {order.status === ORDER_STATUS.RESERVED && !canCancelOrder && (
+        <p className="mt-6 text-xs text-muted">La operación de proveedor ya comenzó: cancelá unidades por línea; no se puede cancelar la orden completa.</p>
+      )}
     </main>
   );
 }
