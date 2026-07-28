@@ -214,3 +214,19 @@ Resultados: `npm run test:identity-it` → **29 passed** (Conferir 11 + Asociar 
   WHERE identityId=src`) → flipear-estado se ejecuta sin violar constraints intermedios).
 
 Ninguna afirmación fue refutada. No se requirió trigger ni lock en Asociar.
+
+## Evidencia adicional — validación contra un REDIRECTED real (slice Fusionar)
+
+Al implementar Fusionar (ver `docs/identity-merge-slice.md`), la FK compuesta y el orden de mutación se
+validaron ya no contra un REDIRECTED "fabricado" sino contra uno **producido por una fusión real**:
+- **Mover-antes-de-flipear CONFIRMADO end-to-end:** `applyIdentityMergeInTx` mueve las referencias
+  (`UPDATE identityId`) y luego flipea la absorbida a `REDIRECTED`; el `ON UPDATE RESTRICT` de la FK compuesta
+  es la red que haría fallar el orden inverso. La carrera Fusionar-vs-Asociar sobre la absorbida nunca deja
+  una referencia sobre una identidad REDIRECTED (verificado en Postgres real).
+- **Nuevo CHECK de coherencia (slice Fusionar):** la migración `20260724000000` agrega
+  `REDIRECTED ⟺ redirectsToId IS NOT NULL`. Esto **endureció** el estado REDIRECTED: los tests de este ADR que
+  fabricaban un REDIRECTED sin destino (raw `UPDATE state='REDIRECTED'`) se ajustaron para construirlo con un
+  destino ACTIVE. Las garantías de ADR-009 (FK compuesta, CHECK de `identityState`, RESTRICT) **no cambiaron**
+  y siguen verdes; el ajuste fue solo en cómo los tests materializan un REDIRECTED válido.
+- **Compatibilidad con el UPDATE masivo de Fusionar CONFIRMADA:** `UPDATE … WHERE identityId=absorbida` →
+  flip de estado se ejecuta sin violar constraints intermedios, tal como este ADR anticipaba.

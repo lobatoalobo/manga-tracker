@@ -18,20 +18,29 @@ describe.skipIf(!URL)("integración — integridad de referencias (ADR-009, base
   let seq = 0;
   const uniq = () => `ri-${Date.now()}-${seq++}`;
 
-  async function identity(state = "ACTIVE"): Promise<number> {
+  async function identity(state = "ACTIVE", redirectsToId: number | null = null): Promise<number> {
     const t = uniq();
     const w = await prisma.work.create({ data: { title: t, normTitle: t, type: "MANGA" }, select: { id: true } });
     const i = await prisma.catalogIdentity.create({
-      data: { state, contentClass: "MANGA", designatedWorkId: w.id, decisionId: uniq(), decisionFingerprint: uniq() },
+      data: { state, contentClass: "MANGA", designatedWorkId: w.id, decisionId: uniq(), decisionFingerprint: uniq(), redirectsToId },
       select: { id: true },
     });
     return i.id;
   }
+  // Una identidad REDIRECTED VÁLIDA (el slice Fusionar exige REDIRECTED ⟺ redirectsToId no nulo): redirige
+  // a un destino ACTIVE fresco. Sirve como "identidad no-ACTIVE" para probar la FK compuesta de ADR-009.
+  const redirected = async (): Promise<number> => identity("REDIRECTED", await identity());
   const decide = (h: number, ext = uniq()) =>
     associateExternalReferenceDecision({ decisionId: uniq(), targetHandle: h, provider: "mangaupdates", externalId: ext });
 
   beforeAll(async () => { await prisma.$queryRaw`SELECT 1`; });
-  afterEach(async () => { await prisma.identityExternalReference.deleteMany({}); await prisma.catalogIdentity.deleteMany({}); });
+  afterEach(async () => {
+    await prisma.identityExternalReference.deleteMany({});
+    // desarmar redirecciones (state + redirect en el MISMO update por el CHECK de coherencia) antes de borrar
+    await prisma.catalogIdentity.updateMany({ data: { state: "ACTIVE", redirectsToId: null } });
+    await prisma.catalogIdentity.deleteMany({});
+    await prisma.work.deleteMany({});
+  });
   afterAll(async () => { await prisma.$disconnect(); });
 
   // --- persistencia y garantía declarativa ---
@@ -51,7 +60,7 @@ describe.skipIf(!URL)("integración — integridad de referencias (ADR-009, base
   });
 
   it("la FK compuesta rechaza una referencia directa hacia una Identity REDIRECTED", async () => {
-    const red = await identity("REDIRECTED");
+    const red = await redirected();
     // insert directo (write ajeno a los casos de uso) con identityState='ACTIVE' hacia una identidad REDIRECTED
     await expect(
       prisma.$executeRawUnsafe(`INSERT INTO "IdentityExternalReference"("identityId","identityState","provider","externalId","createdAt") VALUES (${red},'ACTIVE','p','${uniq()}',now())`),
@@ -61,7 +70,7 @@ describe.skipIf(!URL)("integración — integridad de referencias (ADR-009, base
 
   // --- Asociar (camino amable) ---
   it("Asociar a REDIRECTED (pre-check) → INVALID_IDENTITY_STATE, sin fila", async () => {
-    const red = await identity("REDIRECTED");
+    const red = await redirected();
     const r = await registro.associate(decide(red));
     expect(r).toMatchObject({ kind: "REJECTED", invariant: "INVALID_IDENTITY_STATE" });
     expect(await prisma.identityExternalReference.count({ where: { identityId: red } })).toBe(0);
@@ -75,8 +84,10 @@ describe.skipIf(!URL)("integración — integridad de referencias (ADR-009, base
   // --- orden forzado por ON UPDATE RESTRICT ---
   it("cambiar ACTIVE→REDIRECTED con una referencia presente FALLA (RESTRICT)", async () => {
     const h = await identity();
+    const dst = await identity();
     await registro.associate(decide(h));
-    await expect(prisma.$executeRawUnsafe(`UPDATE "CatalogIdentity" SET state='REDIRECTED' WHERE id=${h}`)).rejects.toBeTruthy();
+    // flip válido en forma (redirectsToId presente) pero bloqueado por la FK compuesta ON UPDATE RESTRICT
+    await expect(prisma.$executeRawUnsafe(`UPDATE "CatalogIdentity" SET state='REDIRECTED', "redirectsToId"=${dst} WHERE id=${h}`)).rejects.toBeTruthy();
     // sigue ACTIVE
     expect((await prisma.catalogIdentity.findUnique({ where: { id: h }, select: { state: true } }))?.state).toBe("ACTIVE");
   });
@@ -88,7 +99,7 @@ describe.skipIf(!URL)("integración — integridad de referencias (ADR-009, base
     await registro.associate(d);
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe(`UPDATE "IdentityExternalReference" SET "identityId"=${dst} WHERE "identityId"=${src}`);
-      await tx.$executeRawUnsafe(`UPDATE "CatalogIdentity" SET state='REDIRECTED' WHERE id=${src}`);
+      await tx.$executeRawUnsafe(`UPDATE "CatalogIdentity" SET state='REDIRECTED', "redirectsToId"=${dst} WHERE id=${src}`);
     });
     expect((await prisma.catalogIdentity.findUnique({ where: { id: src }, select: { state: true } }))?.state).toBe("REDIRECTED");
     const row = await prisma.identityExternalReference.findUnique({ where: { provider_externalId: { provider: d.provider, externalId: d.externalId } }, select: { identityId: true } });
@@ -115,10 +126,11 @@ describe.skipIf(!URL)("integración — integridad de referencias (ADR-009, base
   // --- carrera mínima representativa (Asociar vs transición de estado) ---
   it("carrera: Asociar vs flip a REDIRECTED → nunca queda referencia + REDIRECTED", async () => {
     const h = await identity();
+    const dst = await identity();
     const d = decide(h);
     const results = await Promise.allSettled([
       registro.associate(d),
-      prisma.$executeRawUnsafe(`UPDATE "CatalogIdentity" SET state='REDIRECTED' WHERE id=${h}`),
+      prisma.$executeRawUnsafe(`UPDATE "CatalogIdentity" SET state='REDIRECTED', "redirectsToId"=${dst} WHERE id=${h}`),
     ]);
     // ambas terminan (sin deadlock): allSettled nunca cuelga; verificamos que no haya rechazo inesperado de tipo deadlock
     const assoc = results[0];

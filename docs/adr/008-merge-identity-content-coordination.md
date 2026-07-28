@@ -179,6 +179,23 @@ La dependencia de Catálogo se implementó y validó en Postgres real (ver
   La garantía autoritativa declarativa NO es un cambio pequeño (exigiría denormalizar el estado del Work
   en `CatalogIdentity`) → queda como precondición del futuro coordinador de Fusionar. No es contradicción.
 
+## Evidencia de implementación (Fusionar v1, precisiones operativas)
+
+La slice **Fusionar** se implementó y validó en Postgres real (ver `docs/identity-merge-slice.md`). Confirma
+este ADR sin contradecirlo:
+- **Coordinador en una tx (D1/D4):** `lib/identity/mergeIdentities.ts` abre UNA `$transaction` y compone
+  `prepareIdentityMergeInTx` (namespace) → `absorbWorkInTx` (Catálogo) → `applyIdentityMergeInTx` (namespace).
+  Orden de locks CONGELADO **Identidades → Works** (sin deadlock). Rollback total verificado (fallo inyectado).
+- **`Work` absorbido (D3):** `absorbedIntoId` marcado, detached, sin borrado; la absorción de contenido y la
+  redirección del namespace commitean juntas o no queda nada.
+- **Designated Work de la absorbida (Estado final):** CONFIRMADO — la identidad absorbida **conserva** su
+  `designatedWorkId` histórico y deja de designar contenido activo al pasar a `REDIRECTED` (el índice parcial
+  es WHERE `state='ACTIVE'`). No se recicla ni se re-apunta al Work sobreviviente.
+- **`CONTENT_CONFLICT_REQUIRES_JUDGMENT`** de Catálogo se propaga como resultado de Fusionar (con sus slots) y
+  aborta la fusión sin persistir nada.
+- **Guard de Conferir contra Works absorbidos:** sigue siendo la garantía amable; el coordinador de Fusionar
+  es quien, bajo lock, absorbe contenido y redirige la identidad atómicamente.
+
 ## Criterio de reversión
 
 Si en la práctica la transacción cruzando dos bounded contexts genera acoplamiento inmanejable (p. ej.

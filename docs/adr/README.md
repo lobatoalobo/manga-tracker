@@ -31,5 +31,5 @@ un ADR que desde el código.
 | 005 | Identidad de creadores | _en rama de identidad (staging), congelado_ |
 | 006 | [Contribuciones comunitarias al catálogo](006-community-contributions.md) | Aceptado (dominio) |
 | 007 | [Familias de proyección del motor Apply](007-apply-projection-families.md) | Aceptado |
-| 008 | [Coordinación Identidad–Contenido en Fusionar](008-merge-identity-content-coordination.md) | Aceptado (bloqueante de Fusionar; resuelve T1) |
-| 009 | [Integridad de referencias frente a transiciones de Identity](009-reference-integrity-identity-transitions.md) | Aceptado (bloqueante de Fusionar; resuelve T2) |
+| 008 | [Coordinación Identidad–Contenido en Fusionar](008-merge-identity-content-coordination.md) | Aceptado (T1) — Fusionar IMPLEMENTADA ([slice](../identity-merge-slice.md)) |
+| 009 | [Integridad de referencias frente a transiciones de Identity](009-reference-integrity-identity-transitions.md) | Aceptado (T2) — validado contra REDIRECTED real de Fusionar |
