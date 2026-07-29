@@ -13,6 +13,12 @@ export const FEATURE_FLAGS = {
     description: "Panel de filtros (géneros + demografía) en el catálogo.",
     default: true,
   },
+  "community-contributions": {
+    label: "Contribuciones comunitarias",
+    description:
+      "Alta/corrección/reporte de catálogo por la comunidad (Community Contributions). Sin UI todavía.",
+    default: false,
+  },
 } as const;
 
 export type FlagKey = keyof typeof FEATURE_FLAGS;

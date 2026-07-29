@@ -200,6 +200,7 @@ export async function importVizSeries(
     // La sinopsis inglesa va a la EDICIÓN VIZ, no al Work (el Work prefiere ES;
     // el enrich completa el Work con EN solo si la obra no tiene edición ES).
     originalTitle: mu.title,
+    incomingType: "MANGA", // VIZ es fuente manga (guard cross-type)
   }).catch(() => null);
   if (!workId) return { ok: false, reason: "no se pudo crear Work" };
 

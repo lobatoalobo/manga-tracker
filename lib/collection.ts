@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { getMangaById, searchMangaList } from "@/lib/anilist";
 import { nationalCoversByAnilist, upcomingForIds, authorsByAnilist } from "@/lib/catalog";
 import { isPlausibleVolume } from "@/lib/volumes";
+import { publisherKey, publisherRegion } from "@/lib/publisher-key";
+import { ownershipReader } from "@/lib/collection-read/root";
+import { ownedItems } from "@/lib/collection-read/facade";
 import type { TrackedEdition, OwnedVolume } from "@prisma/client";
 
 type EditionRow = TrackedEdition & { ownedVolumes: OwnedVolume[] };
@@ -165,7 +168,7 @@ export async function setSharing(
 /** Colección pública por slug (solo lectura). null si el slug no existe. */
 export async function getPublicCollection(
   slug: string,
-): Promise<{ name: string; items: CollectionItem[]; favoriteId: number | null } | null> {
+): Promise<{ name: string; items: CollectionItem[]; favoriteId: number | null; ownedVolumes: number } | null> {
   const user = await prisma.user.findUnique({
     where: { shareSlug: slug },
     select: { id: true, name: true, favoriteAnilistId: true },
@@ -173,10 +176,20 @@ export async function getPublicCollection(
   if (!user) return null;
 
   const items = await getCollectionItems(user.id);
+
+  // Read-side unificado (ADR-011, Slice 9 / Checkpoint 7): ÚNICO punto de derivación del stat "Tomos poseídos".
+  // Cuenta = posiciones de volumen con `owned === true` (semántica histórica de `OwnedVolume`: un tomo cuenta una
+  // vez, no por ejemplares). Metadata, portadas, autores, ediciones y grilla siguen viniendo del camino legado
+  // (`items`, arriba) — coexistencia temporal aceptada: se paga una lectura unificada extra (adapters Collection +
+  // legado) además de la lectura rica. Rollback = reemplazar esta línea por la suma legada
+  // `items.reduce((s, i) => s + i.edition.ownedVolumes.length, 0)`.
+  const ownedVolumes = ownedItems(await ownershipReader().getUserOwnership(user.id)).length;
+
   return {
     name: user.name ?? "Colección",
     items,
     favoriteId: user.favoriteAnilistId ?? null,
+    ownedVolumes,
   };
 }
 
@@ -539,23 +552,6 @@ export async function importEdition(
   });
 }
 
-const PURCHASE_PUBLISHER_KEY: Record<string, string> = {
-  "Ivrea Argentina": "ivrea",
-  "Panini Argentina": "panini",
-  "Ovni Press": "ovni",
-  "Kemuri Ediciones": "kemuri",
-  "Utopía Editorial": "utopia",
-  "Larp Editores": "larp",
-  "Distrito Manga": "distrito",
-  "Planeta Cómic": "planeta",
-  "VIZ Media": "viz",
-};
-
-/** Región de la edición según la editorial (VIZ = internacional). */
-function publisherRegion(publisher: string | null | undefined): "AR" | "INT" {
-  return publisher && /viz/i.test(publisher) ? "INT" : "AR";
-}
-
 type PubRow = { publisher: string; slug: string | null; volumes: number };
 
 /** Ediciones (PublisherEdition) de la obra, ordenadas por conteo. */
@@ -582,7 +578,7 @@ function chooseRow(rows: PubRow[], edition?: string | null): PubRow | null {
 
 /** Key de TrackedEdition para un tomo comprado (coherente con la ficha). */
 function purchaseKey(row: PubRow | null, edition?: string | null): string {
-  if (row) return PURCHASE_PUBLISHER_KEY[row.publisher] ?? "ar";
+  if (row) return publisherKey(row.publisher);
   return publisherRegion(edition) === "INT" ? "viz" : "ar";
 }
 

@@ -109,14 +109,19 @@ export const VISIBLE_PUBLISHERS = [
  * edición aún). Fuente única para browse/búsqueda/autores/sitemap.
  */
 export function inCatalogWhere(
-  content: "manga" | "comic" = "manga",
+  content: "manga" | "comic" | "all" = "manga",
 ): import("@prisma/client").Prisma.WorkWhereInput {
   return {
     // Manga = todo lo que NO es cómic (default, no afecta a Ivrea). Cómic = la
     // sección propia (Ovni/Panini/Utopía); su enriquecimiento de géneros/sinopsis
-    // llega con GCD (ver memoria gcd-comics-source). El resto del filtro es común.
+    // llega con GCD (ver memoria gcd-comics-source). `all` = sin filtro de tipo
+    // (una página de autor muestra TODAS sus obras, manga y cómic). Resto común.
     AND: [
-      content === "comic" ? { type: "COMIC" } : { type: { not: "COMIC" } },
+      content === "comic"
+        ? { type: "COMIC" }
+        : content === "all"
+          ? {}
+          : { type: { not: "COMIC" } },
       {
         OR: [
           // Tiene una edición visible (Ivrea/Panini/VIZ). NO exigimos volumes>0:
@@ -379,8 +384,11 @@ export async function workMetaByAnilist(
 
 /** Índice de autores derivado de `Work.author` (sin tabla aparte). */
 export async function getLocalAuthors(): Promise<{ name: string; count: number }[]> {
+  // `all` = manga + cómic: el índice de autores debe incluir a los de cómic (ej.
+  // Tom Taylor), coherente con la página de detalle /autores/[name]. Lee solo
+  // `Work.author` (no credits), igual que antes.
   const works = await prisma.work.findMany({
-    where: { author: { not: null }, ...inCatalogWhere() },
+    where: { author: { not: null }, ...inCatalogWhere("all") },
     select: { author: true },
   });
   const byKey = new Map<string, { name: string; count: number }>();
@@ -633,7 +641,7 @@ export async function browseWorks(opts: {
   demographics?: string[];
   completed?: boolean;
   sort?: "az" | "za" | "none";
-  content?: "manga" | "comic";
+  content?: "manga" | "comic" | "all";
 }): Promise<{ items: WorkCard[]; total: number }> {
   const take = opts.take ?? 60;
   const page = Math.max(1, opts.page ?? 1);
@@ -926,6 +934,10 @@ export async function findOrCreateWork(opts: {
   author?: string | null;
   synopsis?: string | null;
   originalTitle?: string | null;
+  // Tipo de contenido de la fuente (Ivrea/VIZ = MANGA; Whakoom = clasificador).
+  // Bloquea el match DÉBIL (título/romaji) cross-type: un cómic no se fusiona con
+  // un manga y viceversa (ver `sameContentClass`). `null`/omitido = no-cómic.
+  incomingType?: "MANGA" | "COMIC" | null;
 }): Promise<number> {
   // Decodificamos entidades HTML que algunas fuentes dejan escapadas (I&quot;s).
   const title = decodeEntities(opts.title);
@@ -942,12 +954,12 @@ export async function findOrCreateWork(opts: {
   // sinopsis de la editorial (Ivrea/Whakoom) es ES → synopsisEs.
   const sel = {
     id: true, coverImage: true, author: true, synopsisEs: true,
-    originalTitle: true, muId: true, mdId: true,
+    originalTitle: true, muId: true, mdId: true, type: true,
   } as const;
   let existing: {
     id: number; coverImage: string | null; author: string | null;
     synopsisEs: string | null; originalTitle: string | null;
-    muId: string | null; mdId: string | null;
+    muId: string | null; mdId: string | null; type: string;
   } | null = null;
   if (opts.anilistId)
     existing = await prisma.work.findUnique({ where: { anilistId: opts.anilistId }, select: sel });
@@ -958,7 +970,11 @@ export async function findOrCreateWork(opts: {
   if (!existing) {
     const tight = tightTitleKey(title);
     const cands = await prisma.work.findMany({ where: { normTitle }, select: { ...sel, title: true } });
-    existing = cands.find((w) => tightTitleKey(w.title) === tight) ?? null;
+    // Guard cross-type: no fusionar cómic con manga por título (ver `sameContentClass`).
+    existing =
+      cands.find(
+        (w) => tightTitleKey(w.title) === tight && sameContentClass(opts.incomingType, w.type),
+      ) ?? null;
   }
   // Puente ROMAJI: si no matcheó por id ni por título (típico cuando una edición
   // viene en otro idioma — VIZ en inglés vs Ivrea en español — y los ids no se
@@ -980,7 +996,9 @@ export async function findOrCreateWork(opts: {
           (w) =>
             w.originalTitle &&
             romajiKey(w.originalTitle) === rk &&
-            bridgeAuthorOk(author, w.author),
+            bridgeAuthorOk(author, w.author) &&
+            // Guard cross-type: el puente romaji tampoco cruza cómic↔manga.
+            sameContentClass(opts.incomingType, w.type),
         ) ?? null;
     }
   }
@@ -1016,9 +1034,26 @@ export async function findOrCreateWork(opts: {
       author,
       synopsisEs: synopsis,
       originalTitle,
+      // El cómic nace COMIC (no espera al clasificador) → futuros matches ya lo
+      // aíslan del manga. Sin `incomingType`, el default del schema es "MANGA".
+      ...(opts.incomingType ? { type: opts.incomingType } : {}),
     },
   });
   return created.id;
+}
+
+/**
+ * Guard cross-type del dedup por señal DÉBIL (título / romaji): impide fusionar un
+ * cómic con un manga. Solo importa la "comic-ness" — un cómic entrante solo matchea
+ * un Work COMIC; un manga (o tipo desconocido) nunca matchea un COMIC. NO se aplica
+ * a los ids fuertes (anilistId/muId/mdId son provider-scoped a manga). `Work.type`
+ * nunca es null (default "MANGA"); `incomingType` null/omitido cuenta como no-cómic.
+ */
+export function sameContentClass(
+  incomingType: "MANGA" | "COMIC" | null | undefined,
+  existingType: string,
+): boolean {
+  return (existingType === "COMIC") === (incomingType === "COMIC");
 }
 
 /**

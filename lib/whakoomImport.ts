@@ -11,6 +11,7 @@ import {
   findOrCreateWork,
 } from "./catalog";
 import { ovniSearchUrl } from "./ovni";
+import { looksLikeComic } from "./contentType";
 import { getRejected, whakoomIdFromUrl } from "./rejectedSources";
 import { prisma } from "./prisma";
 import { storeCover } from "./coverStore";
@@ -83,6 +84,9 @@ async function persistEditionIdentity(opts: {
     anilistId: opts.anilistId,
     author: opts.author,
     synopsis: opts.synopsis,
+    // Whakoom/Panini mezcla manga y cómic → clasificamos por título/autor (misma
+    // heurística que setea Work.type) para no fusionar cross-type (guard).
+    incomingType: looksLikeComic(opts.title, opts.author) ? "COMIC" : "MANGA",
   }).catch(() => null);
 
   // Portada = TOMO 1, SOLO si el work no tiene portada todavía (no re-fetcheamos

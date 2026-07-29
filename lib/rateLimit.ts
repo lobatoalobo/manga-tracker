@@ -83,4 +83,6 @@ export const RL = {
   friendRequest: { limit: 20, windowMs: HOUR },
   comment: { limit: 30, windowMs: 10 * 60_000 },
   importCsv: { limit: 3, windowMs: HOUR },
+  createProposal: { limit: 10, windowMs: HOUR },
+  addContribution: { limit: 20, windowMs: HOUR },
 } as const;

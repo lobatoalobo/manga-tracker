@@ -37,6 +37,28 @@ model User {
   notifPref         NotificationPref?
   pushSubs          PushSubscription[]
   seriesMutes       SeriesNotifMute[]
+  // Retail: membresías comerciales (OWNER/STAFF) de tiendas que administra. Relación VIRTUAL (la FK vive
+  // en StoreMember.userId); no agrega columnas a User. Ver docs/retail-slice-1-store-commerce.md.
+  storeMemberships  StoreMember[]
+  // Retail: campañas de preventa que creó (ref de auditoría). VIRTUAL. Ver docs/retail-slice-2-preorder-campaigns.md.
+  createdCampaigns  PreorderCampaign[]
+  // Retail: reservas del usuario como CLIENTE y las que canceló (auditoría). VIRTUALES (FK en StoreOrder).
+  // Ver docs/retail-slice-3-preorder-orders.md.
+  storeOrders          StoreOrder[] @relation("customerOrders")
+  cancelledStoreOrders StoreOrder[] @relation("cancelledOrders")
+  // Retail: cumplimiento (Slice 4). Líneas que canceló y eventos operativos que registró (auditoría).
+  // VIRTUALES (FK en StoreOrderLine / StoreOrderLineEvent). Ver docs/retail-slice-4-preorder-fulfillment.md.
+  cancelledStoreOrderLines StoreOrderLine[]      @relation("lineCancelledBy")
+  storeOrderLineEvents     StoreOrderLineEvent[] @relation("lineEventActor")
+  // Retail: avisos de llegada (Slice 5) que creó o envió (auditoría). VIRTUALES. Ver docs/retail-slice-5-*.
+  createdNotifications StoreOrderNotification[] @relation("notifCreatedBy")
+  sentNotifications    StoreOrderNotification[] @relation("notifSentBy")
+  // Retail: pagos manuales (Slice 6) que confirmó (auditoría). VIRTUAL. Ver docs/retail-slice-6-*.
+  confirmedPayments StorePayment[] @relation("paymentConfirmedBy")
+  // Collection (Slice 8): colección automática por PICKED_UP. Back-relations VIRTUALES (FK en Acquisition/
+  // OwnershipPosition.userId, onDelete: Cascade → al borrar la cuenta se elimina su colección). Ver ADR-010.
+  acquisitions       Acquisition[]
+  ownershipPositions OwnershipPosition[]
 }
 
 // Silenciar notis de UNA serie puntual (override del toggle global "tomos
@@ -72,6 +94,7 @@ model NotificationPref {
   wishlist  Boolean @default(true) // novedades de tus deseados (salió en AR)
   social    Boolean @default(true) // reacciones y comentarios en tu actividad
   friends   Boolean @default(true) // solicitudes / aceptaciones de amistad
+  contributions Boolean @default(true) // novedades de tus contribuciones al catálogo
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -461,7 +484,22 @@ model Work {
 
   editions PublisherEdition[]
 
+  // Identidades del catálogo que designan a esta obra (contenido). Relación virtual: la
+  // FK vive en CatalogIdentity.designatedWorkId. A lo sumo UNA identidad ACTIVA por obra
+  // (índice parcial en la migración). Ver docs/identity-confer-slice.md.
+  identities CatalogIdentity[]
+
+  // Absorción de contenido (ADR-008): si != null, este Work fue ABSORBIDO por otro y queda
+  // detached (sus ediciones se re-parentaron). `absorbedIntoId != null` ES la fuente normativa
+  // del estado "absorbido" (sin columna duplicada). Self-FK Restrict (perpetuidad: no se borra un
+  // sobreviviente con absorbidos apuntándolo). CHECK de no-autoabsorción en la migración (crudo).
+  // Ver docs/catalog-work-absorption-slice.md.
+  absorbedIntoId Int?
+  absorbedInto   Work?  @relation("WorkAbsorption", fields: [absorbedIntoId], references: [id], onDelete: Restrict)
+  absorbedWorks  Work[] @relation("WorkAbsorption")
+
   @@index([normTitle])
+  @@index([absorbedIntoId])
 }
 
 // Índice de catálogos de las editoriales (poblado por scripts/crawl.ts).
@@ -522,8 +560,88 @@ model Volume {
   coverImage     String?
   updatedAt      DateTime @updatedAt
 
+  // Back-relations SOLO de persistencia del ORM (las exige Prisma al declarar las FKs en Retail). NO son
+  // una dependencia del dominio Catálogo→Retail: no las use ningún caso de uso de Catálogo (ver Retail).
+  preorderOffers PreorderOffer[]
+  storeOrderLines StoreOrderLine[]
+  // Collection (Slice 8): igual criterio ORM-only (FK en Acquisition/OwnershipPosition.volumeId, onDelete:
+  // Restrict). NO son dependencia del dominio Catálogo→Collection. Ver ADR-010.
+  acquisitions       Acquisition[]
+  ownershipPositions OwnershipPosition[]
+
   @@unique([editionId, number])
   @@index([isbn])
+}
+
+// Identidad del catálogo (el "handle"): asa durable y delgada que designa un contenido.
+// NO es contenido (no tiene título/autor/sinopsis); esos viven en Work. NO posee sus
+// referencias externas (viven en IdentityExternalReference, propiedad del namespace).
+// Este slice SOLO confiere (nace ACTIVE); Fusionar/Partir/Retirar/redirección NO existen
+// todavía. El handle (`id`, sequence) es fresco por construcción y jamás se reusa (las
+// filas no se borran). Invariantes globales enforzados por índices únicos en la migración
+// (designación única entre ACTIVE = índice parcial; unicidad de referencia). Ver
+// docs/identity-confer-slice.md y el Glosario Normativo del Dominio.
+model CatalogIdentity {
+  id               Int      @id @default(autoincrement()) // el handle
+  state            String   @default("ACTIVE") // ACTIVE (RETIRED/REDIRECTED son conceptuales; no se producen acá)
+  contentClass     String // clase de contenido (coherente con Work.type)
+  designatedWorkId Int // el contenido que designa
+  decisionId       String   @unique // identificador de la Decisión que la confirió
+  // Huella semántica canónica de la Decisión (contenido + clase + referencias semilla como
+  // conjunto ordenado). Permite distinguir "misma decisión" (idempotente) de "mismo decisionId
+  // reusado con intención divergente" (rechazo), sin comparar tablas relacionadas en el replay.
+  decisionFingerprint String
+  // Redirección de fusión (ADR-008/009): si `state='REDIRECTED'`, esta identidad fue ABSORBIDA por otra
+  // y `redirectsToId` apunta a la SOBREVIVIENTE (un salto; v1 no encadena). Invariante ACTIVE ⟺
+  // redirectsToId null (CHECK crudo en la migración). Conserva `designatedWorkId` histórico (deja de
+  // designar contenido activo porque el índice parcial es WHERE state='ACTIVE'). Ver docs/identity-merge-slice.md.
+  redirectsToId Int?
+  // Procedencia de la Decisión Fusionar que redirigió ESTA fila (vive en la ABSORBIDA, la que transiciona).
+  // NO reusa las columnas de Conferir (semántica distinta). Único (idempotencia); NULL en filas ACTIVE.
+  mergeDecisionId          String?  @unique
+  mergeDecisionFingerprint String?
+  createdAt                DateTime @default(now())
+
+  designatedWork Work                        @relation(fields: [designatedWorkId], references: [id], onDelete: Restrict)
+  externalRefs   IdentityExternalReference[]
+  // Self-relación de redirección (Fusionar). La FK vive en `redirectsToId`. `redirectedFrom` son las
+  // identidades que redirigen HACIA esta (v1 prohíbe encadenar sobre una ya redirigida).
+  redirectsTo    CatalogIdentity?  @relation("IdentityRedirect", fields: [redirectsToId], references: [id], onDelete: Restrict)
+  redirectedFrom CatalogIdentity[] @relation("IdentityRedirect")
+
+  // La designación única entre identidades ACTIVE es un índice PARCIAL (WHERE state='ACTIVE')
+  // que Prisma no expresa en el DSL: se crea por SQL crudo en la migración. Los CHECK de coherencia
+  // estado⇔redirección y de pareo de procedencia también son crudos (ver migración).
+  @@index([designatedWorkId])
+  @@index([redirectsToId])
+}
+
+// Asociación referencia externa → identidad (propiedad del namespace / Registro, no de
+// Identity — Alternativa B). Una referencia (provider, externalId) resuelve a lo sumo hacia
+// UNA identidad: la unicidad la enforcea `@@unique([provider, externalId])`.
+model IdentityExternalReference {
+  id         Int      @id @default(autoincrement())
+  identityId Int
+  provider   String
+  externalId String
+  // Estado denormalizado del destino, SIEMPRE 'ACTIVE' (ADR-009). Es la mitad "estado" de la FK
+  // COMPUESTA `(identityId, identityState) → CatalogIdentity(id, state)` (cruda en la migración,
+  // ON UPDATE RESTRICT + CHECK = 'ACTIVE'), que garantiza declarativamente que una referencia solo
+  // resuelve hacia una Identity ACTIVE y fuerza mover las referencias antes de redirigir. NO es
+  // sincronización manual del estado real: es un detalle de persistencia (default en Conferir,
+  // constante en Asociar), y la FK es la garantía. No forma parte de la decisión ni del fingerprint.
+  identityState String @default("ACTIVE")
+  // Decisión Asociar que creó esta referencia (idempotencia + reuso divergente). NULL en las
+  // referencias semilla creadas durante Conferir (su procedencia es la decisión de la identidad).
+  // El índice único permite múltiples NULL (Postgres trata NULL como distinto).
+  decisionId          String? @unique
+  decisionFingerprint String?
+  createdAt           DateTime @default(now())
+
+  identity CatalogIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, externalId])
+  @@index([identityId])
 }
 
 // Snapshot de las salidas anunciadas en ivrea.com.ar/proximas/ (lanzamiento,
@@ -598,7 +716,349 @@ model Store {
   submittedBy String? // userId que la propuso (si vino de la comunidad)
   createdAt   DateTime @default(now())
 
+  // Retail: capacidad comercial OPCIONAL (una tienda del directorio puede no ser comercial). Relación
+  // VIRTUAL (la FK vive en StoreCommerceProfile.storeId); no agrega columnas a Store. Ver
+  // docs/retail-slice-1-store-commerce.md.
+  commerceProfile StoreCommerceProfile?
+  // Retail: campañas de preventa (actividad histórica). Cuelgan de Store (identidad durable), no del perfil.
+  // VIRTUAL. FK con onDelete: Restrict → una tienda con campañas no se borra. Ver docs/retail-slice-2-*.
+  preorderCampaigns PreorderCampaign[]
+  // Retail: reservas de clientes (actividad histórica). VIRTUAL. FK Restrict → una tienda con órdenes no se
+  // borra. Ver docs/retail-slice-3-preorder-orders.md.
+  orders            StoreOrder[]
+
   @@index([status])
+}
+
+// ============================================================================
+// Retail / Preventas — dominio comercial (Slice 1: infraestructura de tienda).
+// SATÉLITE aditivo del directorio `Store`: NO modifica su tabla (solo relaciones virtuales). Todavía
+// NO hay campañas/ofertas/órdenes/reservas. Ver docs/retail-slice-1-store-commerce.md.
+// ============================================================================
+
+// Capacidad comercial de una tienda (1:1 con Store). Su ausencia = tienda no comercial. Aporta el `slug`
+// direccionable de las rutas comerciales y los datos que las preventas futuras usarán (pago/retiro/WA).
+model StoreCommerceProfile {
+  id                  Int      @id @default(autoincrement())
+  storeId             Int      @unique
+  slug                String   @unique // llave de ruta comercial: /tiendas/<slug>/admin
+  enabled             Boolean  @default(false) // capacidad comercial activa (pausable)
+  whatsapp            String?
+  paymentAlias        String?
+  paymentInstructions String?
+  pickupInstructions  String?
+  publicDescription   String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  store   Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  members StoreMember[]
+}
+
+// Quién administra la operación comercial de una tienda. Los CLIENTES nunca son miembros. Sin permisos
+// granulares todavía: rol OWNER | STAFF. Cuelga del perfil comercial (agregar miembros presupone perfil).
+model StoreMember {
+  id        Int      @id @default(autoincrement())
+  profileId Int
+  userId    String
+  role      String // OWNER | STAFF
+  createdAt DateTime @default(now())
+
+  profile StoreCommerceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  user    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, userId])
+  @@index([userId])
+}
+
+// ============================================================================
+// Retail / Preventas — Slice 2: campañas de preventa + ofertas (manual).
+// Actividad HISTÓRICA: cuelga de `Store` (identidad durable), NO del perfil comercial. El catálogo NUNCA
+// depende de Retail a nivel de DOMINIO. La FK `PreorderOffer.volume → Volume` está modelada en Prisma (con
+// back-relation mínima `Volume.preorderOffers`): es solo metadata de PERSISTENCIA del ORM, sin drift entre
+// schema y migración; ningún caso de uso de Catálogo la navega. Ver docs/retail-slice-2-preorder-campaigns.md.
+// ============================================================================
+
+// Una preventa semanal de una tienda. `status` = historia explícita; el tiempo (opensAt/closesAt) solo
+// decide disponibilidad pública (sin cron). Estados: DRAFT | PUBLISHED | CLOSED | CANCELLED.
+model PreorderCampaign {
+  id              Int       @id @default(autoincrement())
+  storeId         Int
+  title           String
+  description     String?
+  weekLabel       String?
+  status          String    @default("DRAFT")
+  opensAt         DateTime?
+  closesAt        DateTime?
+  publishedAt     DateTime?
+  closedAt        DateTime?
+  createdByUserId String? // ref de auditoría; nullable + SetNull para no perder la campaña si el creador borra su cuenta
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  store     Store           @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  createdBy User?           @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  offers    PreorderOffer[]
+  orders    StoreOrder[] // reservas sobre la campaña (Restrict: una campaña con órdenes no se borra)
+
+  @@index([storeId])
+  @@index([status])
+  @@index([storeId, status])
+  @@index([publishedAt])
+  @@index([opensAt])
+  @@index([closesAt])
+}
+
+// Un tomo REAL del catálogo ofrecido en una campaña. `volume` → Volume (RESTRICT): no se borra un Volume
+// con ofertas. La relación es de PERSISTENCIA del ORM (Retail depende de Catálogo), no una dependencia de
+// dominio Catálogo→Retail: ningún caso de uso de Catálogo importa Retail ni usa `Volume.preorderOffers`.
+// Snapshots = display histórico estable. Precios en centavos ARS (Int, no Float). Estados: ACTIVE | HIDDEN
+// | CANCELLED.
+model PreorderOffer {
+  id                   Int      @id @default(autoincrement())
+  campaignId           Int
+  volumeId             Int
+  titleSnapshot        String
+  volumeNumberSnapshot Int?
+  publisherSnapshot    String?
+  isbnSnapshot         String?
+  listPriceCents       Int
+  preorderPriceCents   Int
+  status               String   @default("ACTIVE")
+  sortOrder            Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  campaign   PreorderCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  volume     Volume           @relation(fields: [volumeId], references: [id], onDelete: Restrict)
+  orderLines StoreOrderLine[] // líneas de reserva que congelaron esta oferta (Restrict: no se borra si hay líneas)
+
+  @@unique([campaignId, volumeId])
+  @@index([campaignId])
+  @@index([volumeId])
+}
+
+// ============================================================================
+// Retail / Preventas — Slice 3: reservas (StoreOrder + StoreOrderLine).
+// Una StoreOrder es la reserva de un cliente autenticado sobre una campaña PUBLISHED y abierta. NO es una
+// Purchase (compra personal histórica): pertenece al dominio Retail, no hereda su semántica ni estados.
+// Cuelga de `Store` (identidad durable), NUNCA del perfil comercial. Las líneas guardan snapshots y precios
+// históricos propios: un cambio futuro de catálogo/oferta NO altera una orden ya creada. Estados de esta
+// slice: RESERVED | CANCELLED (pago/llegada/retiro son slices posteriores). Ver docs/retail-slice-3-preorder-orders.md.
+// ============================================================================
+
+// Reserva de preventa de un cliente. Aggregate root de sus líneas. `publicCode` legible/no enumerable para
+// que cliente y tienda la referencien (no autoriza: la lectura verifica userId o membresía). `totalCents` es
+// la suma de las líneas, calculada en el servidor. Una sola orden por (campaignId, userId) — cancelar es
+// definitivo (unicidad total; volver a reservar tras cancelar queda para una decisión futura).
+model StoreOrder {
+  id                   Int      @id @default(autoincrement())
+  publicCode           String   @unique
+  storeId              Int
+  campaignId           Int
+  userId               String? // dueño de la orden; nullable + SetNull para preservar el historial si borra su cuenta
+  status               String   @default("RESERVED")
+  customerNameSnapshot String? // nombre/email del cliente al reservar (la tienda los necesita para cumplir); no se inventa más PII
+  customerEmailSnapshot String?
+  totalCents           Int      @default(0)
+  cancelledAt          DateTime?
+  cancelledByUserId    String? // quién canceló (cliente o miembro); ref de auditoría (SetNull)
+  cancellationReason   String?
+  // Proyección de pago (Slice 6): DERIVADA del ledger de StorePayment (Σ CONFIRMED) contra `totalCents`
+  // congelado. La verdad es el ledger; estos campos se recomputan transaccionalmente. Ver docs/retail-slice-6-*.
+  paidCents            Int      @default(0)
+  paymentStatus        String   @default("UNPAID") // UNPAID | PARTIALLY_PAID | PAID | OVERPAID
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  store       Store            @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  campaign    PreorderCampaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  user        User?            @relation("customerOrders", fields: [userId], references: [id], onDelete: SetNull)
+  cancelledBy User?            @relation("cancelledOrders", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
+  lines       StoreOrderLine[]
+  notifications StoreOrderNotification[] // avisos de llegada (Restrict: una orden con avisos no se borra)
+  payments      StorePayment[]           // pagos manuales (Restrict: una orden con pagos no se borra)
+
+  @@unique([campaignId, userId]) // una orden por usuario/campaña (idempotencia natural de la reserva)
+  @@index([userId])
+  @@index([storeId])
+  @@index([campaignId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([storeId, status])
+  @@index([paymentStatus]) // filtro de pago (Slice 6)
+  @@index([storeId, paymentStatus]) // tablero de pagos por tienda
+}
+
+// Una línea de reserva: un tomo (vía su oferta) con cantidad y precios/snapshots CONGELADOS al reservar. No
+// se re-resuelve desde el catálogo: la orden muestra sus líneas aunque el catálogo cambie luego. Slice 4
+// suma la operación FÍSICA (pedido al proveedor + llegada) por CANTIDADES parciales: `quantity` (comercial)
+// es inmutable; `orderedQuantity`/`arrivedQuantity`/`cancelledQuantity` son los contadores operativos y
+// `fulfillmentStatus` (RESERVED|ORDERED|ARRIVED|CANCELLED) se DERIVA de ellos. `pending = quantity −
+// arrived − cancelled`. El historial vive en StoreOrderLineEvent. Ver docs/retail-slice-4-preorder-fulfillment.md.
+model StoreOrderLine {
+  id                     Int      @id @default(autoincrement())
+  orderId                Int
+  offerId                Int
+  volumeId               Int
+  quantity               Int
+  unitListPriceCents     Int
+  unitPreorderPriceCents Int
+  lineTotalCents         Int
+  titleSnapshot          String
+  volumeNumberSnapshot   Int?
+  publisherSnapshot      String?
+  isbnSnapshot           String?
+  createdAt              DateTime @default(now())
+
+  // Cumplimiento (Slice 4). Contadores = fuente de verdad; `fulfillmentStatus` derivado y persistido para
+  // índice/display. Fechas: se fijan en la 1ra transición real y no se sobrescriben (`now` inyectado).
+  fulfillmentStatus  String    @default("RESERVED")
+  orderedQuantity    Int       @default(0)
+  arrivedQuantity    Int       @default(0)
+  cancelledQuantity  Int       @default(0)
+  // Handoff outbound (Slice 7): contadores que continúan el ciclo físico. Verdad = contadores; estados
+  // derivados y NO persistidos. Invariante: pickedUp ≤ prepared ≤ arrived. Ver docs/retail-slice-7-*.
+  preparedQuantity   Int       @default(0)
+  pickedUpQuantity   Int       @default(0)
+  orderedAt          DateTime?
+  arrivedAt          DateTime?
+  cancelledAt        DateTime?
+  cancelledByUserId  String?
+  cancellationReason String?
+  updatedAt          DateTime  @updatedAt
+
+  order       StoreOrder           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  offer       PreorderOffer        @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  volume      Volume               @relation(fields: [volumeId], references: [id], onDelete: Restrict)
+  cancelledBy       User?                        @relation("lineCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
+  events            StoreOrderLineEvent[]
+  notificationItems StoreOrderNotificationItem[] // avisos que informaron unidades de esta línea (Restrict)
+
+  @@unique([orderId, offerId]) // una línea por oferta dentro de la orden (las repetidas se consolidan antes)
+  @@index([orderId])
+  @@index([offerId])
+  @@index([volumeId])
+  @@index([fulfillmentStatus])
+}
+
+// Evento operativo INMUTABLE de una línea (§9/§23): auditoría de pedido/llegada/cancelación. No copia
+// snapshots comerciales (ya viven en la línea). `operationKey` único = idempotencia de la operación admin
+// (protege doble click / retry). No se edita ni borra desde la UI. `type` como String (convención del repo).
+model StoreOrderLineEvent {
+  id           Int      @id @default(autoincrement())
+  orderLineId  Int
+  type         String // MARKED_ORDERED | MARKED_ARRIVED | CANCELLED
+  quantity     Int
+  actorUserId  String?
+  operationKey String
+  note         String?
+  // Collection (Slice 8): snapshot ESTABLE del dueño de la orden al momento del hecho, poblado SOLO al crear
+  // un evento PICKED_UP (desde StoreOrder.userId). SIN FK (snapshot puro, como customerNameSnapshot): NO se
+  // anula con el SetNull del borrado de cuenta → hace el hecho publicado autosuficiente para el proyector de
+  // Collection sin reconstruir el userId desde una relación nullable. Ver ADR-010 §D1.b.
+  ownerUserIdSnapshot String?
+  createdAt    DateTime @default(now())
+
+  orderLine StoreOrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+  actor     User?          @relation("lineEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@unique([operationKey])
+  @@index([orderLineId, createdAt])
+  @@index([actorUserId])
+}
+
+// ============================================================================
+// Retail / Preventas — Slice 5: avisos de llegada al cliente (StoreOrderNotification + …Item).
+// Separa mercadería LLEGADA (Slice 4) de cliente INFORMADO (comunicación). El aviso tiene su propio estado e
+// historial; que una línea esté ARRIVED NO implica que se informó. Envío MANUAL (la tienda copia el texto);
+// Nakama no manda comunicaciones externas. Ver docs/retail-slice-5-arrival-notifications.md.
+// ============================================================================
+
+// Aviso a nivel de ORDEN que agrupa ítems concretos (línea + cantidad informada). `messageSnapshot` conserva
+// el texto EXACTO confirmado. `sendOperationKey` (única) da idempotencia al "marcar enviado". Estados: DRAFT
+// | SENT | CANCELLED (SENT/CANCELLED terminales). No hard-delete desde UI/servicios.
+model StoreOrderNotification {
+  id                Int       @id @default(autoincrement())
+  orderId           Int
+  type              String    @default("ARRIVAL") // ARRIVAL (WHATSAPP/EMAIL/SMS/PUSH: futuros, no usados)
+  status            String    @default("DRAFT") // DRAFT | SENT | CANCELLED
+  channel           String    @default("MANUAL") // MANUAL (otros canales: futuros)
+  recipientSnapshot String? // nombre o email histórico; sin inventar teléfono
+  messageSnapshot   String // texto plano confirmado (sin HTML)
+  createdByUserId   String?
+  sentByUserId      String?
+  sendOperationKey  String? // idempotencia del envío; se fija al pasar a SENT
+  createdAt         DateTime  @default(now())
+  sentAt            DateTime?
+  cancelledAt       DateTime?
+  updatedAt         DateTime  @updatedAt
+
+  order     StoreOrder                   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  createdBy User?                        @relation("notifCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  sentBy    User?                        @relation("notifSentBy", fields: [sentByUserId], references: [id], onDelete: SetNull)
+  items     StoreOrderNotificationItem[]
+
+  @@unique([sendOperationKey])
+  @@index([orderId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+  @@index([sentAt])
+}
+
+// Un ítem informado: cuántas unidades LLEGADAS de una línea se incluyeron en ese aviso. No copia precios (el
+// mensaje y la línea ya conservan lo necesario). Una línea aparece a lo sumo una vez por aviso.
+model StoreOrderNotificationItem {
+  id             Int      @id @default(autoincrement())
+  notificationId Int
+  orderLineId    Int
+  quantity       Int
+  createdAt      DateTime @default(now())
+
+  notification StoreOrderNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  orderLine    StoreOrderLine         @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
+
+  @@unique([notificationId, orderLineId])
+  @@index([orderLineId])
+  @@index([notificationId])
+}
+
+// ============================================================================
+// Retail / Preventas — Slice 6: pagos manuales (StorePayment).
+// LEDGER append-only de dinero. El pago es un EJE ORTOGONAL a `order.status` y al cumplimiento por línea: la
+// tienda registra un pago que YA verificó (transferencia/efectivo por fuera); Nakama no procesa ni cobra. La
+// verdad del dinero es este ledger; `StoreOrder.paidCents`/`paymentStatus` son una proyección DERIVADA de los
+// movimientos CONFIRMED, comparada contra `StoreOrder.totalCents` congelado. En esta slice solo se crean
+// movimientos CONFIRMED; VOIDED queda reservado/documentado (sin operación que lo produzca): no se editan, no
+// se borran, no se anulan. VOID/REFUND/ADJUSTMENT son de la futura slice de correcciones. Ver
+// docs/retail-slice-6-manual-payments.md.
+// ============================================================================
+
+// Un pago manual confirmado contra una orden. `amountCents` es magnitud positiva (centavos ARS).
+// `recordOperationKey` (única) da idempotencia al registro. `note` es INTERNA (nunca al cliente ni a logs).
+model StorePayment {
+  id                Int      @id @default(autoincrement())
+  orderId           Int
+  status            String   @default("CONFIRMED") // CONFIRMED | VOIDED (VOIDED reservado; sin operación en esta slice)
+  amountCents       Int // magnitud positiva; entero ≥ 1
+  method            String // TRANSFER | CASH | MERCADOPAGO | OTHER
+  note              String? // nota interna opcional (sensible)
+  paidAt            DateTime // cuándo pagó el cliente según la tienda (puede diferir de createdAt)
+  confirmedByUserId String?
+  recordOperationKey String // idempotencia del registro
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  order       StoreOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  confirmedBy User?      @relation("paymentConfirmedBy", fields: [confirmedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([recordOperationKey])
+  @@index([orderId])
+  @@index([status])
+  @@index([method])
+  @@index([paidAt])
+  @@index([createdAt])
 }
 
 // Obra de un autor independiente/local, subida por un usuario y moderada por
@@ -667,4 +1127,256 @@ model MutationLog {
   @@index([correlationId])
   @@index([name, at])
   @@index([mutationKey])
+}
+
+// ============================================================================
+// Community Contributions — bounded context ADITIVO (ADR-006).
+// NO toca Work/Edition/Volume/User/MutationLog/Notification (salvo la columna
+// NotificationPref.contributions). Refs cross-BC (Work/Edition/Volume/User/
+// MutationLog/assets) = BLANDAS (Int?/String?, sin FK). FKs SOLO internas al BC.
+// Enum-like = String (convención del repo, sin enums Prisma). Los CHECKs y las
+// invariantes complejas van fuera del schema (SQL manual / application). Ver
+// docs/community-contributions-first-migration-plan.md.
+// ============================================================================
+
+// Aggregate root: identidad opaca del sujeto propuesto + estado de moderación.
+// NO es una obra del catálogo; una propuesta pendiente no existe como Work.
+model CatalogProposal {
+  id                   Int      @id @default(autoincrement())
+  family               String // ALTA | CORRECCION | REPORTE
+  targetKind           String // NEW_WORK|NEW_EDITION|NEW_VOLUME|WORK|EDITION|VOLUME|STRUCTURAL
+  refWorkId            Int? // soft ref catálogo (target/parent/reporte-A)
+  refEditionId         Int? // soft ref catálogo
+  refVolumeId          Int? // soft ref catálogo
+  refWorkBId           Int? // soft ref catálogo (DUPLICATE contraparte)
+  relationKind         String? // DUPLICATE | BAD_MERGE (solo STRUCTURAL)
+  contentClass         String // MANGA | COMIC — autoritativo estructural, INMUTABLE
+  status               String   @default("SUBMITTED")
+  version              Int      @default(0) // optimistic locking
+  relatedProposalId    Int? // soft ref a otra Proposal (advisory; CHECK != id manual)
+  originatorUserId     String? // soft ref User (denorm; null p/ anonimización)
+  createIdempotencyKey String?  @unique
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  contributions ProposalContribution[]
+  infoRequests  ProposalInfoRequest[]
+  subscriptions ProposalSubscription[]
+  preflightKeys ProposalPreflightKey[]
+  resolution    ResolutionRecord?
+
+  @@index([status])
+  @@index([originatorUserId])
+  @@index([contentClass])
+  @@index([refWorkId])
+  @@index([refEditionId])
+  @@index([refVolumeId])
+}
+
+// Envío append-only atribuido. La primera contribución origina la Proposal.
+// Contenido inmutable; solo mutan visibility y withdrawnAt (metadata). La
+// disposición (aceptada/parcial/…) es DERIVADA, no se persiste.
+model ProposalContribution {
+  id                   Int       @id @default(autoincrement())
+  proposalId           Int
+  authorId             String? // soft ref User; null p/ anonimización → "Otra persona"
+  visibility           String    @default("VISIBLE") // VISIBLE | OCULTA | EN_CUARENTENA
+  withdrawnAt          DateTime? // retiro autoritativo (null = ABIERTA)
+  answersInfoRequestId Int? // FK interna (dirección autoritativa), onDelete: SetNull
+  idempotencyKey       String?   @unique
+  createdAt            DateTime  @default(now())
+
+  proposal           CatalogProposal      @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  answersInfoRequest ProposalInfoRequest? @relation(fields: [answersInfoRequestId], references: [id], onDelete: SetNull)
+  claims             ProposalClaim[]
+
+  @@index([proposalId, createdAt])
+  @@index([authorId])
+  @@index([answersInfoRequestId])
+}
+
+// Afirmación (attributeKind, value) — unidad de conocimiento y de resolución.
+// attributeKind/contractVersion/claimOperation/value INMUTABLES; result y su
+// metadata de resolución son mutables.
+model ProposalClaim {
+  id               Int       @id @default(autoincrement())
+  contributionId   Int
+  attributeKind    String
+  contractVersion  Int
+  claimOperation   String // SET|ADD|REMOVE|MARK_UNKNOWN|MARK_NOT_APPLICABLE
+  value            Json? // tipado por (attributeKind, contractVersion); null si MARK_*
+  result           String    @default("PROPUESTA") // PROPUESTA|ACEPTADA|NO_USADA|RETIRADA
+  resultReason     String? // procedencia|corroboracion | desplazada|descartada|rechazada
+  resolvedAt       DateTime?
+  resolvedByUserId String? // soft ref User
+  promotedAssetRef String? // soft ref a asset oficial (URL R2) p/ portada aceptada
+  createdAt        DateTime  @default(now())
+
+  contribution       ProposalContribution     @relation(fields: [contributionId], references: [id], onDelete: Cascade)
+  evidenceReferences ClaimEvidenceReference[]
+  evidenceArtifacts  ClaimEvidenceArtifact[]
+
+  @@index([contributionId, result])
+}
+
+// Evidencia por referencia (VO inmutable): URL / ISBN / fuente estructurada.
+model ClaimEvidenceReference {
+  id        Int      @id @default(autoincrement())
+  claimId   Int
+  type      String // URL | ISBN | SOURCE_REF
+  value     String
+  strength  String // STRONG | MEDIUM | WEAK
+  createdAt DateTime @default(now())
+
+  claim ProposalClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@unique([claimId, type, value])
+}
+
+// Evidencia por artefacto (imagen subida). LATENTE en MVP-A: la tabla existe pero
+// NO se crean filas desde producción hasta habilitar el pipeline de uploads (MVP-B).
+// Contenido inmutable; estado de moderación mutable. CHECKs de lifecycle → MVP-B.
+model ClaimEvidenceArtifact {
+  id                Int       @id @default(autoincrement())
+  claimId           Int
+  status            String    @default("EN_CUARENTENA") // EN_CUARENTENA|DISPONIBLE|BLOQUEADA
+  storageKey        String // opaca (key de R2); NO URL firmada
+  hash              String // content hash (tombstone/audit)
+  detectedMime      String?
+  sizeBytes         Int?
+  scanResult        String?
+  blockedReason     String?
+  scheduledDeleteAt DateTime?
+  bytesDeletedAt    DateTime?
+  promotedAssetRef  String? // soft ref a asset oficial (URL R2)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  claim ProposalClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([scheduledDeleteAt])
+}
+
+// Pedido de información del moderador. answersInfoRequestId (en Contribution) es la
+// dirección autoritativa; targetContributionId acá es una ref BLANDA (rompe el ciclo).
+model ProposalInfoRequest {
+  id                   Int       @id @default(autoincrement())
+  proposalId           Int
+  scope                String // PROPOSAL | CONTRIBUTION
+  targetUserId         String? // soft ref User
+  targetContributionId Int? // soft ref interna (sin FK; app valida misma Proposal)
+  prompt               String
+  privateNote          String? // solo moderador
+  status               String    @default("ABIERTO") // ABIERTO | ANSWERED
+  openedByUserId       String // soft ref User
+  answeredAt           DateTime?
+  idempotencyKey       String?   @unique // idempotencia fuerte de RequestProposalInfo (nullable p/ filas históricas)
+  createdAt            DateTime  @default(now())
+
+  proposal               CatalogProposal        @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  answeringContributions ProposalContribution[] // back-relation de answersInfoRequestId
+
+  @@index([proposalId, status])
+}
+
+// Interés/aviso en una propuesta. Aggregate aparte; no aporta datos.
+model ProposalSubscription {
+  id         Int      @id @default(autoincrement())
+  proposalId Int
+  userId     String // soft ref User
+  status     String   @default("ACTIVE") // ACTIVE | CANCELLED
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  proposal CatalogProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, proposalId])
+  @@index([proposalId, status])
+}
+
+// Registro inmutable del acto de resolución (1 por Proposal). publicReason y
+// privateNote viven SOLO acá. Refs de applied/superseding/mutation/primaryTitle = blandas.
+model ResolutionRecord {
+  id                    Int      @id @default(autoincrement())
+  proposalId            Int      @unique
+  outcome               String // ACEPTADA|RECHAZADA|SUPERSEDED|ABANDONADA
+  actorType             String // HUMAN | SYSTEM | RECONCILE
+  moderatorUserId       String? // soft ref User
+  resolvedAt            DateTime @default(now())
+  publicReason          String?
+  privateNote           String? // solo moderador
+  appliedWorkId         Int? // soft ref catálogo
+  appliedEditionId      Int? // soft ref catálogo
+  appliedVolumeId       Int? // soft ref catálogo
+  supersedingProposalId Int? // soft ref a otra Proposal
+  supersededReason      String? // IMPORT | MODERATION | ANOTHER_PROPOSAL
+  mutationCorrelationId String? // soft ref MutationLog.correlationId
+  overrideSummary       Json?
+  primaryTitleClaimId   Int? // soft ref interna (sin FK; app valida misma Proposal + ACEPTADA)
+  reconcileMeta         Json?
+
+  proposal CatalogProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+}
+
+// Índice derivado y recomputable de preflight (NO verdad del dominio). Se recomputa
+// desde las claims ACTIVAS; el preflight filtra por status de la Proposal.
+model ProposalPreflightKey {
+  id         Int    @id @default(autoincrement())
+  proposalId Int
+  keyType    String // NORM_TITLE | ROMAJI | ISBN | EXTERNAL
+  keyValue   String
+
+  proposal CatalogProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@unique([proposalId, keyType, keyValue])
+  @@index([keyType, keyValue])
+}
+
+// ============================================================================
+// Collection — bounded context de POSESIÓN (Slice 8, ADR-010). Colección automática:
+// las unidades retiradas en Retail (evento PICKED_UP) se materializan acá.
+// Modelo mínimo congelado: Acquisition (hecho histórico inmutable/idempotente) +
+// OwnershipPosition (Aggregate Root pequeño de (userId, volumeId)). Escribe SOLO
+// este modelo — NO reusa OwnedVolume (eje de identidad legado incompatible). El
+// dominio puro vive en lib/domain/collection/*; la infra en lib/collection-context/*.
+// Enum-like = String (convención del repo). CHECKs (quantity > 0 / >= 0) van por SQL
+// manual en la migración (Prisma no los expresa). Ver ADR-010.
+// ============================================================================
+
+// Hecho histórico INMUTABLE de entrada de unidades a la colección. Idempotente por
+// acquisitionKey (= "retail-pickup:<operationKey>" del evento fuente, opaca). Una fila
+// = un hecho físico de pickup. El proyector la aplica sobre la OwnershipPosition.
+model Acquisition {
+  id             Int      @id @default(autoincrement())
+  acquisitionKey String   @unique // identidad estable/opaca del hecho fuente; ancla de idempotencia
+  userId         String
+  volumeId       Int // catálogo Volume.id (mismo eje que Retail)
+  quantity       Int // > 0 (CHECK en la migración)
+  channel        String // RETAIL_PICKUP (obligatorio; Collection no lo infiere)
+  occurredAt     DateTime // momento físico del pickup (= StoreOrderLineEvent.createdAt); NO el de procesamiento
+  recordedAt     DateTime @default(now()) // técnico (cuándo Collection lo procesó); FUERA del contrato de dominio
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  volume Volume @relation(fields: [volumeId], references: [id], onDelete: Restrict)
+
+  @@index([userId, volumeId])
+}
+
+// Aggregate Root deliberadamente pequeño: posesión presente del par (userId, volumeId).
+// `quantity` = fuente de verdad persistida Y reconstruible como Σ Acquisition del par.
+// Hoy (append-only) sólo crece. No contiene entidades internas todavía (ejemplares
+// individualizados = futuro, dentro del mismo agregado). Ver ADR-010 §D2.
+model OwnershipPosition {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  volumeId  Int
+  quantity  Int      @default(0) // >= 0 (CHECK en la migración)
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  volume Volume @relation(fields: [volumeId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, volumeId])
+  @@index([userId])
 }

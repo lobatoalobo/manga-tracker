@@ -61,3 +61,12 @@ next-env.d.ts
 /editoriales-chicas.md
 /ovni-manga.md
 series-export.csv
+
+# Backups de scripts de split/limpieza de datos (artefactos de runtime, para rollback)
+scripts/.backup-*.json
+
+# ephemeral postgres for identity integration tests
+.tmp-identity-pg/
+
+# Retail: Excel comerciales reales usados como evidencia de auditoría (no versionar)
+docs/crumb/

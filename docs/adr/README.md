@@ -28,3 +28,10 @@ un ADR que desde el código.
 | 002 | [Mutation Framework](002-mutation-framework.md) | Aceptado |
 | 003 | Dominio de catálogo | _pendiente (Fase 2)_ |
 | 004 | [Capa de Identidad Externa](004-external-identity.md) | Propuesto (gate: spike de granularidad) |
+| 005 | Identidad de creadores | _en rama de identidad (staging), congelado_ |
+| 006 | [Contribuciones comunitarias al catálogo](006-community-contributions.md) | Aceptado (dominio) |
+| 007 | [Familias de proyección del motor Apply](007-apply-projection-families.md) | Aceptado |
+| 008 | [Coordinación Identidad–Contenido en Fusionar](008-merge-identity-content-coordination.md) | Aceptado (T1) — Fusionar IMPLEMENTADA ([slice](../identity-merge-slice.md)) |
+| 009 | [Integridad de referencias frente a transiciones de Identity](009-reference-integrity-identity-transitions.md) | Aceptado (T2) — validado contra REDIRECTED real de Fusionar |
+| 010 | [Proyección de colección automática (Slice 8)](010-slice8-collection-projection.md) | Aceptado — **IMPLEMENTADO** ([slice](../retail-slice-8-collection-projection.md)) |
+| 011 | [Read-side de colección: Collection autoritativo + backstop legado (Slice 9/F1)](011-collection-read-side.md) | Aceptado — [diseño](../retail-slice-9-unified-collection-read-side.md) |
