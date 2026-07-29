@@ -10,6 +10,9 @@ import { CollectionError, COLLECTION_ERROR } from "@/lib/domain/collection/error
 /** Canal de procedencia de una adquisición. Obligatorio; Collection NO lo infiere (lo fija el proyector). */
 export const ACQUISITION_CHANNEL = {
   RETAIL_PICKUP: "RETAIL_PICKUP",
+  // Backfill del modelo legado `OwnedVolume` → Collection (F2.2, ADR-012): procedencia de una posesión importada
+  // del legado booleano, distinta de un pickup real. No altera el flujo de Slice 8 (adición estrictamente aditiva).
+  LEGACY_BACKFILL: "LEGACY_BACKFILL",
 } as const;
 export type AcquisitionChannel = (typeof ACQUISITION_CHANNEL)[keyof typeof ACQUISITION_CHANNEL];
 
