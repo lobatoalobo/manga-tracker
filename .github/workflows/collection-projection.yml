@@ -1,0 +1,78 @@
+name: Collection Projection Sweep
+
+# Reemplaza el cron horario de Vercel (incompatible con el plan Hobby, que solo
+# admite crons diarios). Invoca el endpoint protegido de produccion cada hora.
+# El barrido es idempotente y recuperador (Slice 8): una hora perdida se procesa
+# en la siguiente. La URL sale SIEMPRE de una variable de repo (nunca de un input),
+# para que el header con CRON_SECRET no pueda redirigirse a un destino arbitrario.
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: collection-projection-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Invoke projection sweep
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ vars.PROJECTION_BASE_URL }}
+        run: |
+          set -euo pipefail
+
+          test -n "$CRON_SECRET" || {
+            echo "::error::CRON_SECRET is not configured"
+            exit 1
+          }
+
+          test -n "$BASE_URL" || {
+            echo "::error::PROJECTION_BASE_URL is not configured"
+            exit 1
+          }
+
+          case "$BASE_URL" in
+            https://*) ;;
+            *)
+              echo "::error::PROJECTION_BASE_URL must use https"
+              exit 1
+              ;;
+          esac
+
+          BASE_URL="${BASE_URL%/}"
+
+          code=$(curl \
+            --silent \
+            --show-error \
+            --output /tmp/response.json \
+            --write-out "%{http_code}" \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            "$BASE_URL/api/cron/collection-projection")
+
+          echo "HTTP $code"
+
+          test "$code" = "200" || {
+            echo "::error::Projection endpoint returned HTTP $code"
+            exit 1
+          }
+
+          node -e "
+            const fs = require('fs');
+            const result = JSON.parse(
+              fs.readFileSync('/tmp/response.json', 'utf8')
+            );
+
+            if (result.ok !== true) {
+              console.error('::error::Projection endpoint returned ok != true');
+              process.exit(1);
+            }
+
+            console.log('Projection sweep completed successfully');
+          "
