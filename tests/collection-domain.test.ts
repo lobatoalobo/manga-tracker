@@ -124,9 +124,9 @@ describe("reconcileAcquisition", () => {
 // PROJECTION_RESULT — vocabulario de resultados
 // ---------------------------------------------------------------------------
 describe("PROJECTION_RESULT", () => {
-  it("expone los seis resultados esperables", () => {
+  it("expone los siete resultados esperables (incl. PENDING_CATALOG_RESOLUTION)", () => {
     expect(Object.values(PROJECTION_RESULT).sort()).toEqual(
-      ["ALREADY_APPLIED", "APPLIED", "CONFLICT", "CORRUPT_SOURCE", "RETRYABLE_FAILURE", "TERMINALLY_NOT_APPLICABLE"],
+      ["ALREADY_APPLIED", "APPLIED", "CONFLICT", "CORRUPT_SOURCE", "PENDING_CATALOG_RESOLUTION", "RETRYABLE_FAILURE", "TERMINALLY_NOT_APPLICABLE"],
     );
   });
 });

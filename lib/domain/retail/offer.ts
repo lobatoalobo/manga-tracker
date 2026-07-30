@@ -52,3 +52,42 @@ export interface OfferSnapshot {
   readonly publisherSnapshot: string | null; // PublisherEdition.publisher
   readonly isbnSnapshot: string | null; // Volume.isbn (hoy casi siempre null en el catálogo)
 }
+
+/**
+ * Descriptor comercial de una oferta MANUAL (lanzamiento aún no catalogado, sin Volume). Es lo que la tienda
+ * autora a mano; se congela como snapshot al reservar (registro histórico inmutable de lo publicado). El
+ * catálogo sigue siendo la autoridad bibliográfica cuando exista un Volume; esto NO lo reemplaza.
+ */
+export interface ManualOfferDescriptor {
+  readonly title: string;
+  readonly volumeNumber: number | null;
+  readonly publisher: string | null;
+  readonly isbn: string | null;
+}
+
+const MANUAL_TITLE_MAX = 300;
+
+/**
+ * Valida y NORMALIZA un descriptor manual (PURO). Título requerido (trim, ≤ 300); número opcional entero ≥ 0;
+ * editorial/ISBN opcionales (trim; vacío → null). Lanza INVALID_TITLE / INVALID_OFFER_DESCRIPTOR. No toca catálogo.
+ */
+export function assertValidManualDescriptor(input: {
+  title: string;
+  volumeNumber?: number | null;
+  publisher?: string | null;
+  isbn?: string | null;
+}): ManualOfferDescriptor {
+  const title = (input.title ?? "").trim();
+  if (title.length === 0)
+    throw new RetailError(RETAIL_ERROR.INVALID_TITLE, "el título de la oferta es requerido");
+  if (title.length > MANUAL_TITLE_MAX)
+    throw new RetailError(RETAIL_ERROR.INVALID_TITLE, `el título no puede superar ${MANUAL_TITLE_MAX} caracteres`);
+  const volumeNumber = input.volumeNumber ?? null;
+  if (volumeNumber !== null && (!Number.isInteger(volumeNumber) || volumeNumber < 0))
+    throw new RetailError(RETAIL_ERROR.INVALID_OFFER_DESCRIPTOR, "el número de tomo debe ser un entero ≥ 0");
+  const norm = (s: string | null | undefined): string | null => {
+    const t = (s ?? "").trim();
+    return t.length === 0 ? null : t;
+  };
+  return { title, volumeNumber, publisher: norm(input.publisher), isbn: norm(input.isbn) };
+}

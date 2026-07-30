@@ -43,7 +43,7 @@ describe.skipIf(!URL)("integración — Pagos manuales (Slice 6, base real)", ()
   async function reservedOrder(storeId: number, owner: string, qty = 2, price = 50000) {
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
     const volumeId = await volume(1);
-    const o = await addPreorderOffer({ campaignId: c.id, volumeId, listPriceCents: price * 2, preorderPriceCents: price }, owner, prisma);
+    const o = await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId, listPriceCents: price * 2, preorderPriceCents: price }, owner, prisma);
     await publishPreorderCampaign(c.id, owner, prisma);
     const client = await user();
     const order = await createStoreOrder({ campaignId: c.id, items: [{ offerId: o.id, quantity: qty }] }, client, prisma);
@@ -211,7 +211,7 @@ describe.skipIf(!URL)("integración — Pagos manuales (Slice 6, base real)", ()
   it("resumen agregado por campaña excluye canceladas; listPendingPayments trae saldos", async () => {
     const { storeId, owner } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
-    const mkOffer = async () => { const v = await volume(1); return (await addPreorderOffer({ campaignId: c.id, volumeId: v, listPriceCents: 100000, preorderPriceCents: 50000 }, owner, prisma)).id; };
+    const mkOffer = async () => { const v = await volume(1); return (await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId: v, listPriceCents: 100000, preorderPriceCents: 50000 }, owner, prisma)).id; };
     const o1 = await mkOffer(); const o2 = await mkOffer(); const o3 = await mkOffer();
     await publishPreorderCampaign(c.id, owner, prisma);
     const mkOrder = async (offerId: number, qty: number) => { const u = await user(); return createStoreOrder({ campaignId: c.id, items: [{ offerId, quantity: qty }] }, u, prisma); };

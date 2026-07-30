@@ -29,7 +29,9 @@ export const RETAIL_ERROR_LABEL: Record<string, string> = {
   INVALID_PRICE: "Precios inválidos (preventa ≤ lista, ≥ 0).",
   INVALID_DATES: "Las fechas no son coherentes.",
   INVALID_TITLE: "El título no puede estar vacío.",
+  INVALID_OFFER_DESCRIPTOR: "Datos de la oferta manual inválidos (revisá el número de tomo).",
   VOLUME_NOT_FOUND: "El tomo no existe en el catálogo.",
+  FEATURE_DISABLED: "La creación de ofertas manuales no está habilitada.",
   STORE_COMMERCE_DISABLED: "La tienda comercial no está habilitada.",
   // Reservas (Slice 3)
   ORDER_NOT_FOUND: "La orden no existe.",
