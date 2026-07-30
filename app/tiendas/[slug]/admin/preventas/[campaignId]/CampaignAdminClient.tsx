@@ -19,7 +19,7 @@ export interface CampaignView {
   opensAt: string | null; closesAt: string | null; publishedAt: string | null;
 }
 
-export default function CampaignAdminClient({ slug, campaign, offers }: { slug: string; campaign: CampaignView; offers: OfferView[] }) {
+export default function CampaignAdminClient({ slug, campaign, offers, manualOffersEnabled = false }: { slug: string; campaign: CampaignView; offers: OfferView[]; manualOffersEnabled?: boolean }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -94,9 +94,47 @@ export default function CampaignAdminClient({ slug, campaign, offers }: { slug: 
         </ul>
       </section>
 
-      {/* picker de tomos (solo DRAFT) */}
+      {/* picker de tomos del catálogo (solo DRAFT) */}
       {isDraft && <OfferPicker slug={slug} campaignId={campaign.id} onAdded={() => router.refresh()} onError={setError} />}
+
+      {/* carga manual de una preventa aún no catalogada (solo DRAFT + flag retail-manual-offers) */}
+      {isDraft && manualOffersEnabled && <ManualOfferForm slug={slug} campaignId={campaign.id} onAdded={() => router.refresh()} onError={setError} />}
     </div>
+  );
+}
+
+/** Alta MANUAL mínima (F4): título obligatorio; número/editorial/ISBN opcionales; precios. Sin portada/matching. */
+function ManualOfferForm({ slug, campaignId, onAdded, onError }: { slug: string; campaignId: number; onAdded: () => void; onError: (e: string) => void }) {
+  const [pending, start] = useTransition();
+  return (
+    <section>
+      <h2 className="mb-2 text-lg font-semibold">Agregar lanzamiento sin catalogar</h2>
+      <p className="mb-2 text-xs text-muted">Para preventas de próximos lanzamientos que todavía no están en el catálogo. Cargá los datos a mano.</p>
+      <form
+        action={(fd) =>
+          start(async () => {
+            const r = await addOfferAction(slug, campaignId, fd);
+            if (r.ok) { (document.getElementById(`manual-${campaignId}`) as HTMLFormElement | null)?.reset(); onAdded(); }
+            else onError(retailErrorLabel(r.error));
+          })
+        }
+        id={`manual-${campaignId}`}
+        className="space-y-2 rounded-xl border border-border p-4"
+      >
+        <input type="hidden" name="mode" value="manual" />
+        <input name="title" required placeholder="Título (obligatorio)" className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
+        <div className="grid grid-cols-2 gap-2">
+          <input name="volumeNumber" type="number" min="0" step="1" placeholder="N.º de tomo (opcional)" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
+          <input name="publisher" placeholder="Editorial (opcional)" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
+        </div>
+        <input name="isbn" placeholder="ISBN (opcional)" className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
+        <div className="flex items-center gap-2">
+          <input name="listPrice" type="number" step="0.01" placeholder="lista $" required className="w-28 rounded border border-border bg-surface px-2 py-1 text-sm" />
+          <input name="preorderPrice" type="number" step="0.01" placeholder="preventa $" required className="w-28 rounded border border-border bg-surface px-2 py-1 text-sm" />
+          <button disabled={pending} className="rounded bg-accent px-3 py-1 text-sm text-white">Agregar</button>
+        </div>
+      </form>
+    </section>
   );
 }
 
@@ -123,6 +161,7 @@ function OfferPicker({ slug, campaignId, onAdded, onError }: { slug: string; cam
               }
               className="flex items-center justify-between gap-2 px-4 py-2.5 text-sm"
             >
+              <input type="hidden" name="mode" value="linked" />
               <input type="hidden" name="volumeId" value={v.volumeId} />
               <span>{v.title} #{v.volumeNumber} <span className="text-muted">· {v.publisher}</span></span>
               <span className="flex items-center gap-2">

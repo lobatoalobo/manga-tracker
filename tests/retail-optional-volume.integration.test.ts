@@ -11,6 +11,7 @@ import { bootstrapStoreCommerce } from "@/lib/storeCommerce";
 import { createPreorderCampaign, publishPreorderCampaign } from "@/lib/retail/campaigns";
 import { addPreorderOffer } from "@/lib/retail/offers";
 import { createStoreOrder, getCustomerOrder } from "@/lib/retail/orders";
+import { getPublicCampaign } from "@/lib/retail/public";
 import { registerPayment } from "@/lib/retail/payments";
 import { markOrderLineOrdered, markOrderLineArrived } from "@/lib/retail/fulfillment";
 import { prepareOrderLine, pickupOrderLine } from "@/lib/retail/handoff";
@@ -97,6 +98,16 @@ describe.skipIf(!URL)("integración — ofertas con vínculo de catálogo opcion
     expect(linked.volumeId).not.toBeNull();
     expect(manual.volumeId).toBeNull();
     expect(await prisma.preorderOffer.count({ where: { campaignId: c.id } })).toBe(2);
+  });
+
+  it("degradación pública: la oferta manual se ve por getPublicCampaign (volumeId null, snapshot suficiente)", async () => {
+    const { storeId, owner, slug } = await commerceStore();
+    const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
+    await addPreorderOffer({ campaignId: c.id, mode: "manual", descriptor: { title: "Próximo tomo", volumeNumber: 2, publisher: "Ovni" }, listPriceCents: 100000, preorderPriceCents: 75000 }, owner, prisma);
+    await publishPreorderCampaign(c.id, owner, prisma);
+    const pub = await getPublicCampaign(slug, c.id, new Date(), prisma);
+    expect(pub?.offers).toHaveLength(1);
+    expect(pub?.offers[0]).toMatchObject({ volumeId: null, title: "Próximo tomo", volumeNumber: 2, publisher: "Ovni", discountPercent: 25 });
   });
 
   // --- orden desde oferta manual --------------------------------------------

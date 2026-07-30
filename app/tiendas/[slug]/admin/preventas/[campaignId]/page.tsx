@@ -4,6 +4,7 @@ import { requireStoreMember } from "@/lib/storeAuth";
 import { StoreAuthError, STORE_ROLE } from "@/lib/domain/store/authorize";
 import { getStoreCampaign } from "@/lib/retail/campaigns";
 import { derivedDiscountPercent } from "@/lib/domain/retail/offer";
+import { isEnabled } from "@/lib/featureFlags";
 import CampaignAdminClient from "./CampaignAdminClient";
 
 export const metadata = { title: "Campaña · Admin · Nakama" };
@@ -39,6 +40,8 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
     listPriceCents: o.listPriceCents, preorderPriceCents: o.preorderPriceCents,
     discountPercent: derivedDiscountPercent(o.listPriceCents, o.preorderPriceCents), status: o.status,
   }));
+  // Solo la CREACIÓN manual está gateada; la lectura de las ofertas (incl. manuales) no depende del flag.
+  const manualOffersEnabled = await isEnabled("retail-manual-offers");
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-8">
@@ -53,7 +56,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
         </span>
       </div>
       <h1 className="mt-4 mb-6 text-2xl font-bold">{campaign.title}</h1>
-      <CampaignAdminClient slug={slug} campaign={view} offers={offers} />
+      <CampaignAdminClient slug={slug} campaign={view} offers={offers} manualOffersEnabled={manualOffersEnabled} />
     </main>
   );
 }

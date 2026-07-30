@@ -18,6 +18,7 @@ import {
 } from "@/lib/retail/campaigns";
 import { addPreorderOffer, updatePreorderOffer, hidePreorderOffer, showPreorderOffer, cancelPreorderOffer, removeDraftPreorderOffer } from "@/lib/retail/offers";
 import { searchOfferVolumes, type OfferVolumeCandidate } from "@/lib/retail/volumeSearch";
+import { isEnabled } from "@/lib/featureFlags";
 import { RetailError } from "@/lib/domain/retail/errors";
 import { StoreAuthError } from "@/lib/domain/store/authorize";
 
@@ -92,13 +93,40 @@ export async function searchVolumesAction(query: string): Promise<OfferVolumeCan
   return searchOfferVolumes(query);
 }
 
+/**
+ * Agrega una oferta. Convierte el form a una entrada DISCRIMINADA explícita (nunca ambigua):
+ *  - `mode=manual` → `{ mode: "manual", descriptor }`, gateado por el flag `retail-manual-offers`. La
+ *    re-validación del flag es SERVER-SIDE: un request manual por fuera de la UI se rechaza con el flag apagado.
+ *  - resto (default / `mode=linked`) → `{ mode: "linked", volumeId }`, comportamiento histórico NO gateado.
+ * El flag solo gatea la ESCRITURA manual; nunca la lectura ni el picker vinculado.
+ */
 export async function addOfferAction(slug: string, campaignId: number, fd: FormData): Promise<ActionResult> {
   try {
     const userId = await requireUserId();
-    await addPreorderOffer(
-      { campaignId, mode: "linked", volumeId: Number(str(fd, "volumeId")), listPriceCents: pesosToCents(fd, "listPrice"), preorderPriceCents: pesosToCents(fd, "preorderPrice") },
-      userId,
-    );
+    const listPriceCents = pesosToCents(fd, "listPrice");
+    const preorderPriceCents = pesosToCents(fd, "preorderPrice");
+
+    if (str(fd, "mode") === "manual") {
+      if (!(await isEnabled("retail-manual-offers"))) return { ok: false, error: "FEATURE_DISABLED" };
+      const volumeNumberRaw = str(fd, "volumeNumber");
+      await addPreorderOffer(
+        {
+          campaignId,
+          mode: "manual",
+          descriptor: {
+            title: str(fd, "title"),
+            volumeNumber: volumeNumberRaw === "" ? null : Number(volumeNumberRaw),
+            publisher: str(fd, "publisher") || null,
+            isbn: str(fd, "isbn") || null,
+          },
+          listPriceCents,
+          preorderPriceCents,
+        },
+        userId,
+      );
+    } else {
+      await addPreorderOffer({ campaignId, mode: "linked", volumeId: Number(str(fd, "volumeId")), listPriceCents, preorderPriceCents }, userId);
+    }
     revalidatePath(`/tiendas/${slug}/admin/preventas/${campaignId}`);
     return { ok: true };
   } catch (err) {
