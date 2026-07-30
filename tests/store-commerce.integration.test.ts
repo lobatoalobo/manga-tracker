@@ -6,8 +6,9 @@
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
-import { bootstrapStoreCommerce, addMember, removeMember, listMembers } from "@/lib/storeCommerce";
+import { bootstrapStoreCommerce, addMember, removeMember, listMembers, updateCommerceData } from "@/lib/storeCommerce";
 import { authorizeStoreAccess } from "@/lib/storeAccess";
+import { DEFAULT_CHECKOUT_MODE } from "@/lib/domain/retail/checkout";
 import { STORE_ROLE, STORE_AUTH_ERROR, StoreAuthError } from "@/lib/domain/store/authorize";
 import { STORE_MEMBERSHIP_ERROR, StoreMembershipError } from "@/lib/domain/store/membership";
 
@@ -52,6 +53,44 @@ describe.skipIf(!URL)("integración — Store Commerce (Slice 1, base real)", ()
       STORE_MEMBERSHIP_ERROR.BOOTSTRAP_FORBIDDEN,
     );
     expect(await prisma.storeCommerceProfile.count({ where: { storeId } })).toBe(0);
+  });
+
+  // --- configuración comercial (Slice P0): datos de contacto/pago + default de checkoutMode ---
+  it("bootstrap deja checkoutMode en CONVERSATIONAL (default); updateCommerceData round-trip sin tocar enabled/slug/checkoutMode", async () => {
+    const owner = await user();
+    const slug = uniq();
+    await bootstrapStoreCommerce({ storeId: await store(), slug, ownerUserId: owner, isGlobalAdmin: true, enabled: true }, prisma);
+    const before = await prisma.storeCommerceProfile.findUnique({ where: { slug }, select: { checkoutMode: true } });
+    expect(before?.checkoutMode).toBe(DEFAULT_CHECKOUT_MODE); // CONVERSATIONAL
+
+    await updateCommerceData(
+      slug,
+      {
+        whatsapp: " +54 9 11 5555 5555 ",
+        paymentAlias: " mi.alias.mp ",
+        paymentInstructions: "Transferí al alias y avisá",
+        pickupInstructions: "Retiro L-V",
+        publicDescription: "Tienda de prueba",
+      },
+      prisma,
+    );
+    const after = await prisma.storeCommerceProfile.findUnique({ where: { slug } });
+    expect(after).toMatchObject({
+      slug,
+      enabled: true,
+      checkoutMode: DEFAULT_CHECKOUT_MODE,
+      whatsapp: "+54 9 11 5555 5555", // clean() recorta
+      paymentAlias: "mi.alias.mp",
+      paymentInstructions: "Transferí al alias y avisá",
+      pickupInstructions: "Retiro L-V",
+      publicDescription: "Tienda de prueba",
+    });
+
+    // vaciar un campo lo deja en null (clean); no afecta a los demás
+    await updateCommerceData(slug, { paymentAlias: "   " }, prisma);
+    const cleared = await prisma.storeCommerceProfile.findUnique({ where: { slug } });
+    expect(cleared?.paymentAlias).toBeNull();
+    expect(cleared?.paymentInstructions).toBe("Transferí al alias y avisá");
   });
 
   // --- autorización central por ID estable (sin auth(), userId explícito) ---
