@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { getCollectionItems, getShareSlug, getFavoriteId } from "@/lib/collection";
+import { getCollectionItemsUnified } from "@/lib/collectionUnified";
+import { isEnabled } from "@/lib/featureFlags";
 import CollectionGrid from "@/components/CollectionGrid";
 import ShareToggle from "@/components/ShareToggle";
 import ImportExport from "@/components/ImportExport";
@@ -15,8 +17,13 @@ export default async function CollectionPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/");
 
+  // Read-side unificado detrás de flag (Retail Pilot, Fase 1): suma tomos de preventa retirados (OwnershipPosition)
+  // sobre la colección legada. Off = comportamiento legado idéntico. Ver docs/retail-pilot-collection-read-wiring-design.md.
+  const unified = await isEnabled("unified-collection");
   const [items, shareSlug, favoriteId] = await Promise.all([
-    getCollectionItems(session.user.id),
+    unified
+      ? getCollectionItemsUnified(session.user.id)
+      : getCollectionItems(session.user.id),
     getShareSlug(session.user.id),
     getFavoriteId(session.user.id),
   ]);
