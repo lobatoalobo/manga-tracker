@@ -748,6 +748,10 @@ model StoreCommerceProfile {
   paymentInstructions String?
   pickupInstructions  String?
   publicDescription   String?
+  // Experiencia de checkout (Slice P0). En P0 el único valor es CONVERSATIONAL; columna forward-ready para que
+  // P1 sume SELF_SERVICE de forma aditiva. Método de pago y canal de comunicación son ejes aparte.
+  // Ver docs/retail-slice-p0-conversational-checkout.md.
+  checkoutMode        String   @default("CONVERSATIONAL")
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

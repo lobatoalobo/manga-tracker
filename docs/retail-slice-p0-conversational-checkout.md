@@ -41,3 +41,4 @@ esquema" → `P2022`). Rollback: código = revert/promote; datos = ninguno; esqu
 
 ## Estado por tarea
 - **T1 — Dominio + doc inicial:** hecho.
+- **T2 — Esquema + migración aditiva:** hecho. `StoreCommerceProfile.checkoutMode TEXT NOT NULL DEFAULT 'CONVERSATIONAL'` (migración `20260802000000_retail_checkout_mode`, expand-only). Valida desde cero en el harness (261 IT). NO aplicada a staging/prod (deploy-time, migrate-first).
