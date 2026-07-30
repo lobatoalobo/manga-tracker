@@ -19,6 +19,12 @@ export const FEATURE_FLAGS = {
       "Alta/corrección/reporte de catálogo por la comunidad (Community Contributions). Sin UI todavía.",
     default: false,
   },
+  "unified-collection": {
+    label: "Colección unificada (read-side)",
+    description:
+      "`/collection` lee el read-side unificado: suma tomos retirados en preventa (OwnershipPosition) sobre la colección legada, sin duplicar. Off = solo legado.",
+    default: false,
+  },
 } as const;
 
 export type FlagKey = keyof typeof FEATURE_FLAGS;
