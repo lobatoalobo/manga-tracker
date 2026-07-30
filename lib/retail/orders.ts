@@ -238,7 +238,16 @@ export async function getCustomerOrder(publicCode: string, actorUserId: string |
       id: true, publicCode: true, userId: true, status: true, totalCents: true, createdAt: true, cancelledAt: true,
       // Proyección de pago visible al cliente (Slice 6): total/pagado/estado (restante se computa en la UI).
       paidCents: true, paymentStatus: true,
-      store: { select: { name: true, commerceProfile: { select: { slug: true } } } },
+      // Datos de EXHIBICIÓN de la tienda para el comprador (Slice P0): experiencia de checkout + contacto/pago.
+      // Solo campos públicos del perfil; nunca notas internas ni datos de otras órdenes.
+      store: {
+        select: {
+          name: true,
+          commerceProfile: {
+            select: { slug: true, checkoutMode: true, whatsapp: true, paymentAlias: true, paymentInstructions: true },
+          },
+        },
+      },
       campaign: { select: { id: true, title: true, weekLabel: true, status: true, opensAt: true, closesAt: true } },
       lines: { orderBy: { id: "asc" }, select: ORDER_LINE_SELECT },
       // Avisos SENT visibles al cliente (§21): fecha, mensaje e ítems. Nunca DRAFT/CANCELLED ni datos internos.

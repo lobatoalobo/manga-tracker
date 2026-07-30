@@ -6,7 +6,8 @@
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
-import { bootstrapStoreCommerce, addMember, setCommerceEnabled } from "@/lib/storeCommerce";
+import { bootstrapStoreCommerce, addMember, setCommerceEnabled, updateCommerceData } from "@/lib/storeCommerce";
+import { registerPayment } from "@/lib/retail/payments";
 import { createPreorderCampaign, publishPreorderCampaign, closePreorderCampaign } from "@/lib/retail/campaigns";
 import { addPreorderOffer, hidePreorderOffer } from "@/lib/retail/offers";
 import {
@@ -55,6 +56,7 @@ describe.skipIf(!URL)("integración — Reservas (Slice 3, base real)", () => {
 
   beforeAll(async () => { await prisma.$queryRaw`SELECT 1`; });
   afterEach(async () => {
+    await prisma.storePayment.deleteMany({}); // Restrict → borrar antes que la orden
     await prisma.storeOrderLine.deleteMany({});
     await prisma.storeOrder.deleteMany({});
     await prisma.preorderOffer.deleteMany({});
@@ -82,6 +84,35 @@ describe.skipIf(!URL)("integración — Reservas (Slice 3, base real)", () => {
     expect(order.lines[0]).toMatchObject({ quantity: 2, unitListPriceCents: 100000, unitPreorderPriceCents: 70000, lineTotalCents: 140000 });
     expect(order.lines[0].titleSnapshot).toBeTruthy();
     expect(order.customerEmailSnapshot).toContain("@ro.dev");
+  });
+
+  it("getCustomerOrder expone datos de exhibición de la tienda (checkoutMode/whatsapp/alias/instrucciones) y NO filtra la nota interna del pago", async () => {
+    const { storeId, owner, slug } = await commerceStore();
+    await updateCommerceData(
+      slug,
+      { whatsapp: "+5491155550000", paymentAlias: "mi.alias", paymentInstructions: "Transferí y avisá" },
+      prisma,
+    );
+    const { campaignId, offerIds } = await openCampaign(storeId, owner, [{ list: 100000, pre: 90000 }]);
+    const client = await user();
+    const order = await createStoreOrder({ campaignId, items: [{ offerId: offerIds[0], quantity: 1 }] }, client, prisma);
+    await registerPayment(
+      { orderId: order.id, amountCents: 90000, method: "TRANSFER", paidAt: new Date(), note: "secreto interno" },
+      owner,
+      `${uniq()}-pay`,
+      prisma,
+    );
+
+    const view = await getCustomerOrder(order.publicCode, client, prisma);
+    expect(view.store.commerceProfile).toMatchObject({
+      checkoutMode: "CONVERSATIONAL",
+      whatsapp: "+5491155550000",
+      paymentAlias: "mi.alias",
+      paymentInstructions: "Transferí y avisá",
+    });
+    expect(view.paymentStatus).toBe("PAID");
+    expect(view.payments).toHaveLength(1);
+    expect(view.payments[0]).not.toHaveProperty("note"); // la nota interna nunca llega al comprador
   });
 
   it("crea orden con varias ofertas → total = suma", async () => {
