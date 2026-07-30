@@ -35,3 +35,4 @@ un ADR que desde el código.
 | 009 | [Integridad de referencias frente a transiciones de Identity](009-reference-integrity-identity-transitions.md) | Aceptado (T2) — validado contra REDIRECTED real de Fusionar |
 | 010 | [Proyección de colección automática (Slice 8)](010-slice8-collection-projection.md) | Aceptado — **IMPLEMENTADO** ([slice](../retail-slice-8-collection-projection.md)) |
 | 011 | [Read-side de colección: Collection autoritativo + backstop legado (Slice 9/F1)](011-collection-read-side.md) | Aceptado — [diseño](../retail-slice-9-unified-collection-read-side.md) |
+| 012 | [Retail: vínculo de catálogo opcional en la oferta de preventa](012-retail-optional-catalog-link.md) | Aceptado — **IMPLEMENTADO** (F1–F4) |
