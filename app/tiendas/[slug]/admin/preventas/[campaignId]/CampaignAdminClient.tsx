@@ -11,7 +11,7 @@ import { formatArsCents, retailErrorLabel } from "@/lib/retail/format";
 import type { OfferVolumeCandidate } from "@/lib/retail/volumeSearch";
 
 export interface OfferView {
-  id: number; volumeId: number; title: string; volumeNumber: number | null; publisher: string | null;
+  id: number; volumeId: number | null; title: string; volumeNumber: number | null; publisher: string | null;
   listPriceCents: number; preorderPriceCents: number; discountPercent: number; status: string;
 }
 export interface CampaignView {

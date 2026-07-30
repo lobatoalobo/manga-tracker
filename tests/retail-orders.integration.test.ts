@@ -301,6 +301,6 @@ describe.skipIf(!URL)("integración — Reservas (Slice 3, base real)", () => {
     await prisma.publisherEdition.update({ where: { id: editionId }, data: { workId: survivor.id } });
     const line = await prisma.storeOrderLine.findFirst({ where: { orderId: order.id }, include: { volume: { include: { edition: { select: { workId: true } } } } } });
     expect(line?.volumeId).toBe(volumeId); // la línea sigue apuntando al mismo Volume
-    expect(line?.volume.edition.workId).toBe(survivor.id); // resuelve el Work sobreviviente
+    expect(line?.volume?.edition.workId).toBe(survivor.id); // resuelve el Work sobreviviente
   });
 });

@@ -17,7 +17,7 @@ type Client = Pick<PrismaClient, "storeCommerceProfile" | "preorderCampaign">;
 
 export interface PublicOfferView {
   id: number;
-  volumeId: number;
+  volumeId: number | null; // null = oferta manual (lanzamiento aún no catalogado)
   title: string;
   volumeNumber: number | null;
   publisher: string | null;

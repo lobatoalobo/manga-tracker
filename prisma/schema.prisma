@@ -821,7 +821,9 @@ model PreorderCampaign {
 model PreorderOffer {
   id                   Int      @id @default(autoincrement())
   campaignId           Int
-  volumeId             Int
+  // Identidad de catálogo OPCIONAL (slice ofertas de vínculo opcional). null = oferta manual (lanzamiento aún no
+  // catalogado); los snapshots de abajo son el registro histórico inmutable de la descripción comercial publicada.
+  volumeId             Int?
   titleSnapshot        String
   volumeNumberSnapshot Int?
   publisherSnapshot    String?
@@ -834,7 +836,7 @@ model PreorderOffer {
   updatedAt            DateTime @updatedAt
 
   campaign   PreorderCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  volume     Volume           @relation(fields: [volumeId], references: [id], onDelete: Restrict)
+  volume     Volume?          @relation(fields: [volumeId], references: [id], onDelete: Restrict)
   orderLines StoreOrderLine[] // líneas de reserva que congelaron esta oferta (Restrict: no se borra si hay líneas)
 
   @@unique([campaignId, volumeId])
@@ -904,7 +906,10 @@ model StoreOrderLine {
   id                     Int      @id @default(autoincrement())
   orderId                Int
   offerId                Int
-  volumeId               Int
+  // Identidad de catálogo OPCIONAL: heredada de la oferta al reservar. null = la oferta era manual (sin Volume).
+  // Los snapshots de abajo son el registro histórico inmutable de lo que vio el comprador. Collection posterga
+  // (no falla) la proyección de las líneas sin Volume hasta que exista identidad de catálogo.
+  volumeId               Int?
   quantity               Int
   unitListPriceCents     Int
   unitPreorderPriceCents Int
@@ -934,7 +939,7 @@ model StoreOrderLine {
 
   order       StoreOrder           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   offer       PreorderOffer        @relation(fields: [offerId], references: [id], onDelete: Restrict)
-  volume      Volume               @relation(fields: [volumeId], references: [id], onDelete: Restrict)
+  volume      Volume?              @relation(fields: [volumeId], references: [id], onDelete: Restrict)
   cancelledBy       User?                        @relation("lineCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
   events            StoreOrderLineEvent[]
   notificationItems StoreOrderNotificationItem[] // avisos que informaron unidades de esta línea (Restrict)

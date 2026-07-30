@@ -3,7 +3,7 @@ import {
   CAMPAIGN_STATUS, canTransitionCampaign, assertCampaignTransition, isDraftEditable, assertDraftEditable,
   assertValidTitle, assertValidDates, assertPublishable, isCampaignOpen, publicAvailabilityLabel,
 } from "@/lib/domain/retail/campaign";
-import { OFFER_STATUS, canTransitionOffer, assertValidPrices, derivedDiscountPercent } from "@/lib/domain/retail/offer";
+import { OFFER_STATUS, canTransitionOffer, assertValidPrices, derivedDiscountPercent, assertValidManualDescriptor } from "@/lib/domain/retail/offer";
 import { CAMPAIGN_POLICY, CAMPAIGN_ACTION, policyFor } from "@/lib/domain/retail/policy";
 import { RetailError, RETAIL_ERROR } from "@/lib/domain/retail/errors";
 import { STORE_ROLE } from "@/lib/domain/store/authorize";
@@ -132,5 +132,32 @@ describe("role policy matrix", () => {
     expect(CAMPAIGN_POLICY.DELETE_DRAFT.roles).toEqual([STORE_ROLE.OWNER]);
     expect(CAMPAIGN_POLICY.CLOSE.requireEnabled).toBe(false);
     expect(CAMPAIGN_POLICY.CANCEL.requireEnabled).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Descriptor de oferta MANUAL (slice vínculo de catálogo opcional)
+// ---------------------------------------------------------------------------
+describe("assertValidManualDescriptor", () => {
+  it("acepta un descriptor mínimo válido y normaliza (trim, vacío→null)", () => {
+    const d = assertValidManualDescriptor({ title: "  Kagurabachi  ", volumeNumber: 1, publisher: " Ivrea ", isbn: "" });
+    expect(d).toEqual({ title: "Kagurabachi", volumeNumber: 1, publisher: "Ivrea", isbn: null });
+  });
+  it("permite número/editorial/isbn ausentes (lanzamiento sin ficha)", () => {
+    const d = assertValidManualDescriptor({ title: "Serie debut" });
+    expect(d).toEqual({ title: "Serie debut", volumeNumber: null, publisher: null, isbn: null });
+  });
+  it("rechaza título vacío o solo espacios → INVALID_TITLE", () => {
+    expect(code(() => assertValidManualDescriptor({ title: "" }))).toBe(RETAIL_ERROR.INVALID_TITLE);
+    expect(code(() => assertValidManualDescriptor({ title: "   " }))).toBe(RETAIL_ERROR.INVALID_TITLE);
+  });
+  it("rechaza título demasiado largo → INVALID_TITLE", () => {
+    expect(code(() => assertValidManualDescriptor({ title: "x".repeat(301) }))).toBe(RETAIL_ERROR.INVALID_TITLE);
+    expect(code(() => assertValidManualDescriptor({ title: "x".repeat(300) }))).toBe("NO_THROW");
+  });
+  it("rechaza número de tomo no entero o negativo → INVALID_OFFER_DESCRIPTOR", () => {
+    expect(code(() => assertValidManualDescriptor({ title: "T", volumeNumber: -1 }))).toBe(RETAIL_ERROR.INVALID_OFFER_DESCRIPTOR);
+    expect(code(() => assertValidManualDescriptor({ title: "T", volumeNumber: 1.5 }))).toBe(RETAIL_ERROR.INVALID_OFFER_DESCRIPTOR);
+    expect(code(() => assertValidManualDescriptor({ title: "T", volumeNumber: 0 }))).toBe("NO_THROW"); // 0 válido
   });
 });

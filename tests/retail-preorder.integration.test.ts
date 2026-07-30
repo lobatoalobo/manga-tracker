@@ -164,9 +164,9 @@ describe.skipIf(!URL)("integración — Preventas (Slice 2, base real)", () => {
     const vId = await volume(7);
     const o = await addPreorderOffer({ campaignId: c.id, volumeId: vId, listPriceCents: 1000, preorderPriceCents: 900 }, owner, prisma);
     const loaded = await prisma.preorderOffer.findUnique({ where: { id: o.id }, include: { volume: { include: { edition: true } } } });
-    expect(loaded?.volume.id).toBe(vId);
-    expect(loaded?.volume.number).toBe(7);
-    expect(loaded?.volume.edition.publisher).toBe("Ivrea Argentina");
+    expect(loaded?.volume?.id).toBe(vId);
+    expect(loaded?.volume?.number).toBe(7);
+    expect(loaded?.volume?.edition.publisher).toBe("Ivrea Argentina");
   });
 
   it("Merge/reparent de Work no invalida la oferta: el Volume no cambia; resuelve el Work sobreviviente", async () => {
@@ -180,7 +180,7 @@ describe.skipIf(!URL)("integración — Preventas (Slice 2, base real)", () => {
     await prisma.publisherEdition.update({ where: { id: before!.editionId }, data: { workId: survivor.id } });
     const after = await prisma.preorderOffer.findUnique({ where: { id: o.id }, include: { volume: { include: { edition: { select: { workId: true } } } } } });
     expect(after?.volumeId).toBe(vId); // la oferta sigue apuntando al mismo Volume
-    expect(after?.volume.edition.workId).toBe(survivor.id); // resuelve el Work sobreviviente
+    expect(after?.volume?.edition.workId).toBe(survivor.id); // resuelve el Work sobreviviente
   });
 
   it("aislamiento entre tiendas: un miembro de otra tienda no accede a la campaña → NOT_A_MEMBER", async () => {
