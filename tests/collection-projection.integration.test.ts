@@ -39,7 +39,7 @@ describe.skipIf(!URL)("integración — Collection projection (Slice 8, base rea
     await bootstrapStoreCommerce({ storeId, slug: uniq(), ownerUserId: owner, isGlobalAdmin: true, enabled: true }, prisma);
     const campaign = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
     const volumeId = await mkVolume();
-    const offer = await addPreorderOffer({ campaignId: campaign.id, volumeId, listPriceCents: 100000, preorderPriceCents: 50000 }, owner, prisma);
+    const offer = await addPreorderOffer({ campaignId: campaign.id, mode: "linked", volumeId, listPriceCents: 100000, preorderPriceCents: 50000 }, owner, prisma);
     await publishPreorderCampaign(campaign.id, owner, prisma);
     const client = await mkUser();
     const order = await createStoreOrder({ campaignId: campaign.id, items: [{ offerId: offer.id, quantity: 5 }] }, client, prisma);

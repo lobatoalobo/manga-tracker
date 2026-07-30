@@ -96,7 +96,7 @@ export async function addOfferAction(slug: string, campaignId: number, fd: FormD
   try {
     const userId = await requireUserId();
     await addPreorderOffer(
-      { campaignId, volumeId: Number(str(fd, "volumeId")), listPriceCents: pesosToCents(fd, "listPrice"), preorderPriceCents: pesosToCents(fd, "preorderPrice") },
+      { campaignId, mode: "linked", volumeId: Number(str(fd, "volumeId")), listPriceCents: pesosToCents(fd, "listPrice"), preorderPriceCents: pesosToCents(fd, "preorderPrice") },
       userId,
     );
     revalidatePath(`/tiendas/${slug}/admin/preventas/${campaignId}`);

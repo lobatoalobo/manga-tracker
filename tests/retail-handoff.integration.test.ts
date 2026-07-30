@@ -45,7 +45,7 @@ describe.skipIf(!URL)("integración — Preparación y retiro (Slice 7, base rea
     const offerIds: number[] = [];
     for (let i = 0; i < specs.length; i++) {
       const volumeId = await volume(i + 1);
-      const o = await addPreorderOffer({ campaignId: c.id, volumeId, listPriceCents: price * 2, preorderPriceCents: price }, owner, prisma);
+      const o = await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId, listPriceCents: price * 2, preorderPriceCents: price }, owner, prisma);
       offerIds.push(o.id);
     }
     await publishPreorderCampaign(c.id, owner, prisma);
@@ -274,7 +274,7 @@ describe.skipIf(!URL)("integración — Preparación y retiro (Slice 7, base rea
     const { owner, storeId } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
     const volumeId = await volume(1);
-    const offer = await addPreorderOffer({ campaignId: c.id, volumeId, listPriceCents: 100000, preorderPriceCents: 50000 }, owner, prisma);
+    const offer = await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId, listPriceCents: 100000, preorderPriceCents: 50000 }, owner, prisma);
     await publishPreorderCampaign(c.id, owner, prisma);
     const u = await user();
     const order = await createStoreOrder({ campaignId: c.id, items: [{ offerId: offer.id, quantity: 5 }] }, u, prisma);

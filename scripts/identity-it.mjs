@@ -56,6 +56,7 @@ try {
     "tests/retail-notifications.integration.test.ts",
     "tests/retail-payments.integration.test.ts",
     "tests/retail-handoff.integration.test.ts",
+    "tests/retail-optional-volume.integration.test.ts",
     "tests/collection-apply.integration.test.ts",
     "tests/collection-projection.integration.test.ts",
     "tests/collection-immediate.integration.test.ts",

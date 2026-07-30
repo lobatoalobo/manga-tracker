@@ -63,7 +63,7 @@ describe.skipIf(!URL)("integración — Preventas (Slice 2, base real)", () => {
     const { storeId, owner } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
     const vId = await volume(3);
-    const o = await addPreorderOffer({ campaignId: c.id, volumeId: vId, listPriceCents: 1000000, preorderPriceCents: 700000 }, owner, prisma);
+    const o = await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId: vId, listPriceCents: 1000000, preorderPriceCents: 700000 }, owner, prisma);
     expect(o).toMatchObject({ status: "ACTIVE", volumeNumberSnapshot: 3, publisherSnapshot: "Ivrea Argentina", listPriceCents: 1000000, preorderPriceCents: 700000 });
     expect(o.titleSnapshot).toBeTruthy();
   });
@@ -72,14 +72,14 @@ describe.skipIf(!URL)("integración — Preventas (Slice 2, base real)", () => {
     const { storeId, owner } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
     const vId = await volume();
-    await addPreorderOffer({ campaignId: c.id, volumeId: vId, listPriceCents: 1000, preorderPriceCents: 900 }, owner, prisma);
-    expect(await retailCode(() => addPreorderOffer({ campaignId: c.id, volumeId: vId, listPriceCents: 1000, preorderPriceCents: 900 }, owner, prisma))).toBe(RETAIL_ERROR.OFFER_ALREADY_EXISTS);
+    await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId: vId, listPriceCents: 1000, preorderPriceCents: 900 }, owner, prisma);
+    expect(await retailCode(() => addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId: vId, listPriceCents: 1000, preorderPriceCents: 900 }, owner, prisma))).toBe(RETAIL_ERROR.OFFER_ALREADY_EXISTS);
   });
 
   it("publicar campaña válida (OWNER) → PUBLISHED con publishedAt", async () => {
     const { storeId, owner } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
-    await addPreorderOffer({ campaignId: c.id, volumeId: await volume(), listPriceCents: 1000, preorderPriceCents: 800 }, owner, prisma);
+    await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId: await volume(), listPriceCents: 1000, preorderPriceCents: 800 }, owner, prisma);
     const pub = await publishPreorderCampaign(c.id, owner, prisma);
     expect(pub?.status).toBe("PUBLISHED");
     expect(pub?.publishedAt).toBeTruthy();
@@ -96,14 +96,14 @@ describe.skipIf(!URL)("integración — Preventas (Slice 2, base real)", () => {
     const staff = await user();
     await addMember(profileId, staff, STORE_ROLE.STAFF, prisma);
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
-    await addPreorderOffer({ campaignId: c.id, volumeId: await volume(), listPriceCents: 1000, preorderPriceCents: 800 }, owner, prisma);
+    await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId: await volume(), listPriceCents: 1000, preorderPriceCents: 800 }, owner, prisma);
     expect(await authCode(() => publishPreorderCampaign(c.id, staff, prisma))).toBe(STORE_AUTH_ERROR.FORBIDDEN_ROLE);
   });
 
   it("lectura pública: publicada visible; borrador NO", async () => {
     const { storeId, owner, slug } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: "Pública" }, owner, prisma);
-    await addPreorderOffer({ campaignId: c.id, volumeId: await volume(1), listPriceCents: 1200000, preorderPriceCents: 900000 }, owner, prisma);
+    await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId: await volume(1), listPriceCents: 1200000, preorderPriceCents: 900000 }, owner, prisma);
     expect(await getPublicCampaign(slug, c.id, new Date(), prisma)).toBeNull(); // DRAFT no pública
     await publishPreorderCampaign(c.id, owner, prisma);
     const pub = await getPublicCampaign(slug, c.id, new Date(), prisma);
@@ -115,7 +115,7 @@ describe.skipIf(!URL)("integración — Preventas (Slice 2, base real)", () => {
   it("cerrar y cancelar", async () => {
     const { storeId, owner } = await commerceStore();
     const c1 = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
-    await addPreorderOffer({ campaignId: c1.id, volumeId: await volume(), listPriceCents: 1000, preorderPriceCents: 800 }, owner, prisma);
+    await addPreorderOffer({ campaignId: c1.id, mode: "linked", volumeId: await volume(), listPriceCents: 1000, preorderPriceCents: 800 }, owner, prisma);
     await publishPreorderCampaign(c1.id, owner, prisma);
     expect((await closePreorderCampaign(c1.id, owner, prisma))?.status).toBe("CLOSED");
     const c2 = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
@@ -126,7 +126,7 @@ describe.skipIf(!URL)("integración — Preventas (Slice 2, base real)", () => {
     const { storeId, owner } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
     const vId = await volume();
-    const add = () => addPreorderOffer({ campaignId: c.id, volumeId: vId, listPriceCents: 1000, preorderPriceCents: 900 }, owner, prisma);
+    const add = () => addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId: vId, listPriceCents: 1000, preorderPriceCents: 900 }, owner, prisma);
     const [r1, r2] = await Promise.allSettled([add(), add()]);
     expect([r1.status, r2.status].sort()).toEqual(["fulfilled", "rejected"]);
     expect(await prisma.preorderOffer.count({ where: { campaignId: c.id } })).toBe(1);
@@ -135,7 +135,7 @@ describe.skipIf(!URL)("integración — Preventas (Slice 2, base real)", () => {
   it("concurrencia: doble publicación → idempotente (PUBLISHED, publishedAt seteado)", async () => {
     const { storeId, owner } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
-    await addPreorderOffer({ campaignId: c.id, volumeId: await volume(), listPriceCents: 1000, preorderPriceCents: 800 }, owner, prisma);
+    await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId: await volume(), listPriceCents: 1000, preorderPriceCents: 800 }, owner, prisma);
     const [r1, r2] = await Promise.allSettled([publishPreorderCampaign(c.id, owner, prisma), publishPreorderCampaign(c.id, owner, prisma)]);
     expect(r1.status).toBe("fulfilled");
     expect(r2.status).toBe("fulfilled");
@@ -154,7 +154,7 @@ describe.skipIf(!URL)("integración — Preventas (Slice 2, base real)", () => {
     const { storeId, owner } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
     const vId = await volume();
-    await addPreorderOffer({ campaignId: c.id, volumeId: vId, listPriceCents: 1000, preorderPriceCents: 900 }, owner, prisma);
+    await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId: vId, listPriceCents: 1000, preorderPriceCents: 900 }, owner, prisma);
     await expect(prisma.volume.delete({ where: { id: vId } })).rejects.toBeTruthy();
   });
 
@@ -162,7 +162,7 @@ describe.skipIf(!URL)("integración — Preventas (Slice 2, base real)", () => {
     const { storeId, owner } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
     const vId = await volume(7);
-    const o = await addPreorderOffer({ campaignId: c.id, volumeId: vId, listPriceCents: 1000, preorderPriceCents: 900 }, owner, prisma);
+    const o = await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId: vId, listPriceCents: 1000, preorderPriceCents: 900 }, owner, prisma);
     const loaded = await prisma.preorderOffer.findUnique({ where: { id: o.id }, include: { volume: { include: { edition: true } } } });
     expect(loaded?.volume?.id).toBe(vId);
     expect(loaded?.volume?.number).toBe(7);
@@ -173,7 +173,7 @@ describe.skipIf(!URL)("integración — Preventas (Slice 2, base real)", () => {
     const { storeId, owner } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
     const vId = await volume(2);
-    const o = await addPreorderOffer({ campaignId: c.id, volumeId: vId, listPriceCents: 1000, preorderPriceCents: 900 }, owner, prisma);
+    const o = await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId: vId, listPriceCents: 1000, preorderPriceCents: 900 }, owner, prisma);
     // Simula la absorción: la edición del volumen se re-parenta a otro Work (Volume.id/editionId no cambian).
     const survivor = await prisma.work.create({ data: { title: uniq(), normTitle: uniq(), type: "MANGA" }, select: { id: true } });
     const before = await prisma.volume.findUnique({ where: { id: vId }, select: { editionId: true } });

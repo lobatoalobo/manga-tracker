@@ -7,7 +7,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { CAMPAIGN_STATUS, assertDraftEditable, type CampaignStatus } from "@/lib/domain/retail/campaign";
-import { OFFER_STATUS, assertOfferTransition, assertValidPrices, type OfferStatus } from "@/lib/domain/retail/offer";
+import { OFFER_STATUS, assertOfferTransition, assertValidPrices, assertValidManualDescriptor, type OfferStatus, type ManualOfferDescriptor } from "@/lib/domain/retail/offer";
 import { CAMPAIGN_ACTION } from "@/lib/domain/retail/policy";
 import { RetailError, RETAIL_ERROR } from "@/lib/domain/retail/errors";
 import { authorizeCampaignAction } from "@/lib/retail/auth";
@@ -23,37 +23,79 @@ async function lockCampaignOf(tx: Tx, campaignId: number): Promise<{ storeId: nu
   return { storeId: c.storeId, status: c.status as CampaignStatus };
 }
 
-export interface AddOfferInput {
+/** Descriptor manual que autora la tienda para un lanzamiento aún NO catalogado (sin Volume). */
+export interface ManualOfferInput {
+  title: string;
+  volumeNumber?: number | null;
+  publisher?: string | null;
+  isbn?: string | null;
+}
+
+/**
+ * Entrada de oferta DISCRIMINADA por `mode` (inequívoca y mutuamente excluyente: nunca ambos, nunca ninguno):
+ *  - `linked`: exige `volumeId`; el snapshot se resuelve del catálogo (comportamiento histórico).
+ *  - `manual`: exige `descriptor`; el snapshot se autora y `volumeId = null` (vínculo de catálogo diferido).
+ */
+export type AddOfferInput = {
   campaignId: number;
-  volumeId: number;
   listPriceCents: number;
   preorderPriceCents: number;
   sortOrder?: number;
-}
+} & (
+  | { mode: "linked"; volumeId: number }
+  | { mode: "manual"; descriptor: ManualOfferInput }
+);
 
-/** Agrega un tomo real como oferta (solo en DRAFT). Snapshot resuelto del catálogo. Unicidad por Volume. */
+type OfferSnapshotFields = {
+  titleSnapshot: string;
+  volumeNumberSnapshot: number | null;
+  publisherSnapshot: string | null;
+  isbnSnapshot: string | null;
+};
+
+const manualToSnapshot = (d: ManualOfferDescriptor): OfferSnapshotFields => ({
+  titleSnapshot: d.title,
+  volumeNumberSnapshot: d.volumeNumber,
+  publisherSnapshot: d.publisher,
+  isbnSnapshot: d.isbn,
+});
+
+/**
+ * Agrega una oferta a una campaña DRAFT. `linked` congela el snapshot desde el Volume (unicidad por Volume);
+ * `manual` congela el snapshot autorado con `volumeId = null`. En ambos casos el snapshot es el registro
+ * histórico inmutable de la descripción comercial publicada.
+ */
 export async function addPreorderOffer(input: AddOfferInput, actorUserId: string | null, client: Client = prisma) {
+  // Validación pura del descriptor manual ANTES de abrir la tx (fail-fast, sin tocar catálogo).
+  const manualSnapshot = input.mode === "manual" ? manualToSnapshot(assertValidManualDescriptor(input.descriptor)) : null;
+
   return client.$transaction(async (tx) => {
     const { storeId, status } = await lockCampaignOf(tx, input.campaignId);
     await authorizeCampaignAction(tx, storeId, actorUserId, CAMPAIGN_ACTION.MANAGE_OFFERS);
     assertDraftEditable(status);
     assertValidPrices(input.listPriceCents, input.preorderPriceCents);
 
-    const v = await tx.volume.findUnique({
-      where: { id: input.volumeId },
-      select: { number: true, isbn: true, edition: { select: { title: true, publisher: true, work: { select: { title: true } } } } },
-    });
-    if (!v) throw new RetailError(RETAIL_ERROR.VOLUME_NOT_FOUND);
+    let volumeId: number | null;
+    let snapshot: OfferSnapshotFields;
+    if (input.mode === "linked") {
+      const v = await tx.volume.findUnique({
+        where: { id: input.volumeId },
+        select: { number: true, isbn: true, edition: { select: { title: true, publisher: true, work: { select: { title: true } } } } },
+      });
+      if (!v) throw new RetailError(RETAIL_ERROR.VOLUME_NOT_FOUND);
+      volumeId = input.volumeId;
+      snapshot = { titleSnapshot: v.edition.work?.title ?? v.edition.title, volumeNumberSnapshot: v.number, publisherSnapshot: v.edition.publisher, isbnSnapshot: v.isbn };
+    } else {
+      volumeId = null; // oferta manual: identidad de catálogo diferida
+      snapshot = manualSnapshot!;
+    }
 
     try {
       return await tx.preorderOffer.create({
         data: {
           campaignId: input.campaignId,
-          volumeId: input.volumeId,
-          titleSnapshot: v.edition.work?.title ?? v.edition.title,
-          volumeNumberSnapshot: v.number,
-          publisherSnapshot: v.edition.publisher,
-          isbnSnapshot: v.isbn,
+          volumeId,
+          ...snapshot,
           listPriceCents: input.listPriceCents,
           preorderPriceCents: input.preorderPriceCents,
           status: OFFER_STATUS.ACTIVE,

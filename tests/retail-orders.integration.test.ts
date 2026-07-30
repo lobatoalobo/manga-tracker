@@ -45,7 +45,7 @@ describe.skipIf(!URL)("integración — Reservas (Slice 3, base real)", () => {
     const offerIds: number[] = [];
     for (let i = 0; i < prices.length; i++) {
       const { volumeId } = await volume(i + 1);
-      const o = await addPreorderOffer({ campaignId: c.id, volumeId, listPriceCents: prices[i].list, preorderPriceCents: prices[i].pre }, owner, prisma);
+      const o = await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId, listPriceCents: prices[i].list, preorderPriceCents: prices[i].pre }, owner, prisma);
       offerIds.push(o.id);
     }
     await publishPreorderCampaign(c.id, owner, prisma);
@@ -127,7 +127,7 @@ describe.skipIf(!URL)("integración — Reservas (Slice 3, base real)", () => {
     const { storeId, owner } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
     const { volumeId, workId } = await volume(4);
-    const offer = await addPreorderOffer({ campaignId: c.id, volumeId, listPriceCents: 90000, preorderPriceCents: 60000 }, owner, prisma);
+    const offer = await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId, listPriceCents: 90000, preorderPriceCents: 60000 }, owner, prisma);
     await publishPreorderCampaign(c.id, owner, prisma);
     const order = await createStoreOrder({ campaignId: c.id, items: [{ offerId: offer.id, quantity: 1 }] }, await user(), prisma);
     const snap = order.lines[0].titleSnapshot;
@@ -269,7 +269,7 @@ describe.skipIf(!URL)("integración — Reservas (Slice 3, base real)", () => {
     const { storeId, owner } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
     const { volumeId } = await volume(1);
-    const offer = await addPreorderOffer({ campaignId: c.id, volumeId, listPriceCents: 100000, preorderPriceCents: 70000 }, owner, prisma);
+    const offer = await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId, listPriceCents: 100000, preorderPriceCents: 70000 }, owner, prisma);
     await publishPreorderCampaign(c.id, owner, prisma);
     await createStoreOrder({ campaignId: c.id, items: [{ offerId: offer.id, quantity: 1 }] }, await user(), prisma);
     await expect(prisma.store.delete({ where: { id: storeId } })).rejects.toBeTruthy();
@@ -294,7 +294,7 @@ describe.skipIf(!URL)("integración — Reservas (Slice 3, base real)", () => {
     const { storeId, owner } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
     const { volumeId, editionId } = await volume(2);
-    const offer = await addPreorderOffer({ campaignId: c.id, volumeId, listPriceCents: 100000, preorderPriceCents: 70000 }, owner, prisma);
+    const offer = await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId, listPriceCents: 100000, preorderPriceCents: 70000 }, owner, prisma);
     await publishPreorderCampaign(c.id, owner, prisma);
     const order = await createStoreOrder({ campaignId: c.id, items: [{ offerId: offer.id, quantity: 1 }] }, await user(), prisma);
     const survivor = await prisma.work.create({ data: { title: uniq(), normTitle: uniq(), type: "MANGA" }, select: { id: true } });
