@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireStoreMember } from "@/lib/storeAuth";
 import { listMembers } from "@/lib/storeCommerce";
 import { STORE_AUTH_ERROR, StoreAuthError, STORE_ROLE } from "@/lib/domain/store/authorize";
+import CommerceConfigForm from "./CommerceConfigForm";
 
 export const metadata = { title: "Admin de tienda · Nakama" };
 
@@ -55,13 +56,27 @@ export default async function StoreAdminPage({ params }: { params: Promise<{ slu
 
       <section className="mt-6">
         <h2 className="mb-2 text-lg font-semibold">Datos comerciales</h2>
-        <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-          <Field label="WhatsApp" value={profile.whatsapp} />
-          <Field label="Alias de pago" value={profile.paymentAlias} />
-          <Field label="Instrucciones de pago" value={profile.paymentInstructions} />
-          <Field label="Instrucciones de retiro" value={profile.pickupInstructions} />
-          <Field label="Descripción pública" value={profile.publicDescription} />
-        </dl>
+        {/* OWNER edita (dato sensible: alias); STAFF ve solo lectura. Sin selector de checkoutMode (P0). */}
+        {role === STORE_ROLE.OWNER ? (
+          <CommerceConfigForm
+            slug={slug}
+            initial={{
+              whatsapp: profile.whatsapp,
+              paymentAlias: profile.paymentAlias,
+              paymentInstructions: profile.paymentInstructions,
+              pickupInstructions: profile.pickupInstructions,
+              publicDescription: profile.publicDescription,
+            }}
+          />
+        ) : (
+          <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+            <Field label="WhatsApp" value={profile.whatsapp} />
+            <Field label="Alias de pago" value={profile.paymentAlias} />
+            <Field label="Instrucciones de pago" value={profile.paymentInstructions} />
+            <Field label="Instrucciones de retiro" value={profile.pickupInstructions} />
+            <Field label="Descripción pública" value={profile.publicDescription} />
+          </dl>
+        )}
       </section>
 
       <section className="mt-8">
