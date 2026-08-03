@@ -25,11 +25,11 @@
 
 ## Cuerpo de diseño que los fundamenta
 
-- [retail-ux-review.md](../retail-ux-review.md) — crítica del producto entidad-espejo; 10 pantallas → 2.
+- [retail-ux-review.md](../archive/retail/discovery/retail-ux-review.md) — crítica del producto entidad-espejo; 10 pantallas → 2.
 - [vision/retail-product-vision.md](retail-product-vision.md) — visión y principios de producto (P1–P7).
-- [retail-workflow-design.md](../retail-workflow-design.md) — el flujo del Drop semanal como historia.
-- [retail-pilot-design.md](../retail-pilot-design.md) — qué entra al piloto y el momento WOW.
-- [retail-customer-experience.md](../retail-customer-experience.md) — la experiencia del cliente sin cuenta.
+- [retail-workflow-design.md](../archive/retail/discovery/retail-workflow-design.md) — el flujo del Drop semanal como historia.
+- [retail-pilot-design.md](../archive/retail/discovery/retail-pilot-design.md) — qué entra al piloto y el momento WOW.
+- [retail-customer-experience.md](../archive/retail/discovery/retail-customer-experience.md) — la experiencia del cliente sin cuenta.
 - Specs de interacción del **Workspace** y la **Página Pública** (en la conversación de diseño).
 
 ## Próxima etapa
