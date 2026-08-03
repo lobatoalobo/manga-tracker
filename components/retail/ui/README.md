@@ -1,11 +1,12 @@
 # Retail UI Kit (`components/retail/ui`)
 
-Los 11 componentes del PDD (ver [`docs/pdd/componentes.md`](../../../docs/pdd/componentes.md)) viven acá. Se implementan de a poco (Fase 0). Presentes hoy: **`Button`** (C-01), **`Money`** (C-02), **`Cover`** (C-03) y **`Pill`** (C-04).
+Los 11 componentes del PDD (ver [`docs/pdd/componentes.md`](../../../docs/pdd/componentes.md)) viven acá. Se implementan de a poco (Fase 0). Presentes hoy: **`Button`** (C-01), **`Money`** (C-02), **`Cover`** (C-03), **`Pill`** (C-04) y **`TomoLine`** (C-05, compuesto: Cover + Money + slot de acción).
 
 > Nombres de props (desviaciones deliberadas vs la ficha):
 > - `Money` recibe **`cents`** (garantía de unidad, siempre vía `formatArsCents`) y **`variant`** (`inline` | `total`), no `amount`/`size`.
 > - `Button` y `Pill` reciben **`children`** (no `label`), para admitir ícono + contenido. `Button` suma `type` (`button` | `submit`), `loading` (`aria-busy`, sin spinner) y `ariaLabel` (solo-ícono). No renderiza como link ni orquesta async.
 > - `Pill` sin `onClick` → `<span>` display-only; con `onClick` → `<button>` nativo. El mapeo *estado → tono/etiqueta* es dominio, no del `Pill`.
+> - `TomoLine` recibe **`precioCents`** (no `precio`+`mostrarPrecio`) y **`estadoVisual`** (`normal` | `sin-precio` | `faltante` | `atenuada`, absorbe `marca?`). Toda acción entra por el slot **`accion`**; la fila no es clickeable y la tapa va `aria-hidden` (la identidad textual es el nombre accesible). La semántica de lista (`<ul>/<li>`) la pone la pantalla.
 
 ## Convenciones
 

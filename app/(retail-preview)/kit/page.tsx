@@ -6,6 +6,7 @@ import { Money } from "@/components/retail/ui/Money";
 import { Cover, type CoverSize, type CoverState } from "@/components/retail/ui/Cover";
 import { Button, type ButtonVariant } from "@/components/retail/ui/Button";
 import { Pill, type PillTono } from "@/components/retail/ui/Pill";
+import { TomoLine } from "@/components/retail/ui/TomoLine";
 
 const BUTTON_VARIANTS: readonly ButtonVariant[] = ["primary", "ghost", "warn"];
 const PILL_TONOS: readonly PillTono[] = ["neutral", "mark", "warn", "go"];
@@ -203,6 +204,36 @@ export default function RetailKitPreview() {
               <Pill tono="go">Pagado</Pill>
               <Pill tono="warn">Falta pagar</Pill>
             </div>
+          </div>
+        </Section>
+
+        <Section title="TomoLine · C-05">
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, border: "1px solid var(--hair)", borderRadius: 10, padding: 12, background: "var(--card)" }}>
+            <TomoLine tomo={{ serie: "Chainsaw Man", volumen: 17 }} />
+            <TomoLine tomo={{ serie: "Berserk", volumen: 41 }} precioCents={320000} />
+            <TomoLine tomo={{ serie: "Vinland Saga", volumen: 12, autor: "Makoto Yukimura", imagen: COVER_SAMPLE_IMG }} precioCents={280000} aux="Edición deluxe" />
+            <TomoLine tomo={{ serie: "Akira", volumen: 1 }} cantidad={2} precioCents={450000} />
+            <TomoLine tomo={{ serie: "Blame!", volumen: 6 }} estadoVisual="atenuada" precioCents={300000} aux="Debe · retiro parcial" />
+            <TomoLine tomo={{ serie: "Dandadan", volumen: 5 }} estadoVisual="faltante" aux="No llegó" />
+            <TomoLine tomo={{ serie: "Gantz", volumen: 3 }} estadoVisual="sin-precio" />
+            <TomoLine tomo={{ serie: "Spy × Family", volumen: 9 }} precioCents={310000} accion={<Button size="small">Apartar</Button>} />
+            <TomoLine
+              tomo={{ serie: "Jujutsu Kaisen", volumen: 21 }}
+              precioCents={320000}
+              accion={
+                <>
+                  <Button variant="ghost" size="small" ariaLabel="Restar uno">−</Button>
+                  <span style={{ fontFamily: "var(--mono)", fontSize: 13, color: "var(--ink)", minWidth: 14, textAlign: "center" }}>2</span>
+                  <Button variant="ghost" size="small" ariaLabel="Sumar uno">+</Button>
+                  <Button variant="ghost" size="small" ariaLabel="Quitar tomo">×</Button>
+                </>
+              }
+            />
+            <TomoLine
+              tomo={{ serie: "Kaguya-sama: Love Is War — Ultra Romantic Edición Especial Aniversario", volumen: 14, autor: "Aka Akasaka" }}
+              precioCents={299000}
+              accion={<Button size="small">Apartar</Button>}
+            />
           </div>
         </Section>
       </div>
