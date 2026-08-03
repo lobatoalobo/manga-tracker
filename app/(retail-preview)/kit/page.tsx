@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Section } from "./_gallery/Section";
 
 const COLOR_TOKENS: ReadonlyArray<readonly [token: string, label: string]> = [
   ["--paper", "Papel · fondo"],
@@ -22,15 +23,6 @@ const COLOR_TOKENS: ReadonlyArray<readonly [token: string, label: string]> = [
 type Choice = "system" | "light" | "dark";
 const CHOICES: readonly Choice[] = ["system", "light", "dark"];
 const CHOICE_LABEL: Record<Choice, string> = { system: "Sistema", light: "Claro", dark: "Oscuro" };
-
-const label: React.CSSProperties = {
-  fontFamily: "var(--sans)",
-  fontSize: 11,
-  letterSpacing: ".11em",
-  textTransform: "uppercase",
-  color: "var(--ink-3)",
-  margin: "32px 0 12px",
-};
 
 export default function RetailKitPreview() {
   const [choice, setChoice] = useState<Choice>("system");
@@ -81,25 +73,27 @@ export default function RetailKitPreview() {
           })}
         </div>
 
-        <h2 style={label}>Color</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12 }}>
-          {COLOR_TOKENS.map(([token, text]) => (
-            <div key={token} style={{ border: "1px solid var(--hair)", borderRadius: 10, overflow: "hidden", background: "var(--card)" }}>
-              <div style={{ height: 56, background: `var(${token})`, borderBottom: "1px solid var(--hair)" }} />
-              <div style={{ padding: "8px 10px" }}>
-                <div style={{ fontFamily: "var(--serif)", fontSize: 14, color: "var(--ink)" }}>{text}</div>
-                <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-3)" }}>{token}</div>
+        <Section title="Color">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12 }}>
+            {COLOR_TOKENS.map(([token, text]) => (
+              <div key={token} style={{ border: "1px solid var(--hair)", borderRadius: 10, overflow: "hidden", background: "var(--card)" }}>
+                <div style={{ height: 56, background: `var(${token})`, borderBottom: "1px solid var(--hair)" }} />
+                <div style={{ padding: "8px 10px" }}>
+                  <div style={{ fontFamily: "var(--serif)", fontSize: 14, color: "var(--ink)" }}>{text}</div>
+                  <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-3)" }}>{token}</div>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </Section>
 
-        <h2 style={label}>Tipografía</h2>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, border: "1px solid var(--hair)", borderRadius: 10, padding: 18, background: "var(--card)" }}>
-          <div style={{ fontFamily: "var(--serif)", fontSize: 24, color: "var(--ink)" }}>Serif · Kagurabachi 03 — cuerpo editorial</div>
-          <div style={{ fontFamily: "var(--sans)", fontSize: 14, letterSpacing: ".02em", color: "var(--ink-2)" }}>Sans · etiquetas y controles de interfaz</div>
-          <div style={{ fontFamily: "var(--mono)", fontSize: 14, color: "var(--ink)" }}>Mono · $3.200 · #81 · 12/08</div>
-        </div>
+        <Section title="Tipografía">
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, border: "1px solid var(--hair)", borderRadius: 10, padding: 18, background: "var(--card)" }}>
+            <div style={{ fontFamily: "var(--serif)", fontSize: 24, color: "var(--ink)" }}>Serif · Kagurabachi 03 — cuerpo editorial</div>
+            <div style={{ fontFamily: "var(--sans)", fontSize: 14, letterSpacing: ".02em", color: "var(--ink-2)" }}>Sans · etiquetas y controles de interfaz</div>
+            <div style={{ fontFamily: "var(--mono)", fontSize: 14, color: "var(--ink)" }}>Mono · $3.200 · #81 · 12/08</div>
+          </div>
+        </Section>
       </div>
     </div>
   );

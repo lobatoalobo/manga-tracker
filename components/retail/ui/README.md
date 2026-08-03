@@ -13,3 +13,5 @@ Los 11 componentes del PDD (ver [`docs/pdd/componentes.md`](../../../docs/pdd/co
 ## Preview
 
 La galería de estados/variantes se sirve en `/kit`, **gateada** por `RETAIL_PREVIEW_ENABLED=true` (ver [`app/(retail-preview)/gate.ts`](../../../app/%28retail-preview%29/gate.ts)). La preview valida **composición visual**; el comportamiento se cubre con tests (desde C2).
+
+**Regla de la galería:** cada componente se muestra **aislado, con fixtures propias** — la galería **nunca reconstruye una pantalla** (P-01…P-08). El andamio reutilizable es `Section` (en `app/(retail-preview)/kit/_gallery/`), donde se enchufa cada entrada. Los tests de componentes viven en `tests/ui/**/*.test.tsx` (entorno **jsdom**, proyecto `ui` de Vitest); la suite de dominio/servicios sigue en `tests/*.test.ts` (**node**).
