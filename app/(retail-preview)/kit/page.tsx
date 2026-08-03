@@ -4,6 +4,11 @@ import { useState } from "react";
 import { Section } from "./_gallery/Section";
 import { Money } from "@/components/retail/ui/Money";
 import { Cover, type CoverSize, type CoverState } from "@/components/retail/ui/Cover";
+import { Button, type ButtonVariant } from "@/components/retail/ui/Button";
+import { Pill, type PillTono } from "@/components/retail/ui/Pill";
+
+const BUTTON_VARIANTS: readonly ButtonVariant[] = ["primary", "ghost", "warn"];
+const PILL_TONOS: readonly PillTono[] = ["neutral", "mark", "warn", "go"];
 
 // Tapa de muestra self-contained (data-URI SVG, CSP-safe): ejercita el modo con imagen.
 const COVER_SAMPLE_IMG =
@@ -153,6 +158,50 @@ export default function RetailKitPreview() {
                 <Cover serie="Akira" volumen={1} size="lg" imagen={COVER_SAMPLE_IMG} />
                 <span style={{ fontFamily: "var(--sans)", fontSize: 10, color: "var(--ink-3)" }}>con imagen</span>
               </div>
+            </div>
+          </div>
+        </Section>
+
+        <Section title="Button · C-01">
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, border: "1px solid var(--hair)", borderRadius: 10, padding: 18, background: "var(--card)" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
+              {BUTTON_VARIANTS.map((v) => (
+                <Button key={v} variant={v}>
+                  {v}
+                </Button>
+              ))}
+              {BUTTON_VARIANTS.map((v) => (
+                <Button key={`${v}-sm`} variant={v} size="small">
+                  {v} small
+                </Button>
+              ))}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
+              <Button disabled>disabled</Button>
+              <Button loading>Cancelando…</Button>
+              <Button variant="ghost" size="small" ariaLabel="Quitar tomo">
+                ×
+              </Button>
+            </div>
+          </div>
+        </Section>
+
+        <Section title="Pill · C-04">
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, border: "1px solid var(--hair)", borderRadius: 10, padding: 18, background: "var(--card)" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+              {PILL_TONOS.map((t) => (
+                <Pill key={t} tono={t} dot>
+                  {t}
+                </Pill>
+              ))}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+              <Pill tono="mark" prefijo="+" onClick={() => {}}>
+                Sugerida (clickable)
+              </Pill>
+              <Pill>Principal</Pill>
+              <Pill tono="go">Pagado</Pill>
+              <Pill tono="warn">Falta pagar</Pill>
             </div>
           </div>
         </Section>

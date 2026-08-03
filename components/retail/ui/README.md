@@ -1,8 +1,11 @@
 # Retail UI Kit (`components/retail/ui`)
 
-Los 11 componentes del PDD (ver [`docs/pdd/componentes.md`](../../../docs/pdd/componentes.md)) viven acá. Se implementan de a poco (Fase 0). Presentes hoy: **`Money`** (C-02) y **`Cover`** (C-03), sumados en C3.
+Los 11 componentes del PDD (ver [`docs/pdd/componentes.md`](../../../docs/pdd/componentes.md)) viven acá. Se implementan de a poco (Fase 0). Presentes hoy: **`Button`** (C-01), **`Money`** (C-02), **`Cover`** (C-03) y **`Pill`** (C-04).
 
-> Nota sobre nombres de props: `Money` recibe **`cents`** (garantía de unidad, siempre vía `formatArsCents`) y **`variant`** (`inline` | `total`) — dos renombres deliberados respecto de la ficha (`amount`/`size`).
+> Nombres de props (desviaciones deliberadas vs la ficha):
+> - `Money` recibe **`cents`** (garantía de unidad, siempre vía `formatArsCents`) y **`variant`** (`inline` | `total`), no `amount`/`size`.
+> - `Button` y `Pill` reciben **`children`** (no `label`), para admitir ícono + contenido. `Button` suma `type` (`button` | `submit`), `loading` (`aria-busy`, sin spinner) y `ariaLabel` (solo-ícono). No renderiza como link ni orquesta async.
+> - `Pill` sin `onClick` → `<span>` display-only; con `onClick` → `<button>` nativo. El mapeo *estado → tono/etiqueta* es dominio, no del `Pill`.
 
 ## Convenciones
 
