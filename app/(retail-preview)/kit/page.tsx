@@ -7,6 +7,15 @@ import { Cover, type CoverSize, type CoverState } from "@/components/retail/ui/C
 import { Button, type ButtonVariant } from "@/components/retail/ui/Button";
 import { Pill, type PillTono } from "@/components/retail/ui/Pill";
 import { TomoLine } from "@/components/retail/ui/TomoLine";
+import { Portada } from "@/components/retail/ui/Portada";
+
+const PORTADA_CAPTION: React.CSSProperties = {
+  fontFamily: "var(--sans)",
+  fontSize: 11,
+  letterSpacing: ".04em",
+  color: "var(--ink-3)",
+  margin: "0 0 12px",
+};
 
 const BUTTON_VARIANTS: readonly ButtonVariant[] = ["primary", "ghost", "warn"];
 const PILL_TONOS: readonly PillTono[] = ["neutral", "mark", "warn", "go"];
@@ -234,6 +243,58 @@ export default function RetailKitPreview() {
               precioCents={299000}
               accion={<Button size="small">Apartar</Button>}
             />
+          </div>
+        </Section>
+
+        <Section title="Portada · C-06">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
+            <div style={{ border: "1px solid var(--hair)", borderRadius: 10, padding: 18, background: "var(--card)" }}>
+              <p style={PORTADA_CAPTION}>vacía (editor invita)</p>
+              <Portada vacio={<p style={{ fontFamily: "var(--sans)", fontSize: 13, color: "var(--ink-3)", textAlign: "center", margin: 0 }}>Sin portada — llevá un tomo</p>} />
+            </div>
+
+            <div style={{ border: "1px solid var(--hair)", borderRadius: 10, padding: 18, background: "var(--card)" }}>
+              <p style={PORTADA_CAPTION}>solo principal</p>
+              <Portada principal={{ tomo: { serie: "Berserk", volumen: 41, autor: "Kentaro Miura", imagen: COVER_SAMPLE_IMG }, precioCents: 380000 }} />
+            </div>
+
+            <div style={{ border: "1px solid var(--hair)", borderRadius: 10, padding: 18, background: "var(--card)" }}>
+              <p style={PORTADA_CAPTION}>principal + 1 secundaria</p>
+              <Portada
+                principal={{ tomo: { serie: "Chainsaw Man", volumen: 17, autor: "Tatsuki Fujimoto" }, precioCents: 320000 }}
+                secundarias={[{ tomo: { serie: "Spy × Family", volumen: 9 }, precioCents: 310000 }]}
+              />
+            </div>
+
+            <div style={{ border: "1px solid var(--hair)", borderRadius: 10, padding: 18, background: "var(--card)" }}>
+              <p style={PORTADA_CAPTION}>público · principal + varias (responsive)</p>
+              <Portada
+                principal={{ tomo: { serie: "Vinland Saga", volumen: 12, autor: "Makoto Yukimura" }, precioCents: 340000 }}
+                secundarias={[
+                  { tomo: { serie: "Akira", volumen: 1 }, precioCents: 500000 },
+                  { tomo: { serie: "Blame!", volumen: 6 }, precioCents: 300000 },
+                  { tomo: { serie: "Gantz", volumen: 3 }, precioCents: 290000 },
+                  { tomo: { serie: "Dandadan", volumen: 5 }, precioCents: 315000 },
+                ]}
+              />
+            </div>
+
+            <div style={{ border: "1px solid var(--hair)", borderRadius: 10, padding: 18, background: "var(--card)" }}>
+              <p style={PORTADA_CAPTION}>editor · mini con acciones</p>
+              <Portada
+                tamano="mini"
+                principal={{ tomo: { serie: "Berserk", volumen: 41 }, accion: <Button variant="ghost" size="small" ariaLabel="Bajar de portada">↓</Button> }}
+                secundarias={[
+                  { tomo: { serie: "Gantz", volumen: 3 }, accion: <Button variant="ghost" size="small" ariaLabel="Hacer principal">★</Button> },
+                  { tomo: { serie: "Akira", volumen: 1 }, accion: <Button variant="ghost" size="small" ariaLabel="Hacer principal">★</Button> },
+                ]}
+              />
+            </div>
+
+            <div style={{ border: "1px solid var(--hair)", borderRadius: 10, padding: 18, background: "var(--card)" }}>
+              <p style={PORTADA_CAPTION}>título largo</p>
+              <Portada principal={{ tomo: { serie: "Kaguya-sama: Love Is War — Ultra Romantic Edición Especial", volumen: 14, autor: "Aka Akasaka" }, precioCents: 299000 }} />
+            </div>
           </div>
         </Section>
       </div>
