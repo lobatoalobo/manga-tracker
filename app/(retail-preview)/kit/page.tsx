@@ -8,6 +8,7 @@ import { Button, type ButtonVariant } from "@/components/retail/ui/Button";
 import { Pill, type PillTono } from "@/components/retail/ui/Pill";
 import { TomoLine } from "@/components/retail/ui/TomoLine";
 import { Portada } from "@/components/retail/ui/Portada";
+import { Comprobante } from "@/components/retail/ui/Comprobante";
 
 const PORTADA_CAPTION: React.CSSProperties = {
   fontFamily: "var(--sans)",
@@ -294,6 +295,39 @@ export default function RetailKitPreview() {
             <div style={{ border: "1px solid var(--hair)", borderRadius: 10, padding: 18, background: "var(--card)" }}>
               <p style={PORTADA_CAPTION}>título largo</p>
               <Portada principal={{ tomo: { serie: "Kaguya-sama: Love Is War — Ultra Romantic Edición Especial", volumen: 14, autor: "Aka Akasaka" }, precioCents: 299000 }} />
+            </div>
+          </div>
+        </Section>
+
+        <Section title="Comprobante · C-07">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
+            <div>
+              <p style={PORTADA_CAPTION}>cliente · sin comprobante</p>
+              <Comprobante contexto="cliente" estado="sin-comprobante" referencia={<Money cents={320000} variant="total" />} onSeleccionar={() => {}} />
+            </div>
+            <div>
+              <p style={PORTADA_CAPTION}>cliente · seleccionado</p>
+              <Comprobante contexto="cliente" estado="seleccionado" archivo={{ nombre: "transferencia-1234.pdf" }} onQuitar={() => {}} onEnviar={() => {}} />
+            </div>
+            <div>
+              <p style={PORTADA_CAPTION}>cliente · enviado (por validar)</p>
+              <Comprobante contexto="cliente" estado="enviado" archivo={{ nombre: "comprobante.jpg", fecha: "12/08" }} onVer={() => {}} />
+            </div>
+            <div>
+              <p style={PORTADA_CAPTION}>confirmado</p>
+              <Comprobante contexto="cliente" estado="confirmado" archivo={{ nombre: "comprobante.jpg", fecha: "12/08" }} referencia={<Money cents={320000} />} onVer={() => {}} />
+            </div>
+            <div>
+              <p style={PORTADA_CAPTION}>cliente · rechazado</p>
+              <Comprobante contexto="cliente" estado="rechazado" nota="El monto no coincide con el pedido." onSeleccionar={() => {}} />
+            </div>
+            <div>
+              <p style={PORTADA_CAPTION}>tienda · por validar</p>
+              <Comprobante contexto="tienda" estado="enviado" archivo={{ nombre: "comprobante.jpg", fecha: "12/08" }} referencia={<Money cents={320000} variant="total" />} onVer={() => {}} onConfirmar={() => {}} onRechazar={() => {}} />
+            </div>
+            <div>
+              <p style={PORTADA_CAPTION}>tienda · confirmado</p>
+              <Comprobante contexto="tienda" estado="confirmado" archivo={{ nombre: "comprobante.jpg", fecha: "12/08" }} onVer={() => {}} />
             </div>
           </div>
         </Section>

@@ -1,6 +1,6 @@
 # Retail UI Kit (`components/retail/ui`)
 
-Los 11 componentes del PDD (ver [`docs/pdd/componentes.md`](../../../docs/pdd/componentes.md)) viven acá. Se implementan de a poco (Fase 0). Presentes hoy: **`Button`** (C-01), **`Money`** (C-02), **`Cover`** (C-03), **`Pill`** (C-04), **`TomoLine`** (C-05, compuesto) y **`Portada`** (C-06, composición editorial: Cover + Money).
+Los 11 componentes del PDD (ver [`docs/pdd/componentes.md`](../../../docs/pdd/componentes.md)) viven acá. Se implementan de a poco (Fase 0). Presentes hoy: **`Button`** (C-01), **`Money`** (C-02), **`Cover`** (C-03), **`Pill`** (C-04), **`TomoLine`** (C-05, compuesto), **`Portada`** (C-06, composición editorial) y **`Comprobante`** (C-07, artefacto de evidencia de pago: Button + Pill).
 
 > Nombres de props (desviaciones deliberadas vs la ficha):
 > - `Money` recibe **`cents`** (garantía de unidad, siempre vía `formatArsCents`) y **`variant`** (`inline` | `total`), no `amount`/`size`.
@@ -10,6 +10,8 @@ Los 11 componentes del PDD (ver [`docs/pdd/componentes.md`](../../../docs/pdd/co
 > - `Portada` **elimina `modo`** (ficha): usa **`tamano`** (`mini` reflejo del editor / `grande` display público) + slots. Las acciones editoriales entran como **`accion?` por `PortadaItem`** (nodo, no `accionesTomo` render-prop). Recibe la composición resuelta: no elige la principal ni reordena las secundarias. En `grande` la tapa va `aria-hidden` (hay título textual); en `mini` la tapa es informativa (`alt` del `Cover`). Portada posee el `<ul>` de secundarias.
 >
 > **Límite conocido:** el tope de `Cover` es `xl` (74×110). La escala **hero** de la principal pública (P-04) puede requerir sumar tamaños a `Cover` más adelante; se evaluará al implementar P-04, no en C6.
+>
+> - `Comprobante` **reemplaza `modo`** (ficha) por **`contexto`** (`cliente` | `tienda`) + **`estado`** (`sin-comprobante` | `seleccionado` | `enviado` | `confirmado` | `rechazado`), que matchea la máquina de pago. Es **controlado** (recibe estado + callbacks; no ejecuta transiciones). Callbacks: `onSeleccionar/onQuitar/onEnviar/onVer/onConfirmar/onRechazar` (un botón se muestra solo si su callback existe). Incluye un `<input type="file">` nativo que **solo captura el `File`** (sin upload/storage/OCR/backend). El **monto** llega por `referencia` (la pantalla pasa `<Money/>`); el estado se muestra con `Pill` (texto, no solo color); el motivo de rechazo por `nota`. El trigger de archivo es un `<label>` estilado (un `<button>` no dispara el picker).
 
 ## Convenciones
 
