@@ -9,6 +9,8 @@ import { Pill, type PillTono } from "@/components/retail/ui/Pill";
 import { TomoLine } from "@/components/retail/ui/TomoLine";
 import { Portada } from "@/components/retail/ui/Portada";
 import { Comprobante } from "@/components/retail/ui/Comprobante";
+import { WorkspaceShell } from "@/components/retail/ui/WorkspaceShell";
+import { ActionBar } from "@/components/retail/ui/ActionBar";
 
 const PORTADA_CAPTION: React.CSSProperties = {
   fontFamily: "var(--sans)",
@@ -16,6 +18,14 @@ const PORTADA_CAPTION: React.CSSProperties = {
   letterSpacing: ".04em",
   color: "var(--ink-3)",
   margin: "0 0 12px",
+};
+
+// El shell llena su padre; en la galería lo enmarcamos con altura fija.
+const SHELL_FRAME: React.CSSProperties = {
+  height: 320,
+  border: "1px solid var(--hair-2)",
+  borderRadius: 12,
+  overflow: "hidden",
 };
 
 const BUTTON_VARIANTS: readonly ButtonVariant[] = ["primary", "ghost", "warn"];
@@ -328,6 +338,64 @@ export default function RetailKitPreview() {
             <div>
               <p style={PORTADA_CAPTION}>tienda · confirmado</p>
               <Comprobante contexto="tienda" estado="confirmado" archivo={{ nombre: "comprobante.jpg", fecha: "12/08" }} onVer={() => {}} />
+            </div>
+          </div>
+        </Section>
+
+        <Section title="WorkspaceShell · C-08">
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div>
+              <p style={PORTADA_CAPTION}>una columna · nav (Preventa activa, algunas disabled) · pie = ActionBar</p>
+              <div style={SHELL_FRAME}>
+                <WorkspaceShell
+                  edicion={{ numero: 81, semana: "semana del 12/08", estado: { label: "En preventa", tono: "mark" } }}
+                  faseActual="preventa"
+                  fasesDisponibles={["creacion", "preventa", "cierre"]}
+                  onNavegar={() => {}}
+                  pie={<ActionBar resumen="Vas a pedir 12 · definiste 8 de 10 tomos" acciones={<Button>Cerrar preventa</Button>} />}
+                >
+                  <TomoLine tomo={{ serie: "Chainsaw Man", volumen: 17, autor: "Tatsuki Fujimoto" }} precioCents={320000} />
+                  <TomoLine tomo={{ serie: "Spy × Family", volumen: 9 }} precioCents={310000} />
+                  <TomoLine tomo={{ serie: "Berserk", volumen: 41 }} precioCents={380000} />
+                </WorkspaceShell>
+              </div>
+            </div>
+
+            <div>
+              <p style={PORTADA_CAPTION}>dos columnas (main + aside) · fase Creación</p>
+              <div style={SHELL_FRAME}>
+                <WorkspaceShell
+                  edicion={{ numero: 82, semana: "semana del 19/08", estado: { label: "En preparación", tono: "neutral" } }}
+                  faseActual="creacion"
+                  onNavegar={() => {}}
+                  aside={<Portada tamano="mini" principal={{ tomo: { serie: "Berserk", volumen: 41 } }} secundarias={[{ tomo: { serie: "Gantz", volumen: 3 } }]} />}
+                  pie={<ActionBar bloqueo="Faltan 2 precios" acciones={<Button disabled>Publicar la edición</Button>} />}
+                >
+                  <TomoLine tomo={{ serie: "Gantz", volumen: 3 }} estadoVisual="sin-precio" />
+                  <TomoLine tomo={{ serie: "Akira", volumen: 1, autor: "Katsuhiro Otomo" }} precioCents={500000} />
+                </WorkspaceShell>
+              </div>
+            </div>
+          </div>
+        </Section>
+
+        <Section title="ActionBar · C-09">
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ border: "1px solid var(--hair)", borderRadius: 10, overflow: "hidden" }}>
+              <p style={{ ...PORTADA_CAPTION, margin: "10px 14px 0" }}>con CTA + resumen secundario (Money)</p>
+              <ActionBar resumen={<>3 tomos · total <Money cents={960000} /></>} acciones={<><Button variant="ghost" size="small">Vaciar</Button><Button>Hacer pedido</Button></>} />
+            </div>
+            <div style={{ border: "1px solid var(--hair)", borderRadius: 10, overflow: "hidden" }}>
+              <p style={{ ...PORTADA_CAPTION, margin: "10px 14px 0" }}>bloqueada (motivo anunciado)</p>
+              <ActionBar bloqueo="Queda un tomo sin definir “A pedir”" acciones={<Button disabled>Cerrar preventa</Button>} />
+            </div>
+            <div style={{ border: "1px solid var(--hair)", borderRadius: 10, overflow: "hidden" }}>
+              <p style={{ ...PORTADA_CAPTION, margin: "10px 14px 0" }}>loading (aria-busy)</p>
+              <ActionBar loading resumen="Publicando…" acciones={<Button loading>Publicando…</Button>} />
+            </div>
+            <div style={{ maxWidth: 340, border: "1px solid var(--hair)", borderRadius: 10, overflow: "hidden" }}>
+              <p style={{ ...PORTADA_CAPTION, margin: "10px 14px 0" }}>angosto / mobile (wrap)</p>
+              <ActionBar resumen={<>total <Money cents={960000} variant="total" /></>} acciones={<Button>Hacer pedido</Button>} />
             </div>
           </div>
         </Section>

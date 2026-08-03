@@ -1,6 +1,6 @@
 # Retail UI Kit (`components/retail/ui`)
 
-Los 11 componentes del PDD (ver [`docs/pdd/componentes.md`](../../../docs/pdd/componentes.md)) viven acá. Se implementan de a poco (Fase 0). Presentes hoy: **`Button`** (C-01), **`Money`** (C-02), **`Cover`** (C-03), **`Pill`** (C-04), **`TomoLine`** (C-05, compuesto), **`Portada`** (C-06, composición editorial) y **`Comprobante`** (C-07, artefacto de evidencia de pago: Button + Pill).
+Los 11 componentes del PDD (ver [`docs/pdd/componentes.md`](../../../docs/pdd/componentes.md)) viven acá. Se implementan de a poco (Fase 0). Presentes hoy: **`Button`** (C-01), **`Money`** (C-02), **`Cover`** (C-03), **`Pill`** (C-04), **`TomoLine`** (C-05, compuesto), **`Portada`** (C-06, composición editorial), **`Comprobante`** (C-07, evidencia de pago), **`WorkspaceShell`** (C-08, estructura) y **`ActionBar`** (C-09, estructura).
 
 > Nombres de props (desviaciones deliberadas vs la ficha):
 > - `Money` recibe **`cents`** (garantía de unidad, siempre vía `formatArsCents`) y **`variant`** (`inline` | `total`), no `amount`/`size`.
@@ -12,6 +12,8 @@ Los 11 componentes del PDD (ver [`docs/pdd/componentes.md`](../../../docs/pdd/co
 > **Límite conocido:** el tope de `Cover` es `xl` (74×110). La escala **hero** de la principal pública (P-04) puede requerir sumar tamaños a `Cover` más adelante; se evaluará al implementar P-04, no en C6.
 >
 > - `Comprobante` **reemplaza `modo`** (ficha) por **`contexto`** (`cliente` | `tienda`) + **`estado`** (`sin-comprobante` | `seleccionado` | `enviado` | `confirmado` | `rechazado`), que matchea la máquina de pago. Es **controlado** (recibe estado + callbacks; no ejecuta transiciones). Callbacks: `onSeleccionar/onQuitar/onEnviar/onVer/onConfirmar/onRechazar` (un botón se muestra solo si su callback existe). Incluye un `<input type="file">` nativo que **solo captura el `File`** (sin upload/storage/OCR/backend). El **monto** llega por `referencia` (la pantalla pasa `<Money/>`); el estado se muestra con `Pill` (texto, no solo color); el motivo de rechazo por `nota`. El trigger de archivo es un `<label>` estilado (un `<button>` no dispara el picker).
+> - `WorkspaceShell` es la estructura de las 5 superficies del comerciante: `edicion` + `faseActual` + `fasesDisponibles?` + `onNavegar?` (callback **neutro**, sin rutas) + `children` (main) + `aside?` (2ª columna, apila por flex-wrap) + `pie?` (región inferior siempre visible por **flex**, no `position:fixed`). Landmarks `header`/`nav[aria-label]`/`main`; `aria-current="page"` en la fase activa; fases fuera de `fasesDisponibles` van `disabled`. **Llena su padre** (la página provee el wrapper full-height, p. ej. `100dvh`). No mapea estado→etiqueta (recibe `{label, tono}` para el `Pill`) ni conoce cada flujo. Las etiquetas de fase son vocabulario de UI del shell.
+> - `ActionBar` es una barra neutra: `resumen?` + `acciones?` (slot de `Button`) + `bloqueo?` (motivo en `role="status"`, marca `data-bloqueada`; **no calcula** el bloqueo) + `loading?` (`aria-busy`) + `sticky?` (solo standalone; dentro del shell la posiciona el layout). No conoce publicar/cerrar/entregar/preparar; `Money`/`Pill` se componen en `resumen`/`bloqueo`.
 
 ## Convenciones
 
