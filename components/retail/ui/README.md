@@ -1,6 +1,8 @@
 # Retail UI Kit (`components/retail/ui`)
 
-Los 11 componentes del PDD (ver [`docs/pdd/componentes.md`](../../../docs/pdd/componentes.md)) viven acá. Se implementan de a poco (Fase 0, commits C3+). Hoy **el directorio está vacío**: C1 solo trajo el tema.
+Los 11 componentes del PDD (ver [`docs/pdd/componentes.md`](../../../docs/pdd/componentes.md)) viven acá. Se implementan de a poco (Fase 0). Presentes hoy: **`Money`** (C-02) y **`Cover`** (C-03), sumados en C3.
+
+> Nota sobre nombres de props: `Money` recibe **`cents`** (garantía de unidad, siempre vía `formatArsCents`) y **`variant`** (`inline` | `total`) — dos renombres deliberados respecto de la ficha (`amount`/`size`).
 
 ## Convenciones
 
