@@ -11,6 +11,8 @@ import { Portada } from "@/components/retail/ui/Portada";
 import { Comprobante } from "@/components/retail/ui/Comprobante";
 import { WorkspaceShell } from "@/components/retail/ui/WorkspaceShell";
 import { ActionBar } from "@/components/retail/ui/ActionBar";
+import { BottomSheet } from "@/components/retail/ui/BottomSheet";
+import { Search } from "@/components/retail/ui/Search";
 
 const PORTADA_CAPTION: React.CSSProperties = {
   fontFamily: "var(--sans)",
@@ -73,6 +75,9 @@ const CHOICE_LABEL: Record<Choice, string> = { system: "Sistema", light: "Claro"
 export default function RetailKitPreview() {
   const [choice, setChoice] = useState<Choice>("system");
   const dataTheme = choice === "system" ? undefined : choice;
+
+  const [sheet, setSheet] = useState<null | "breve" | "acciones" | "largo">(null);
+  const [busqueda, setBusqueda] = useState("Juan");
 
   return (
     <div
@@ -396,6 +401,53 @@ export default function RetailKitPreview() {
             <div style={{ maxWidth: 340, border: "1px solid var(--hair)", borderRadius: 10, overflow: "hidden" }}>
               <p style={{ ...PORTADA_CAPTION, margin: "10px 14px 0" }}>angosto / mobile (wrap)</p>
               <ActionBar resumen={<>total <Money cents={960000} variant="total" /></>} acciones={<Button>Hacer pedido</Button>} />
+            </div>
+          </div>
+        </Section>
+
+        <Section title="BottomSheet · C-10">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, border: "1px solid var(--hair)", borderRadius: 10, padding: 18, background: "var(--card)" }}>
+            <Button variant="ghost" onClick={() => setSheet("breve")}>Abrir (contenido breve)</Button>
+            <Button variant="ghost" onClick={() => setSheet("acciones")}>Abrir (con acciones)</Button>
+            <Button variant="ghost" onClick={() => setSheet("largo")}>Abrir (contenido largo)</Button>
+            <span style={{ fontFamily: "var(--sans)", fontSize: 12, color: "var(--ink-3)", alignSelf: "center" }}>
+              Cerrá con ×, click fuera o Escape.
+            </span>
+          </div>
+          <BottomSheet abierta={sheet === "breve"} onCerrar={() => setSheet(null)} titulo="Superficie modal" descripcion="Contenido breve de ejemplo.">
+            <p style={{ fontFamily: "var(--sans)", fontSize: 14, color: "var(--ink)", margin: 0 }}>El componente solo provee la superficie; el contenido lo pone la pantalla.</p>
+          </BottomSheet>
+          <BottomSheet
+            abierta={sheet === "acciones"}
+            onCerrar={() => setSheet(null)}
+            titulo="Con acciones"
+            acciones={<><Button variant="ghost" onClick={() => setSheet(null)}>Cancelar</Button><Button onClick={() => setSheet(null)}>Confirmar</Button></>}
+          >
+            <p style={{ fontFamily: "var(--sans)", fontSize: 14, color: "var(--ink)", margin: 0 }}>Las acciones entran por slot; el sheet no las conoce.</p>
+          </BottomSheet>
+          <BottomSheet abierta={sheet === "largo"} onCerrar={() => setSheet(null)} titulo="Contenido largo (scroll interno)">
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {Array.from({ length: 24 }).map((_, i) => (
+                <TomoLine key={i} tomo={{ serie: "Chainsaw Man", volumen: i + 1 }} precioCents={320000} />
+              ))}
+            </div>
+          </BottomSheet>
+        </Section>
+
+        <Section title="Search · C-11">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16, border: "1px solid var(--hair)", borderRadius: 10, padding: 18, background: "var(--card)" }}>
+            <div>
+              <p style={PORTADA_CAPTION}>en vivo (escribí)</p>
+              <Search valor={busqueda} onChange={setBusqueda} placeholder="Buscar por nombre" onSubmit={() => {}} />
+              <p style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-3)", marginTop: 6 }}>consulta: “{busqueda}”</p>
+            </div>
+            <div>
+              <p style={PORTADA_CAPTION}>vacío</p>
+              <Search valor="" onChange={() => {}} placeholder="Buscar por nombre" />
+            </div>
+            <div>
+              <p style={PORTADA_CAPTION}>disabled</p>
+              <Search valor="María" onChange={() => {}} disabled />
             </div>
           </div>
         </Section>
