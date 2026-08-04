@@ -63,6 +63,8 @@ export const RETAIL_ERROR = {
   DUPLICATE_HANDOFF_ITEM: "DUPLICATE_HANDOFF_ITEM",
   // Modo de pago — puntos de cobro (dominio-vista)
   INVALID_PAYMENT_MODE_CONFIG: "INVALID_PAYMENT_MODE_CONFIG",
+  // P-03 · Estudio (edición) — orden editorial de las ofertas
+  INVALID_REORDER_SET: "INVALID_REORDER_SET",
 } as const;
 export type RetailErrorCode = (typeof RETAIL_ERROR)[keyof typeof RETAIL_ERROR];
 

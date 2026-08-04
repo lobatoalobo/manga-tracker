@@ -7,7 +7,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { CAMPAIGN_STATUS, assertDraftEditable, type CampaignStatus } from "@/lib/domain/retail/campaign";
-import { OFFER_STATUS, assertOfferTransition, assertValidPrices, assertValidManualDescriptor, type OfferStatus, type ManualOfferDescriptor } from "@/lib/domain/retail/offer";
+import { OFFER_STATUS, assertOfferTransition, assertValidPrices, assertValidManualDescriptor, buildReorderPlan, type OfferStatus, type ManualOfferDescriptor } from "@/lib/domain/retail/offer";
 import { CAMPAIGN_ACTION } from "@/lib/domain/retail/policy";
 import { RetailError, RETAIL_ERROR } from "@/lib/domain/retail/errors";
 import { authorizeCampaignAction } from "@/lib/retail/auth";
@@ -90,6 +90,14 @@ export async function addPreorderOffer(input: AddOfferInput, actorUserId: string
       snapshot = manualSnapshot!;
     }
 
+    // Alta al FINAL del catálogo de la campaña (ADR-013): sin sortOrder explícito, va después del último. El
+    // lock de la campaña (lockCampaignOf) serializa las altas concurrentes, así que el max no tiene carrera.
+    let sortOrder = input.sortOrder;
+    if (sortOrder === undefined) {
+      const agg = await tx.preorderOffer.aggregate({ where: { campaignId: input.campaignId }, _max: { sortOrder: true } });
+      sortOrder = (agg._max.sortOrder ?? -1) + 1;
+    }
+
     try {
       return await tx.preorderOffer.create({
         data: {
@@ -99,7 +107,7 @@ export async function addPreorderOffer(input: AddOfferInput, actorUserId: string
           listPriceCents: input.listPriceCents,
           preorderPriceCents: input.preorderPriceCents,
           status: OFFER_STATUS.ACTIVE,
-          sortOrder: input.sortOrder ?? 0,
+          sortOrder,
         },
       });
     } catch (err) {
@@ -160,6 +168,25 @@ async function setOfferStatus(offerId: number, target: OfferStatus, actorUserId:
 export const hidePreorderOffer = (offerId: number, actor: string | null, client: Client = prisma) => setOfferStatus(offerId, OFFER_STATUS.HIDDEN, actor, client);
 export const showPreorderOffer = (offerId: number, actor: string | null, client: Client = prisma) => setOfferStatus(offerId, OFFER_STATUS.ACTIVE, actor, client);
 export const cancelPreorderOffer = (offerId: number, actor: string | null, client: Client = prisma) => setOfferStatus(offerId, OFFER_STATUS.CANCELLED, actor, client);
+
+/**
+ * REORDENA las ofertas de una campaña DRAFT (P-03 · Estudio). `orderedOfferIds` debe ser una PERMUTACIÓN
+ * exacta de las ofertas de la campaña; `buildReorderPlan` (dominio puro) lo valida y produce `sortOrder =
+ * índice`. Todo en una tx bajo el lock de campaña → serializa con publish y otras ediciones. Idempotente:
+ * reordenar al mismo orden reescribe los mismos valores.
+ */
+export async function reorderPreorderOffers(campaignId: number, orderedOfferIds: number[], actorUserId: string | null, client: Client = prisma) {
+  return client.$transaction(async (tx) => {
+    const { storeId, status } = await lockCampaignOf(tx, campaignId);
+    await authorizeCampaignAction(tx, storeId, actorUserId, CAMPAIGN_ACTION.MANAGE_OFFERS);
+    assertDraftEditable(status);
+    const existing = await tx.preorderOffer.findMany({ where: { campaignId }, select: { id: true } });
+    const plan = buildReorderPlan(existing.map((o) => o.id), orderedOfferIds);
+    for (const { offerId, sortOrder } of plan) {
+      await tx.preorderOffer.update({ where: { id: offerId }, data: { sortOrder } });
+    }
+  });
+}
 
 /** Elimina una oferta solo si la campaña está en DRAFT (nunca borra ofertas históricas de publicadas). */
 export async function removeDraftPreorderOffer(offerId: number, actorUserId: string | null, client: Client = prisma) {

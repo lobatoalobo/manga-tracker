@@ -45,6 +45,29 @@ export function derivedDiscountPercent(listPriceCents: number, preorderPriceCent
   return Math.round((1 - preorderPriceCents / listPriceCents) * 100);
 }
 
+/**
+ * Plan de REORDEN editorial (P-03 · Estudio). PURO. Recibe el conjunto de ofertas de la campaña y el orden
+ * pedido, valida que sea una PERMUTACIÓN exacta (mismo conjunto, sin duplicados, sin ids ajenos) y devuelve
+ * la asignación `sortOrder = índice`. La validación estricta evita reordenar con datos inconsistentes (bug de
+ * cliente o carrera). Idempotente por naturaleza: el mismo orden produce el mismo plan.
+ */
+export function buildReorderPlan(
+  existingOfferIds: readonly number[],
+  orderedOfferIds: readonly number[],
+): { offerId: number; sortOrder: number }[] {
+  if (orderedOfferIds.length !== existingOfferIds.length)
+    throw new RetailError(RETAIL_ERROR.INVALID_REORDER_SET, "el orden debe incluir exactamente las ofertas de la campaña");
+  const existing = new Set(existingOfferIds);
+  const seen = new Set<number>();
+  for (const id of orderedOfferIds) {
+    if (seen.has(id)) throw new RetailError(RETAIL_ERROR.INVALID_REORDER_SET, `oferta duplicada en el orden: ${id}`);
+    if (!existing.has(id)) throw new RetailError(RETAIL_ERROR.INVALID_REORDER_SET, `oferta ajena a la campaña: ${id}`);
+    seen.add(id);
+  }
+  // Igual longitud + sin duplicados + todas pertenecen ⇒ es una permutación exacta.
+  return orderedOfferIds.map((offerId, index) => ({ offerId, sortOrder: index }));
+}
+
 /** Snapshot histórico de una oferta (resoluble desde Volume → PublisherEdition → Work). Ver §7. */
 export interface OfferSnapshot {
   readonly titleSnapshot: string; // Work.title
