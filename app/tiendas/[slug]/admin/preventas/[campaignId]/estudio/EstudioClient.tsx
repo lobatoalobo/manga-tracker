@@ -293,6 +293,7 @@ export default function EstudioClient({ campaignId, status, titulo, weekLabel, p
         acciones={!readOnly ? <Button onClick={publish} loading={screenPending} disabled={activeCount < 1}>Publicar edición</Button> : null}
       />}
     >
+      <div style={{ maxWidth: 640 }}>
       {readOnly ? <p role="status" style={{ fontFamily: "var(--sans)", fontSize: 13, color: "var(--ink-2)", marginBottom: 12 }}>Edición {STATUS_PILL[status]?.label.toLowerCase() ?? status} — solo lectura. Las operaciones posteriores se gestionan en el admin.</p> : null}
 
       {!readOnly ? (
@@ -310,6 +311,7 @@ export default function EstudioClient({ campaignId, status, titulo, weekLabel, p
         {sorted.map(renderTomo)}
         {sorted.length === 0 ? <li style={{ listStyle: "none", fontFamily: "var(--sans)", fontSize: 13, color: "var(--ink-3)", padding: "8px 0" }}>Todavía no hay tomos en la edición.</li> : null}
       </ul>
+      </div>
 
       {/* Sheet: agregar del catálogo */}
       <BottomSheet abierta={addOpen} onCerrar={() => setAddOpen(false)} titulo="Agregar tomo" descripcion="Buscá en el catálogo y definí los precios.">

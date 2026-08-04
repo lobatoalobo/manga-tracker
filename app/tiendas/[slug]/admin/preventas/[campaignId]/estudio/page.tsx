@@ -4,6 +4,7 @@ import { StoreAuthError, STORE_ROLE } from "@/lib/domain/store/authorize";
 import { getStoreCampaign } from "@/lib/retail/campaigns";
 import { toStudioOfferRow } from "@/lib/retail/studio";
 import EstudioClient from "./EstudioClient";
+import "@/components/retail/ui/retail-theme.css";
 
 export const metadata = { title: "Estudio · Edición · Nakama" };
 
@@ -24,7 +25,7 @@ export default async function EstudioPage({ params }: { params: Promise<{ slug: 
   if (!campaign || campaign.storeId !== ctx.profileRow.storeId) notFound(); // aislamiento entre tiendas
 
   return (
-    <main style={{ height: "100dvh" }}>
+    <main data-retail="" style={{ height: "100dvh", background: "var(--paper)" }}>
       <EstudioClient
         campaignId={campaign.id}
         status={campaign.status}
