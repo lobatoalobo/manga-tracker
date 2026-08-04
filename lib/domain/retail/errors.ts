@@ -61,6 +61,8 @@ export const RETAIL_ERROR = {
   PICKUP_EXCEEDS_PREPARED: "PICKUP_EXCEEDS_PREPARED",
   EMPTY_HANDOFF_BATCH: "EMPTY_HANDOFF_BATCH",
   DUPLICATE_HANDOFF_ITEM: "DUPLICATE_HANDOFF_ITEM",
+  // Modo de pago — puntos de cobro (dominio-vista)
+  INVALID_PAYMENT_MODE_CONFIG: "INVALID_PAYMENT_MODE_CONFIG",
 } as const;
 export type RetailErrorCode = (typeof RETAIL_ERROR)[keyof typeof RETAIL_ERROR];
 
