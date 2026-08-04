@@ -67,6 +67,8 @@ export const RETAIL_ERROR = {
   INVALID_REORDER_SET: "INVALID_REORDER_SET",
   // P-03 · Estudio (edición) — la principal de la portada no está en portada
   PRINCIPAL_NOT_ON_COVER: "PRINCIPAL_NOT_ON_COVER",
+  // Gate de feature (p. ej. ofertas manuales): ya tenía label en format.ts; se formaliza como código.
+  FEATURE_DISABLED: "FEATURE_DISABLED",
 } as const;
 export type RetailErrorCode = (typeof RETAIL_ERROR)[keyof typeof RETAIL_ERROR];
 

@@ -15,13 +15,23 @@ import { authorizeCampaignAction } from "@/lib/retail/auth";
 type Client = PrismaClient;
 type Tx = Pick<PrismaClient, "preorderCampaign" | "preorderOffer" | "volume" | "storeCommerceProfile" | "storeMember" | "$queryRaw">;
 
-/** Lockea la campaña padre y devuelve su estado + storeId (o lanza CAMPAIGN_NOT_FOUND). */
-async function lockCampaignOf(tx: Tx, campaignId: number): Promise<{ storeId: number; status: CampaignStatus }> {
+/** Lockea la campaña padre y devuelve su estado + storeId + principal (o lanza CAMPAIGN_NOT_FOUND). */
+async function lockCampaignOf(tx: Tx, campaignId: number): Promise<{ storeId: number; status: CampaignStatus; principalOfferId: number | null }> {
   await tx.$queryRaw`SELECT id FROM "PreorderCampaign" WHERE id = ${campaignId} FOR UPDATE`;
-  const c = await tx.preorderCampaign.findUnique({ where: { id: campaignId }, select: { storeId: true, status: true } });
+  const c = await tx.preorderCampaign.findUnique({ where: { id: campaignId }, select: { storeId: true, status: true, principalOfferId: true } });
   if (!c) throw new RetailError(RETAIL_ERROR.CAMPAIGN_NOT_FOUND);
-  return { storeId: c.storeId, status: c.status as CampaignStatus };
+  return { storeId: c.storeId, status: c.status as CampaignStatus, principalOfferId: c.principalOfferId };
 }
+
+/**
+ * Proyección mínima autoritativa para RECONCILIAR el optimista tras una mutación de oferta: el estado del
+ * ejemplar + el `principalOfferId` de la campaña YA resuelto dentro de la misma tx. Evita que la capa de
+ * actions haga una segunda lectura.
+ */
+export type OfferReconcileResult = {
+  offer: { id: number; status: string; onCover: boolean };
+  principalOfferId: number | null;
+};
 
 /** Descriptor manual que autora la tienda para un lanzamiento aún NO catalogado (sin Volume). */
 export interface ManualOfferInput {
@@ -122,8 +132,8 @@ export async function addPreorderOffer(input: AddOfferInput, actorUserId: string
 async function loadOfferLocked(tx: Tx, offerId: number) {
   const offer = await tx.preorderOffer.findUnique({ where: { id: offerId }, select: { id: true, campaignId: true, status: true, onCover: true, listPriceCents: true, preorderPriceCents: true } });
   if (!offer) throw new RetailError(RETAIL_ERROR.OFFER_NOT_FOUND);
-  const { storeId, status } = await lockCampaignOf(tx, offer.campaignId);
-  return { offer, storeId, campaignStatus: status };
+  const { storeId, status, principalOfferId } = await lockCampaignOf(tx, offer.campaignId);
+  return { offer, storeId, campaignStatus: status, principalOfferId };
 }
 
 /**
@@ -162,18 +172,20 @@ export async function updatePreorderOffer(offerId: number, patch: UpdateOfferPat
 }
 
 /** Transición de estado de una oferta (ocultar/mostrar/cancelar). Permitida en DRAFT o PUBLISHED. */
-async function setOfferStatus(offerId: number, target: OfferStatus, actorUserId: string | null, client: Client) {
+async function setOfferStatus(offerId: number, target: OfferStatus, actorUserId: string | null, client: Client): Promise<OfferReconcileResult> {
   return client.$transaction(async (tx) => {
-    const { offer, storeId, campaignStatus } = await loadOfferLocked(tx, offerId);
+    const { offer, storeId, campaignStatus, principalOfferId } = await loadOfferLocked(tx, offerId);
     await authorizeCampaignAction(tx, storeId, actorUserId, CAMPAIGN_ACTION.MANAGE_OFFERS);
     if (campaignStatus === CAMPAIGN_STATUS.CLOSED || campaignStatus === CAMPAIGN_STATUS.CANCELLED)
       throw new RetailError(RETAIL_ERROR.CAMPAIGN_NOT_EDITABLE, `campaña en estado ${campaignStatus}`);
-    if ((offer.status as OfferStatus) === target) return tx.preorderOffer.findUnique({ where: { id: offerId } }); // idempotente
+    if ((offer.status as OfferStatus) === target) // idempotente
+      return { offer: { id: offer.id, status: offer.status, onCover: offer.onCover }, principalOfferId };
     assertOfferTransition(offer.status as OfferStatus, target);
-    const updated = await tx.preorderOffer.update({ where: { id: offerId }, data: { status: target } });
+    await tx.preorderOffer.update({ where: { id: offerId }, data: { status: target } });
     // Ocultar/cancelar la principal la vuelve inelegible → limpiar principalOfferId en la misma tx.
     if (target !== OFFER_STATUS.ACTIVE) await clearPrincipalIfMatches(tx, offer.campaignId, offerId);
-    return updated;
+    const principal = target !== OFFER_STATUS.ACTIVE && principalOfferId === offerId ? null : principalOfferId;
+    return { offer: { id: offer.id, status: target, onCover: offer.onCover }, principalOfferId: principal };
   });
 }
 
@@ -181,15 +193,17 @@ async function setOfferStatus(offerId: number, target: OfferStatus, actorUserId:
  * Lleva/baja una oferta de la PORTADA (P-03 · Estudio). Solo DRAFT. Idempotente. Bajar de portada a la oferta
  * principal limpia `principalOfferId` en la misma tx (no se auto-elige otra, D-008).
  */
-export async function setOfferOnCover(offerId: number, onCover: boolean, actorUserId: string | null, client: Client = prisma) {
+export async function setOfferOnCover(offerId: number, onCover: boolean, actorUserId: string | null, client: Client = prisma): Promise<OfferReconcileResult> {
   return client.$transaction(async (tx) => {
-    const { offer, storeId, campaignStatus } = await loadOfferLocked(tx, offerId);
+    const { offer, storeId, campaignStatus, principalOfferId } = await loadOfferLocked(tx, offerId);
     await authorizeCampaignAction(tx, storeId, actorUserId, CAMPAIGN_ACTION.MANAGE_OFFERS);
     assertDraftEditable(campaignStatus);
-    if (offer.onCover === onCover) return tx.preorderOffer.findUnique({ where: { id: offerId } }); // idempotente
-    const updated = await tx.preorderOffer.update({ where: { id: offerId }, data: { onCover } });
+    if (offer.onCover === onCover) // idempotente
+      return { offer: { id: offer.id, status: offer.status, onCover: offer.onCover }, principalOfferId };
+    await tx.preorderOffer.update({ where: { id: offerId }, data: { onCover } });
     if (!onCover) await clearPrincipalIfMatches(tx, offer.campaignId, offerId);
-    return updated;
+    const principal = !onCover && principalOfferId === offerId ? null : principalOfferId;
+    return { offer: { id: offer.id, status: offer.status, onCover }, principalOfferId: principal };
   });
 }
 
