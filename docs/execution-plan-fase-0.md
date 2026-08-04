@@ -156,7 +156,7 @@ Sin código · sin schema ni migraciones · sin reabrir decisiones de producto �
 | Archivo | Tipo | Contenido |
 |---|---|---|
 | `app/(retail-preview)/retail-theme.css` | NEW | Tokens **scopeados** bajo `[data-retail]`: `--paper/-2/--card · --ink/-2/-3 · --hair/-2 · --mark/-2/-soft · --warn/-soft · --go/-soft` + `--serif/--sans/--mono` (fuentes de sistema, sin webfonts). Light por defecto; `@media (prefers-color-scheme:dark)`; overrides `[data-retail][data-theme="dark"]` / `[data-theme="light"]` en ambas direcciones. **Todos los selectores bajo `[data-retail]` → inertes fuera del segmento.** |
-| `app/(retail-preview)/layout.tsx` | NEW | Layout del route-group aislado `(retail-preview)`: importa `retail-theme.css`, envuelve en `<div data-retail>`, marca `robots noindex` y **gatea fuera de producción** (`notFound()` si `NODE_ENV==="production"`). No altera el nesting de rutas existentes. |
+| `app/(retail-preview)/layout.tsx` | NEW | Layout del route-group aislado `(retail-preview)`: importa `retail-theme.css`, envuelve en `<div data-retail>`, marca `robots noindex` y **gatea por flag explícito** (`notFound()` salvo que `RETAIL_PREVIEW_ENABLED==="true"`; oculto por defecto en todos los entornos). No altera el nesting de rutas existentes. |
 | `app/(retail-preview)/kit/page.tsx` | NEW | Preview mínima verificable: **swatches** de cada token de color, **muestras tipográficas** (serif/sans/mono) y un **toggle light/dark** que estampa `data-theme` en el wrapper. Sin componentes del Kit todavía. |
 | `components/retail/ui/README.md` | NEW | Documenta la convención: el Kit vive acá; los colores/tipografía se consumen de las CSS-vars del tema `[data-retail]`; Tailwind se usa para layout/utilidades. |
 
