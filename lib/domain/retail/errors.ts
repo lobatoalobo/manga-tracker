@@ -65,6 +65,8 @@ export const RETAIL_ERROR = {
   INVALID_PAYMENT_MODE_CONFIG: "INVALID_PAYMENT_MODE_CONFIG",
   // P-03 · Estudio (edición) — orden editorial de las ofertas
   INVALID_REORDER_SET: "INVALID_REORDER_SET",
+  // P-03 · Estudio (edición) — la principal de la portada no está en portada
+  PRINCIPAL_NOT_ON_COVER: "PRINCIPAL_NOT_ON_COVER",
 } as const;
 export type RetailErrorCode = (typeof RETAIL_ERROR)[keyof typeof RETAIL_ERROR];
 

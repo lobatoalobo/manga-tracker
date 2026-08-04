@@ -120,10 +120,19 @@ export async function addPreorderOffer(input: AddOfferInput, actorUserId: string
 
 /** Carga la oferta + su campaña bloqueada; valida que pertenezca a esa campaña (no confía en ids sueltos). */
 async function loadOfferLocked(tx: Tx, offerId: number) {
-  const offer = await tx.preorderOffer.findUnique({ where: { id: offerId }, select: { id: true, campaignId: true, status: true, listPriceCents: true, preorderPriceCents: true } });
+  const offer = await tx.preorderOffer.findUnique({ where: { id: offerId }, select: { id: true, campaignId: true, status: true, onCover: true, listPriceCents: true, preorderPriceCents: true } });
   if (!offer) throw new RetailError(RETAIL_ERROR.OFFER_NOT_FOUND);
   const { storeId, status } = await lockCampaignOf(tx, offer.campaignId);
   return { offer, storeId, campaignStatus: status };
+}
+
+/**
+ * Reconcilia la invariante de principal (ADR-013): si la campaña tenía a ESTA oferta como principal, la
+ * limpia. Una sola sentencia idempotente (`updateMany` con guard sobre `principalOfferId`) dentro de la tx del
+ * llamador. NO auto-elige otra principal (D-008). Punto único de verdad para bajar-de-portada/ocultar/cancelar.
+ */
+async function clearPrincipalIfMatches(tx: Tx, campaignId: number, offerId: number): Promise<void> {
+  await tx.preorderCampaign.updateMany({ where: { id: campaignId, principalOfferId: offerId }, data: { principalOfferId: null } });
 }
 
 export interface UpdateOfferPatch {
@@ -161,7 +170,26 @@ async function setOfferStatus(offerId: number, target: OfferStatus, actorUserId:
       throw new RetailError(RETAIL_ERROR.CAMPAIGN_NOT_EDITABLE, `campaña en estado ${campaignStatus}`);
     if ((offer.status as OfferStatus) === target) return tx.preorderOffer.findUnique({ where: { id: offerId } }); // idempotente
     assertOfferTransition(offer.status as OfferStatus, target);
-    return tx.preorderOffer.update({ where: { id: offerId }, data: { status: target } });
+    const updated = await tx.preorderOffer.update({ where: { id: offerId }, data: { status: target } });
+    // Ocultar/cancelar la principal la vuelve inelegible → limpiar principalOfferId en la misma tx.
+    if (target !== OFFER_STATUS.ACTIVE) await clearPrincipalIfMatches(tx, offer.campaignId, offerId);
+    return updated;
+  });
+}
+
+/**
+ * Lleva/baja una oferta de la PORTADA (P-03 · Estudio). Solo DRAFT. Idempotente. Bajar de portada a la oferta
+ * principal limpia `principalOfferId` en la misma tx (no se auto-elige otra, D-008).
+ */
+export async function setOfferOnCover(offerId: number, onCover: boolean, actorUserId: string | null, client: Client = prisma) {
+  return client.$transaction(async (tx) => {
+    const { offer, storeId, campaignStatus } = await loadOfferLocked(tx, offerId);
+    await authorizeCampaignAction(tx, storeId, actorUserId, CAMPAIGN_ACTION.MANAGE_OFFERS);
+    assertDraftEditable(campaignStatus);
+    if (offer.onCover === onCover) return tx.preorderOffer.findUnique({ where: { id: offerId } }); // idempotente
+    const updated = await tx.preorderOffer.update({ where: { id: offerId }, data: { onCover } });
+    if (!onCover) await clearPrincipalIfMatches(tx, offer.campaignId, offerId);
+    return updated;
   });
 }
 

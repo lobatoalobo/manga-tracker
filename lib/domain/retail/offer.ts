@@ -68,6 +68,23 @@ export function buildReorderPlan(
   return orderedOfferIds.map((offerId, index) => ({ offerId, sortOrder: index }));
 }
 
+/**
+ * Elegibilidad de una oferta como PRINCIPAL de la portada (P-03 · Estudio, ADR-013). PURO. La principal debe:
+ * (1) pertenecer a la campaña; (2) estar ACTIVE; (3) estar en portada (onCover). Lanza el error específico por
+ * causa. Elegir principal y llevar-a-portada son acciones distintas (D-008): no se auto-sube a portada.
+ */
+export function assertPrincipalEligible(
+  offer: { campaignId: number; status: OfferStatus; onCover: boolean },
+  campaignId: number,
+): void {
+  if (offer.campaignId !== campaignId)
+    throw new RetailError(RETAIL_ERROR.OFFER_NOT_FOUND, "la oferta no pertenece a la campaña");
+  if (offer.status !== OFFER_STATUS.ACTIVE)
+    throw new RetailError(RETAIL_ERROR.OFFER_NOT_AVAILABLE, "la principal debe ser una oferta activa");
+  if (!offer.onCover)
+    throw new RetailError(RETAIL_ERROR.PRINCIPAL_NOT_ON_COVER, "la principal debe estar en portada");
+}
+
 /** Snapshot histórico de una oferta (resoluble desde Volume → PublisherEdition → Work). Ver §7. */
 export interface OfferSnapshot {
   readonly titleSnapshot: string; // Work.title
