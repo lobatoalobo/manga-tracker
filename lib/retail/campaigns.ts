@@ -15,7 +15,7 @@ import {
   assertPublishable,
   type CampaignStatus,
 } from "@/lib/domain/retail/campaign";
-import { OFFER_STATUS } from "@/lib/domain/retail/offer";
+import { OFFER_STATUS, assertPrincipalEligible, type OfferStatus } from "@/lib/domain/retail/offer";
 import { ORDER_STATUS } from "@/lib/domain/retail/order";
 import { CAMPAIGN_ACTION } from "@/lib/domain/retail/policy";
 import { RetailError, RETAIL_ERROR } from "@/lib/domain/retail/errors";
@@ -108,6 +108,25 @@ export async function updateCampaign(campaignId: number, patch: UpdateCampaignPa
       return tx.preorderCampaign.update({ where: { id: campaignId }, data: { description: clean(patch.description) } });
     }
     throw new RetailError(RETAIL_ERROR.CAMPAIGN_NOT_EDITABLE, `campaña en estado ${status}`);
+  });
+}
+
+/**
+ * Elige o limpia la oferta PRINCIPAL de la portada (P-03 · Estudio). Solo DRAFT. `offerId = null` limpia.
+ * `offerId != null` exige (vía `assertPrincipalEligible`) que la oferta sea de la campaña, ACTIVE y en portada
+ * (si no, error específico). Idempotente. NO auto-elige otra al limpiar (D-008).
+ */
+export async function setCampaignPrincipal(campaignId: number, offerId: number | null, actorUserId: string | null, client: Client = prisma) {
+  return client.$transaction(async (tx) => {
+    const c = requireCampaign(await lockCampaign(tx, campaignId));
+    await authorizeCampaignAction(tx, c.storeId, actorUserId, CAMPAIGN_ACTION.MANAGE_OFFERS);
+    assertDraftEditable(c.status as CampaignStatus);
+    if (offerId === null)
+      return tx.preorderCampaign.update({ where: { id: campaignId }, data: { principalOfferId: null } });
+    const offer = await tx.preorderOffer.findUnique({ where: { id: offerId }, select: { campaignId: true, status: true, onCover: true } });
+    if (!offer) throw new RetailError(RETAIL_ERROR.OFFER_NOT_FOUND);
+    assertPrincipalEligible({ campaignId: offer.campaignId, status: offer.status as OfferStatus, onCover: offer.onCover }, campaignId);
+    return tx.preorderCampaign.update({ where: { id: campaignId }, data: { principalOfferId: offerId } });
   });
 }
 

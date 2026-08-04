@@ -5,9 +5,10 @@ import { getCustomerOrder } from "@/lib/retail/orders";
 import { getOrderFulfillmentSummary } from "@/lib/domain/retail/fulfillment";
 import { RetailError } from "@/lib/domain/retail/errors";
 import { formatArsCents, orderStatusLabel, orderFulfillmentLabel, fulfillmentStatusLabel, paymentStatusLabel, paymentMethodLabel, orderHandoffLabel } from "@/lib/retail/format";
-import { computeRemainingCents } from "@/lib/domain/retail/payment";
+import { computeRemainingCents, PAYMENT_STATUS } from "@/lib/domain/retail/payment";
 import { deriveHandoffLine, getOrderHandoffSummary, ORDER_HANDOFF } from "@/lib/domain/retail/handoff";
 import { ORDER_STATUS } from "@/lib/domain/retail/order";
+import { whatsappOrderLink } from "@/lib/retail/contact";
 import CancelOrderButton from "../CancelOrderButton";
 
 export const metadata = { title: "Reserva · Nakama" };
@@ -71,6 +72,50 @@ export default async function MyOrderDetailPage({ params }: { params: Promise<{ 
 
       <p className="mt-4 text-xs text-muted">La reserva no es un pago. Coordiná el pago y el retiro con la tienda.</p>
       {order.status === ORDER_STATUS.RESERVED && <CancelOrderButton publicCode={order.publicCode} />}
+
+      {(() => {
+        // Cómo pagar (Slice P0, experiencia conversacional): total + alias + instrucciones + contacto WhatsApp.
+        // Solo si el pedido está RESERVED y no está pagado, y hay datos de pago o teléfono de la tienda.
+        const profile = order.store.commerceProfile;
+        const waLink = whatsappOrderLink({ whatsapp: profile?.whatsapp ?? null }, { publicCode: order.publicCode, totalCents: order.totalCents });
+        const hasPayData = Boolean(profile && (profile.paymentInstructions || profile.paymentAlias));
+        const show = order.status === ORDER_STATUS.RESERVED && order.paymentStatus !== PAYMENT_STATUS.PAID && (hasPayData || waLink);
+        if (!show) return null;
+        return (
+          <section className="mt-8">
+            <h2 className="text-lg font-semibold">Cómo pagar</h2>
+            <div className="mt-3 space-y-3 rounded-xl border border-border p-4 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted">Total a pagar</span>
+                <span className="text-lg font-bold">{formatArsCents(order.totalCents)}</span>
+              </div>
+              {profile?.paymentAlias && (
+                <div>
+                  <p className="text-xs text-muted">Alias</p>
+                  <p className="font-medium">{profile.paymentAlias}</p>
+                </div>
+              )}
+              {profile?.paymentInstructions && (
+                <div>
+                  <p className="text-xs text-muted">Instrucciones</p>
+                  <pre className="mt-0.5 whitespace-pre-wrap font-sans">{profile.paymentInstructions}</pre>
+                </div>
+              )}
+              {waLink && (
+                <a
+                  href={waLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+                >
+                  Contactar por WhatsApp
+                </a>
+              )}
+              <p className="text-xs text-muted">Coordiná el pago con la tienda. Nakama no procesa el cobro; la tienda registra el pago recibido.</p>
+            </div>
+          </section>
+        );
+      })()}
 
       {(order.paymentStatus !== "UNPAID" || order.payments.length > 0) && (
         <section className="mt-8">

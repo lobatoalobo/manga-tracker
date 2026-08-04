@@ -56,6 +56,8 @@ try {
     "tests/retail-notifications.integration.test.ts",
     "tests/retail-payments.integration.test.ts",
     "tests/retail-handoff.integration.test.ts",
+    "tests/retail-optional-volume.integration.test.ts",
+    "tests/retail-edition.integration.test.ts",
     "tests/collection-apply.integration.test.ts",
     "tests/collection-projection.integration.test.ts",
     "tests/collection-immediate.integration.test.ts",
@@ -68,6 +70,7 @@ try {
     "tests/collection-legacy-read.integration.test.ts",
     "tests/collection-backfill-scan.integration.test.ts",
     "tests/collection-backfill-run.integration.test.ts",
+    "tests/collection-unified.integration.test.ts",
   ];
   execSync(`npx vitest run --no-file-parallelism ${suites.join(" ")}`, {
     stdio: "inherit",

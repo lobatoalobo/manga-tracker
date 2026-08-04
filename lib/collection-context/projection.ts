@@ -27,7 +27,7 @@ export interface PickupEvent {
   readonly quantity: number;
   readonly createdAt: Date;
   readonly ownerUserIdSnapshot: string | null;
-  readonly volumeId: number;
+  readonly volumeId: number | null; // null = línea de oferta manual (identidad de catálogo aún no resuelta)
 }
 
 /**
@@ -39,6 +39,9 @@ export interface PickupEvent {
  */
 export async function projectPickupEvent(client: Client, ev: PickupEvent): Promise<ProjectionResult> {
   if (ev.ownerUserIdSnapshot === null) return PROJECTION_RESULT.CORRUPT_SOURCE;
+  // Línea SIN identidad de catálogo (oferta manual): resultado BENIGNO. No aplica, no reintenta, no escribe
+  // Acquisition/OwnershipPosition; el hecho durable se proyectará cuando exista un Volume (sin cambiar snapshot).
+  if (ev.volumeId === null) return PROJECTION_RESULT.PENDING_CATALOG_RESOLUTION;
 
   const user = await client.user.findUnique({ where: { id: ev.ownerUserIdSnapshot }, select: { id: true } });
   if (!user) return PROJECTION_RESULT.TERMINALLY_NOT_APPLICABLE;
@@ -67,7 +70,8 @@ export async function findPendingPickups(client: Client, batchSize: number, afte
     JOIN "StoreOrderLine" l ON l.id = e."orderLineId"
     JOIN "User" u ON u.id = e."ownerUserIdSnapshot"
     LEFT JOIN "Acquisition" a ON a."acquisitionKey" = ${ACQUISITION_KEY_PREFIX} || e."operationKey"
-    WHERE e.type = 'PICKED_UP' AND e."ownerUserIdSnapshot" IS NOT NULL AND a.id IS NULL AND e.id > ${afterEventId}
+    WHERE e.type = 'PICKED_UP' AND e."ownerUserIdSnapshot" IS NOT NULL AND l."volumeId" IS NOT NULL
+      AND a.id IS NULL AND e.id > ${afterEventId}
     ORDER BY e.id ASC
     LIMIT ${batchSize}
   `;
@@ -85,8 +89,9 @@ export interface PickupProjectionTally {
   corrupt: number;
   conflict: number;
   retryable: number;
+  pendingResolution: number; // línea sin Volume: benigno, se posterga hasta que exista identidad de catálogo
 }
-const emptyTally = (): PickupProjectionTally => ({ applied: 0, alreadyApplied: 0, terminal: 0, corrupt: 0, conflict: 0, retryable: 0 });
+const emptyTally = (): PickupProjectionTally => ({ applied: 0, alreadyApplied: 0, terminal: 0, corrupt: 0, conflict: 0, retryable: 0, pendingResolution: 0 });
 function bump(t: PickupProjectionTally, r: ProjectionResult): void {
   if (r === PROJECTION_RESULT.APPLIED) t.applied++;
   else if (r === PROJECTION_RESULT.ALREADY_APPLIED) t.alreadyApplied++;
@@ -94,6 +99,7 @@ function bump(t: PickupProjectionTally, r: ProjectionResult): void {
   else if (r === PROJECTION_RESULT.CORRUPT_SOURCE) t.corrupt++;
   else if (r === PROJECTION_RESULT.CONFLICT) t.conflict++;
   else if (r === PROJECTION_RESULT.RETRYABLE_FAILURE) t.retryable++;
+  else if (r === PROJECTION_RESULT.PENDING_CATALOG_RESOLUTION) t.pendingResolution++;
 }
 
 /** Carga los eventos PICKED_UP de un conjunto EXACTO de operationKeys (con el volumen de su línea). */
@@ -132,7 +138,7 @@ export async function projectPickupImmediate(keys: readonly string[], client: Cl
     const tally = await projectPickupByOperationKeys(keys, client);
     if (tally.corrupt || tally.conflict) console.warn("[collection] anomalía en proyección inmediata:", tally);
     else if (tally.retryable) console.warn("[collection] proyección inmediata con reintentos pendientes (recupera el barrido):", tally);
-    else if (tally.terminal) console.info("[collection] proyección inmediata con terminales:", tally);
+    else if (tally.terminal || tally.pendingResolution) console.info("[collection] proyección inmediata con terminales/pendientes de catálogo:", tally);
     else console.info("[collection] proyección inmediata:", tally);
     return tally;
   } catch (err) {
@@ -164,6 +170,52 @@ export async function findTerminalPickups(client: Client, batchSize: number): Pr
     LEFT JOIN "User" u ON u.id = e."ownerUserIdSnapshot"
     LEFT JOIN "Acquisition" a ON a."acquisitionKey" = ${ACQUISITION_KEY_PREFIX} || e."operationKey"
     WHERE e.type = 'PICKED_UP' AND e."ownerUserIdSnapshot" IS NOT NULL AND u.id IS NULL AND a.id IS NULL
+    ORDER BY e.id ASC
+    LIMIT ${batchSize}
+  `;
+}
+
+// --- Observabilidad READ-ONLY del backlog de pickups sin identidad de catálogo (slice F3) ---------------
+// Pickups durables cuya línea no tiene `volumeId` (oferta manual): NO proyectan a Collection todavía. Read-only,
+// para monitoreo del piloto (integra a pilot-report o se usa como helper de auditoría). NO resuelve ni proyecta.
+
+/** Fila del backlog: identifica campaña/pedido/línea/oferta, el snapshot comercial y la fecha del pickup. */
+export interface UnresolvedCatalogPickup {
+  eventId: number;
+  pickedUpAt: Date;
+  quantity: number;
+  orderLineId: number;
+  offerId: number;
+  orderId: number;
+  publicCode: string;
+  campaignId: number;
+  titleSnapshot: string;
+  volumeNumberSnapshot: number | null;
+  publisherSnapshot: string | null;
+}
+
+/** Cuenta los pickups PICKED_UP con línea sin `volumeId` (backlog pendiente de resolución de catálogo). */
+export async function countUnresolvedCatalogPickups(client: Client): Promise<number> {
+  const rows = await client.$queryRaw<{ n: number }[]>`
+    SELECT COUNT(*)::int AS n
+    FROM "StoreOrderLineEvent" e
+    JOIN "StoreOrderLine" l ON l.id = e."orderLineId"
+    WHERE e.type = 'PICKED_UP' AND l."volumeId" IS NULL
+  `;
+  return Number(rows[0]?.n ?? 0);
+}
+
+/** Lista el backlog con datos comerciales para observarlo (determinista por id del evento, acotado). */
+export function findUnresolvedCatalogPickups(client: Client, batchSize: number): Promise<UnresolvedCatalogPickup[]> {
+  return client.$queryRaw<UnresolvedCatalogPickup[]>`
+    SELECT e.id AS "eventId", e."createdAt" AS "pickedUpAt", e.quantity AS "quantity",
+           l.id AS "orderLineId", l."offerId" AS "offerId", l."titleSnapshot" AS "titleSnapshot",
+           l."volumeNumberSnapshot" AS "volumeNumberSnapshot", l."publisherSnapshot" AS "publisherSnapshot",
+           o.id AS "orderId", o."publicCode" AS "publicCode", o."campaignId" AS "campaignId"
+    FROM "StoreOrderLineEvent" e
+    JOIN "StoreOrderLine" l ON l.id = e."orderLineId"
+    JOIN "StoreOrder" o ON o.id = l."orderId"
+    WHERE e.type = 'PICKED_UP' AND l."volumeId" IS NULL
     ORDER BY e.id ASC
     LIMIT ${batchSize}
   `;

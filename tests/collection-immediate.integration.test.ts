@@ -38,7 +38,7 @@ describe.skipIf(!URL)("integración — Collection proyección inmediata (Slice 
     const offers: Array<{ offerId: number; volumeId: number }> = [];
     for (let i = 0; i < specs.length; i++) {
       const volumeId = await mkVolume(i + 1);
-      const o = await addPreorderOffer({ campaignId: campaign.id, volumeId, listPriceCents: 100000, preorderPriceCents: 50000 }, owner, prisma);
+      const o = await addPreorderOffer({ campaignId: campaign.id, mode: "linked", volumeId, listPriceCents: 100000, preorderPriceCents: 50000 }, owner, prisma);
       offers.push({ offerId: o.id, volumeId });
     }
     await publishPreorderCampaign(campaign.id, owner, prisma);

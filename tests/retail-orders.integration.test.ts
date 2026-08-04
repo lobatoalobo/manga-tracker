@@ -6,7 +6,8 @@
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
-import { bootstrapStoreCommerce, addMember, setCommerceEnabled } from "@/lib/storeCommerce";
+import { bootstrapStoreCommerce, addMember, setCommerceEnabled, updateCommerceData } from "@/lib/storeCommerce";
+import { registerPayment } from "@/lib/retail/payments";
 import { createPreorderCampaign, publishPreorderCampaign, closePreorderCampaign } from "@/lib/retail/campaigns";
 import { addPreorderOffer, hidePreorderOffer } from "@/lib/retail/offers";
 import {
@@ -44,7 +45,7 @@ describe.skipIf(!URL)("integración — Reservas (Slice 3, base real)", () => {
     const offerIds: number[] = [];
     for (let i = 0; i < prices.length; i++) {
       const { volumeId } = await volume(i + 1);
-      const o = await addPreorderOffer({ campaignId: c.id, volumeId, listPriceCents: prices[i].list, preorderPriceCents: prices[i].pre }, owner, prisma);
+      const o = await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId, listPriceCents: prices[i].list, preorderPriceCents: prices[i].pre }, owner, prisma);
       offerIds.push(o.id);
     }
     await publishPreorderCampaign(c.id, owner, prisma);
@@ -55,6 +56,7 @@ describe.skipIf(!URL)("integración — Reservas (Slice 3, base real)", () => {
 
   beforeAll(async () => { await prisma.$queryRaw`SELECT 1`; });
   afterEach(async () => {
+    await prisma.storePayment.deleteMany({}); // Restrict → borrar antes que la orden
     await prisma.storeOrderLine.deleteMany({});
     await prisma.storeOrder.deleteMany({});
     await prisma.preorderOffer.deleteMany({});
@@ -84,6 +86,35 @@ describe.skipIf(!URL)("integración — Reservas (Slice 3, base real)", () => {
     expect(order.customerEmailSnapshot).toContain("@ro.dev");
   });
 
+  it("getCustomerOrder expone datos de exhibición de la tienda (checkoutMode/whatsapp/alias/instrucciones) y NO filtra la nota interna del pago", async () => {
+    const { storeId, owner, slug } = await commerceStore();
+    await updateCommerceData(
+      slug,
+      { whatsapp: "+5491155550000", paymentAlias: "mi.alias", paymentInstructions: "Transferí y avisá" },
+      prisma,
+    );
+    const { campaignId, offerIds } = await openCampaign(storeId, owner, [{ list: 100000, pre: 90000 }]);
+    const client = await user();
+    const order = await createStoreOrder({ campaignId, items: [{ offerId: offerIds[0], quantity: 1 }] }, client, prisma);
+    await registerPayment(
+      { orderId: order.id, amountCents: 90000, method: "TRANSFER", paidAt: new Date(), note: "secreto interno" },
+      owner,
+      `${uniq()}-pay`,
+      prisma,
+    );
+
+    const view = await getCustomerOrder(order.publicCode, client, prisma);
+    expect(view.store.commerceProfile).toMatchObject({
+      checkoutMode: "CONVERSATIONAL",
+      whatsapp: "+5491155550000",
+      paymentAlias: "mi.alias",
+      paymentInstructions: "Transferí y avisá",
+    });
+    expect(view.paymentStatus).toBe("PAID");
+    expect(view.payments).toHaveLength(1);
+    expect(view.payments[0]).not.toHaveProperty("note"); // la nota interna nunca llega al comprador
+  });
+
   it("crea orden con varias ofertas → total = suma", async () => {
     const { storeId, owner } = await commerceStore();
     const { campaignId, offerIds } = await openCampaign(storeId, owner, [{ list: 100000, pre: 70000 }, { list: 50000, pre: 50000 }]);
@@ -96,7 +127,7 @@ describe.skipIf(!URL)("integración — Reservas (Slice 3, base real)", () => {
     const { storeId, owner } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
     const { volumeId, workId } = await volume(4);
-    const offer = await addPreorderOffer({ campaignId: c.id, volumeId, listPriceCents: 90000, preorderPriceCents: 60000 }, owner, prisma);
+    const offer = await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId, listPriceCents: 90000, preorderPriceCents: 60000 }, owner, prisma);
     await publishPreorderCampaign(c.id, owner, prisma);
     const order = await createStoreOrder({ campaignId: c.id, items: [{ offerId: offer.id, quantity: 1 }] }, await user(), prisma);
     const snap = order.lines[0].titleSnapshot;
@@ -238,7 +269,7 @@ describe.skipIf(!URL)("integración — Reservas (Slice 3, base real)", () => {
     const { storeId, owner } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
     const { volumeId } = await volume(1);
-    const offer = await addPreorderOffer({ campaignId: c.id, volumeId, listPriceCents: 100000, preorderPriceCents: 70000 }, owner, prisma);
+    const offer = await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId, listPriceCents: 100000, preorderPriceCents: 70000 }, owner, prisma);
     await publishPreorderCampaign(c.id, owner, prisma);
     await createStoreOrder({ campaignId: c.id, items: [{ offerId: offer.id, quantity: 1 }] }, await user(), prisma);
     await expect(prisma.store.delete({ where: { id: storeId } })).rejects.toBeTruthy();
@@ -263,13 +294,13 @@ describe.skipIf(!URL)("integración — Reservas (Slice 3, base real)", () => {
     const { storeId, owner } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
     const { volumeId, editionId } = await volume(2);
-    const offer = await addPreorderOffer({ campaignId: c.id, volumeId, listPriceCents: 100000, preorderPriceCents: 70000 }, owner, prisma);
+    const offer = await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId, listPriceCents: 100000, preorderPriceCents: 70000 }, owner, prisma);
     await publishPreorderCampaign(c.id, owner, prisma);
     const order = await createStoreOrder({ campaignId: c.id, items: [{ offerId: offer.id, quantity: 1 }] }, await user(), prisma);
     const survivor = await prisma.work.create({ data: { title: uniq(), normTitle: uniq(), type: "MANGA" }, select: { id: true } });
     await prisma.publisherEdition.update({ where: { id: editionId }, data: { workId: survivor.id } });
     const line = await prisma.storeOrderLine.findFirst({ where: { orderId: order.id }, include: { volume: { include: { edition: { select: { workId: true } } } } } });
     expect(line?.volumeId).toBe(volumeId); // la línea sigue apuntando al mismo Volume
-    expect(line?.volume.edition.workId).toBe(survivor.id); // resuelve el Work sobreviviente
+    expect(line?.volume?.edition.workId).toBe(survivor.id); // resuelve el Work sobreviviente
   });
 });

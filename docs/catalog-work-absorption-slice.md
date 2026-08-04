@@ -101,6 +101,15 @@ FK, como ADR-009) — no es un cambio pequeño y obligaría a tocar la persisten
 absorbe contenido y redirige la identidad bajo lock; además, mientras la identidad del absorbido sigue
 activa, el índice parcial de designación ya impide una segunda identidad activa sobre ese Work).
 
+**Ventana de carrera ACEPTADA (v1).** Al ser un pre-check, existe un TOCTOU: entre la lectura de
+`Work.absorbedIntoId` (paso 1 de `conferInTx`) y la creación de la identidad, una absorción concurrente
+puede commitear en esa ventana y dejar una identidad `ACTIVE` designando un Work ya absorbido. Se
+**acepta deliberadamente en v1** — no se toma lock ni se agrega constraint declarativa. Impacto acotado:
+el índice parcial de designación ya impide una *segunda* identidad activa sobre el Work, así que el caso
+residual es conferir la **primera** identidad sobre un Work que se absorbe en simultáneo. El **cierre
+autoritativo** de esta carrera queda **diferido a Fusionar**, que ejecuta absorción + redirección bajo
+lock en una sola transacción; hasta entonces es una **deuda consciente**, no un invariante roto silencioso.
+
 ## Relación futura con Fusionar (sin implementarla)
 
 ```ts

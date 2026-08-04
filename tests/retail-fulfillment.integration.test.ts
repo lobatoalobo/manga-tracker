@@ -42,7 +42,7 @@ describe.skipIf(!URL)("integración — Cumplimiento (Slice 4, base real)", () =
   async function orderWith(storeId: number, owner: string, quantity: number) {
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
     const { volumeId } = await volume(1);
-    const offer = await addPreorderOffer({ campaignId: c.id, volumeId, listPriceCents: 100000, preorderPriceCents: 70000 }, owner, prisma);
+    const offer = await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId, listPriceCents: 100000, preorderPriceCents: 70000 }, owner, prisma);
     await publishPreorderCampaign(c.id, owner, prisma);
     const client = await user();
     const order = await createStoreOrder({ campaignId: c.id, items: [{ offerId: offer.id, quantity }] }, client, prisma);
@@ -264,7 +264,7 @@ describe.skipIf(!URL)("integración — Cumplimiento (Slice 4, base real)", () =
     const { storeId, owner } = await commerceStore();
     const c = await createPreorderCampaign({ storeId, title: uniq() }, owner, prisma);
     const { volumeId, editionId } = await volume(2);
-    const offer = await addPreorderOffer({ campaignId: c.id, volumeId, listPriceCents: 100000, preorderPriceCents: 70000 }, owner, prisma);
+    const offer = await addPreorderOffer({ campaignId: c.id, mode: "linked", volumeId, listPriceCents: 100000, preorderPriceCents: 70000 }, owner, prisma);
     await publishPreorderCampaign(c.id, owner, prisma);
     const order = await createStoreOrder({ campaignId: c.id, items: [{ offerId: offer.id, quantity: 2 }] }, await user(), prisma);
     const lineId = order.lines[0].id;
