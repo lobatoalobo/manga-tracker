@@ -25,7 +25,7 @@ export default async function EstudioPage({ params }: { params: Promise<{ slug: 
   if (!campaign || campaign.storeId !== ctx.profileRow.storeId) notFound(); // aislamiento entre tiendas
 
   return (
-    <main data-retail="" style={{ height: "100dvh", background: "var(--paper)" }}>
+    <main data-retail="" data-theme="dark" style={{ height: "100dvh", background: "var(--paper)" }}>
       <EstudioClient
         campaignId={campaign.id}
         status={campaign.status}
