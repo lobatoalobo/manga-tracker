@@ -58,24 +58,28 @@ Plan de ejecución de las fundaciones compartidas para implementar las ocho pant
 
 Entregables chicos, en orden de dependencia. Cada commit deja `npm run check` verde y **no cambia nada visible** de la app existente (el Kit vive en `components/retail/ui/` + una ruta de preview gateada). Convención de tests: **dominio → vitest unit**; **componentes → smoke render + fixtures visuales**.
 
-### 0.A · Scaffolding y tema (sin tocar la app actual)
+> **Estado real (progreso).** **UI Kit 11/11 implementado y verde** (rama `feat/retail-redesign-foundations`): tema (C1), harness jsdom + galería (C2), y los 11 componentes. **Capa de dominio-vista (`labels.ts` · `promise-view.ts` · `payment-mode.ts`) TODAVÍA PENDIENTE** → es el único faltante para cerrar Fase 0 (ver §6). Tests: **82 de componente (jsdom)** + **803 de dominio (node) intactos**.
+>
+> **Nota de numeración.** Este plan enumera los commits **C1–C12** (con la capa de dominio en C10–C12). Durante la implementación se usó una numeración **C1–C11** que agrupó distinto los componentes de estructura (el `WorkspaceShell + ActionBar` quedó como C8+C9 y el `BottomSheet + Search` como C10+C11), dejando la capa de dominio **sin numerar** (pendiente). **La diferencia entre la numeración original del plan y la usada durante la implementación no representa un cambio de alcance sino únicamente una diferencia de organización de los commits** — el trabajo es el mismo. Mapa: plan C3=Cover+Money, C4=Button+Pill, C5=TomoLine, C6=Portada, C7=Comprobante, C8=WorkspaceShell+ActionBar, C9=BottomSheet+Search, **C10–C12=capa de dominio (pendiente)**.
+
+### 0.A · Scaffolding y tema (sin tocar la app actual) — ✅ HECHO
 - **C1 · Tema retail acotado.** Tokens papel+tinta (light/dark) como capa CSS **scopeada** a un segmento retail (p. ej. `data-retail` en el layout del segmento), sin alterar `globals.css` global. Fuentes **de sistema** (Iowan/Palatino, Optima, ui-monospace — sin webfonts, CSP-safe). *Aceptación:* una página de preview muestra la paleta en light/dark; el resto de la app queda idéntica. *Tests:* visual (preview).
 - **C2 · Infra de preview + tests de componentes.** Expandir la preview a galería de componentes/estados. Sumar `@testing-library/react` + `@testing-library/jest-dom` + `jsdom` + env vitest (jsdom) para tests de **comportamiento**. **División aprobada:** la **preview valida composición visual**; los **tests cubren comportamiento, estados, callbacks, teclado, foco y a11y básica**. *Aceptación:* `npm run test` verde; galería renderiza. *Tests:* smoke del harness (render + un aserto de rol/aria) que prueba que jsdom+testing-library funcionan.
 
-### 0.B · Primitivos
+### 0.B · Primitivos — ✅ HECHO
 - **C3 · Cover + Money.** `Cover` (greybox tipográfico por paleta; prop `imagen` futura; tamaños xs–xl; estado visual). `Money` **envuelve `formatArsCents`** (recibe **centavos**). *Aceptación:* fixtures de tamaños/estados; Money formatea es-AR desde centavos. *Tests:* unit de Money; smoke de Cover.
 - **C4 · Button + Pill.** `Button` (primary/ghost/warn, disabled). `Pill` (tono neutral/mark/warn/go, dot?, prefijo?, onClick?) — unifica status/chip/pay/tag. *Aceptación:* fixtures de variantes; foco visible (a11y). *Tests:* smoke + a11y (rol/aria).
 
-### 0.C · Compuestos de contenido
+### 0.C · Compuestos de contenido — ✅ HECHO
 - **C5 · TomoLine.** Cover + identidad + cantidad + precio + **acción por slot**. Fixtures de variantes (lectura, precio editable, "A pedir", stepper, "no llegó", se-lleva/debe). Props tipados desde snapshots de oferta/línea existentes. *Tests:* smoke por variante.
 - **C6 · Portada.** principal + secundarias (D-006/007/008) con acciones de editor **por slot**; consume props (persistencia del flag = futura). *Tests:* smoke vacía/con-principal.
 - **C7 · Comprobante.** Modos adjuntar/enviar (cliente) y ver/confirmar (tienda) — **UI only**, sin persistencia (X-3). *Tests:* smoke por modo.
 
-### 0.D · Estructura
+### 0.D · Estructura — ✅ HECHO
 - **C8 · WorkspaceShell + ActionBar.** `WorkspaceShell` (identidad de edición + fase + navegación; **absorbe Masthead**, usa `Pill`). `ActionBar` (barra fija: status/bloqueo + CTA). *Aceptación:* shell con las 5 fases; ActionBar bloqueada con motivo. *Tests:* smoke.
 - **C9 · BottomSheet + Search.** `BottomSheet` (capa sobre la página; `prefers-reduced-motion`). `Search` (filtro por nombre, client). *Tests:* smoke + a11y (foco/escape del sheet).
 
-### 0.E · Capa de dominio-vista (pura, sin schema)
+### 0.E · Capa de dominio-vista (pura, sin schema) — ⏳ PENDIENTE (único faltante de Fase 0)
 - **C10 · `labels.ts`.** Mapeos estado→etiqueta (dominio→cliente→tienda) sobre `FULFILLMENT_STATUS` + `paymentStatus` + `StoreOrder.status`. El cliente nunca ve *apartado/faltante*. *Tests:* unit de cada fila del mapeo.
 - **C11 · `promise-view.ts`.** View-model que combina cumplimiento + pago + aviso → etiqueta + tono + **acciones permitidas** (alimenta HeroEstado, PayChip, tarjetas). *Tests:* unit por combinación de estados.
 - **C12 · `payment-mode.ts`.** Derivación de los 3 modos (`sin_pago_previo`/`sena`/`total`) → puntos de cargo CP1/CP2; **`pilot.modoPago` sin definir** (config, no constante). *Tests:* unit de la tabla modo × punto de cargo.
@@ -112,13 +116,15 @@ Para trazabilidad, lo que **fases futuras** necesitarán (fuera de acá): `Preor
 
 ## 6 · Definition of Done de Fase 0
 
+> **Estado: 5/6 cumplidos · falta el item 3.** El UI Kit está completo (11/11) y verde; el único faltante es la **capa de dominio-vista** (§0.E). Hasta que exista, Fase 0 no está cerrada y no se implementan P-03/P-01/P-02.
+
 Para habilitar la implementación (rediseño) de **P-03 / P-01 / P-02**:
-1. **11 componentes** del Kit implementados en `components/retail/ui/`, tematizados **light/dark**, responsive, con **a11y base** (foco visible, roles/aria, `prefers-reduced-motion`), y **fixtures** que muestran cada estado/variante.
-2. **Tema retail acotado** aplicado sin alterar la estética global de la app.
-3. **Capa de dominio-vista** (`labels.ts`, `promise-view.ts`, `payment-mode.ts`) con **tests unitarios**; `pilot.modoPago` **sin fijar**.
-4. **`Money` reusa `formatArsCents`**; ningún cálculo de dinero duplicado.
-5. `npm run check` **verde**; la app existente **visualmente intacta**; el Kit no importa Prisma.
-6. **Mapa PDD ↔ schema** documentado (esta tabla de incompatibilidades, mantenida).
+1. ✅ **11 componentes** del Kit implementados en `components/retail/ui/`, tematizados **light/dark**, responsive, con **a11y base** (foco visible, roles/aria, `prefers-reduced-motion`), y **fixtures** que muestran cada estado/variante.
+2. ✅ **Tema retail acotado** aplicado sin alterar la estética global de la app.
+3. ⏳ **Capa de dominio-vista** (`labels.ts`, `promise-view.ts`, `payment-mode.ts`) con **tests unitarios**; `pilot.modoPago` **sin fijar**. — **PENDIENTE.**
+4. ✅ **`Money` reusa `formatArsCents`**; ningún cálculo de dinero duplicado.
+5. ✅ `npm run check` **verde**; la app existente **visualmente intacta**; el Kit no importa Prisma.
+6. ✅ **Mapa PDD ↔ schema** documentado (esta tabla de incompatibilidades, mantenida).
 
 P-03/P-01/P-02 son alcanzables schema-free porque mapean a `PreorderCampaign`/`PreorderOffer`/`StoreOrder` **que ya existen** (la única pieza que P-03 pediría a futuro es el flag de portada X-4, no bloqueante del rediseño base).
 

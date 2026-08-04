@@ -86,3 +86,13 @@
   --go: #7fae82;
   --go-soft: rgba(127, 174, 130, 0.15);
 }
+
+/* Foco accesible del buscador (C-11): el <input type="search"> suprime su outline
+ * para evitar el doble anillo; el contenedor muestra un anillo visible al recibir
+ * el foco. El outline es una señal de FORMA (visible aun en escala de grises), no
+ * solo color; var(--mark) adapta light/dark. Selector acotado al <form> del Search
+ * y a [data-retail]: inerte fuera del segmento retail. */
+[data-retail] form[data-retail-search]:focus-within {
+  outline: 2px solid var(--mark);
+  outline-offset: 2px;
+}
