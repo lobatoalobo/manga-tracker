@@ -48,6 +48,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
       <div className="flex items-center justify-between">
         <Link href={`/tiendas/${slug}/admin/preventas`} className="text-sm text-accent hover:underline">← Preventas</Link>
         <span className="flex gap-4">
+          <Link href={`/tiendas/${slug}/admin/preventas/${campaign.id}/estudio`} className="text-sm font-medium text-accent hover:underline">Abrir en el Estudio →</Link>
           <Link href={`/tiendas/${slug}/admin/preventas/${campaign.id}/ordenes`} className="text-sm text-accent hover:underline">Órdenes →</Link>
           <Link href={`/tiendas/${slug}/admin/preventas/${campaign.id}/cumplimiento`} className="text-sm text-accent hover:underline">Cumplimiento →</Link>
           <Link href={`/tiendas/${slug}/admin/preventas/${campaign.id}/preparacion`} className="text-sm text-accent hover:underline">Preparación →</Link>
