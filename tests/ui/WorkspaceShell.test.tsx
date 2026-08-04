@@ -101,6 +101,31 @@ describe("WorkspaceShell", () => {
     expect(kids).toEqual(["header", "main", "div"]);
   });
 
+  it("masthead con titulo: muestra el título (sin '#') cuando se provee, no el número", () => {
+    render(
+      <WorkspaceShell edicion={{ titulo: "Kagurabachi — semana 3", semana: "12/08", estado: { label: "Borrador" } }} faseActual="creacion">
+        <p>x</p>
+      </WorkspaceShell>,
+    );
+    const h1 = screen.getByRole("heading", { level: 1 });
+    expect(h1).toHaveTextContent("Kagurabachi — semana 3");
+    expect(h1).toHaveTextContent("12/08");
+    expect(h1.textContent).not.toContain("#");
+  });
+
+  it("fasesVisibles: renderiza SOLO las fases indicadas en la nav", () => {
+    render(
+      <WorkspaceShell edicion={edicion} faseActual="creacion" fasesVisibles={["creacion"]}>
+        <p>x</p>
+      </WorkspaceShell>,
+    );
+    const nav = screen.getByRole("navigation", { name: "Fases de la edición" });
+    expect(within(nav).getByRole("button", { name: "Creación" })).toBeInTheDocument();
+    expect(within(nav).queryByRole("button", { name: "Preventa" })).toBeNull();
+    expect(within(nav).queryByRole("button", { name: "Entrega" })).toBeNull();
+    expect(within(nav).getAllByRole("button")).toHaveLength(1);
+  });
+
   it("sin dominio: renderiza el estado.label provisto tal cual (no mapea)", () => {
     render(
       <WorkspaceShell edicion={{ numero: 9, semana: "s", estado: { label: "Etiqueta arbitraria" } }} faseActual="preventa">

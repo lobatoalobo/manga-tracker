@@ -7,7 +7,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { CAMPAIGN_STATUS, assertDraftEditable, type CampaignStatus } from "@/lib/domain/retail/campaign";
-import { OFFER_STATUS, assertOfferTransition, assertValidPrices, assertValidManualDescriptor, type OfferStatus, type ManualOfferDescriptor } from "@/lib/domain/retail/offer";
+import { OFFER_STATUS, assertOfferTransition, assertValidPrices, assertValidManualDescriptor, buildReorderPlan, type OfferStatus, type ManualOfferDescriptor } from "@/lib/domain/retail/offer";
 import { CAMPAIGN_ACTION } from "@/lib/domain/retail/policy";
 import { RetailError, RETAIL_ERROR } from "@/lib/domain/retail/errors";
 import { authorizeCampaignAction } from "@/lib/retail/auth";
@@ -15,13 +15,23 @@ import { authorizeCampaignAction } from "@/lib/retail/auth";
 type Client = PrismaClient;
 type Tx = Pick<PrismaClient, "preorderCampaign" | "preorderOffer" | "volume" | "storeCommerceProfile" | "storeMember" | "$queryRaw">;
 
-/** Lockea la campaña padre y devuelve su estado + storeId (o lanza CAMPAIGN_NOT_FOUND). */
-async function lockCampaignOf(tx: Tx, campaignId: number): Promise<{ storeId: number; status: CampaignStatus }> {
+/** Lockea la campaña padre y devuelve su estado + storeId + principal (o lanza CAMPAIGN_NOT_FOUND). */
+async function lockCampaignOf(tx: Tx, campaignId: number): Promise<{ storeId: number; status: CampaignStatus; principalOfferId: number | null }> {
   await tx.$queryRaw`SELECT id FROM "PreorderCampaign" WHERE id = ${campaignId} FOR UPDATE`;
-  const c = await tx.preorderCampaign.findUnique({ where: { id: campaignId }, select: { storeId: true, status: true } });
+  const c = await tx.preorderCampaign.findUnique({ where: { id: campaignId }, select: { storeId: true, status: true, principalOfferId: true } });
   if (!c) throw new RetailError(RETAIL_ERROR.CAMPAIGN_NOT_FOUND);
-  return { storeId: c.storeId, status: c.status as CampaignStatus };
+  return { storeId: c.storeId, status: c.status as CampaignStatus, principalOfferId: c.principalOfferId };
 }
+
+/**
+ * Proyección mínima autoritativa para RECONCILIAR el optimista tras una mutación de oferta: el estado del
+ * ejemplar + el `principalOfferId` de la campaña YA resuelto dentro de la misma tx. Evita que la capa de
+ * actions haga una segunda lectura.
+ */
+export type OfferReconcileResult = {
+  offer: { id: number; status: string; onCover: boolean };
+  principalOfferId: number | null;
+};
 
 /** Descriptor manual que autora la tienda para un lanzamiento aún NO catalogado (sin Volume). */
 export interface ManualOfferInput {
@@ -90,6 +100,14 @@ export async function addPreorderOffer(input: AddOfferInput, actorUserId: string
       snapshot = manualSnapshot!;
     }
 
+    // Alta al FINAL del catálogo de la campaña (ADR-013): sin sortOrder explícito, va después del último. El
+    // lock de la campaña (lockCampaignOf) serializa las altas concurrentes, así que el max no tiene carrera.
+    let sortOrder = input.sortOrder;
+    if (sortOrder === undefined) {
+      const agg = await tx.preorderOffer.aggregate({ where: { campaignId: input.campaignId }, _max: { sortOrder: true } });
+      sortOrder = (agg._max.sortOrder ?? -1) + 1;
+    }
+
     try {
       return await tx.preorderOffer.create({
         data: {
@@ -99,7 +117,7 @@ export async function addPreorderOffer(input: AddOfferInput, actorUserId: string
           listPriceCents: input.listPriceCents,
           preorderPriceCents: input.preorderPriceCents,
           status: OFFER_STATUS.ACTIVE,
-          sortOrder: input.sortOrder ?? 0,
+          sortOrder,
         },
       });
     } catch (err) {
@@ -112,10 +130,19 @@ export async function addPreorderOffer(input: AddOfferInput, actorUserId: string
 
 /** Carga la oferta + su campaña bloqueada; valida que pertenezca a esa campaña (no confía en ids sueltos). */
 async function loadOfferLocked(tx: Tx, offerId: number) {
-  const offer = await tx.preorderOffer.findUnique({ where: { id: offerId }, select: { id: true, campaignId: true, status: true, listPriceCents: true, preorderPriceCents: true } });
+  const offer = await tx.preorderOffer.findUnique({ where: { id: offerId }, select: { id: true, campaignId: true, status: true, onCover: true, listPriceCents: true, preorderPriceCents: true } });
   if (!offer) throw new RetailError(RETAIL_ERROR.OFFER_NOT_FOUND);
-  const { storeId, status } = await lockCampaignOf(tx, offer.campaignId);
-  return { offer, storeId, campaignStatus: status };
+  const { storeId, status, principalOfferId } = await lockCampaignOf(tx, offer.campaignId);
+  return { offer, storeId, campaignStatus: status, principalOfferId };
+}
+
+/**
+ * Reconcilia la invariante de principal (ADR-013): si la campaña tenía a ESTA oferta como principal, la
+ * limpia. Una sola sentencia idempotente (`updateMany` con guard sobre `principalOfferId`) dentro de la tx del
+ * llamador. NO auto-elige otra principal (D-008). Punto único de verdad para bajar-de-portada/ocultar/cancelar.
+ */
+async function clearPrincipalIfMatches(tx: Tx, campaignId: number, offerId: number): Promise<void> {
+  await tx.preorderCampaign.updateMany({ where: { id: campaignId, principalOfferId: offerId }, data: { principalOfferId: null } });
 }
 
 export interface UpdateOfferPatch {
@@ -145,21 +172,63 @@ export async function updatePreorderOffer(offerId: number, patch: UpdateOfferPat
 }
 
 /** Transición de estado de una oferta (ocultar/mostrar/cancelar). Permitida en DRAFT o PUBLISHED. */
-async function setOfferStatus(offerId: number, target: OfferStatus, actorUserId: string | null, client: Client) {
+async function setOfferStatus(offerId: number, target: OfferStatus, actorUserId: string | null, client: Client): Promise<OfferReconcileResult> {
   return client.$transaction(async (tx) => {
-    const { offer, storeId, campaignStatus } = await loadOfferLocked(tx, offerId);
+    const { offer, storeId, campaignStatus, principalOfferId } = await loadOfferLocked(tx, offerId);
     await authorizeCampaignAction(tx, storeId, actorUserId, CAMPAIGN_ACTION.MANAGE_OFFERS);
     if (campaignStatus === CAMPAIGN_STATUS.CLOSED || campaignStatus === CAMPAIGN_STATUS.CANCELLED)
       throw new RetailError(RETAIL_ERROR.CAMPAIGN_NOT_EDITABLE, `campaña en estado ${campaignStatus}`);
-    if ((offer.status as OfferStatus) === target) return tx.preorderOffer.findUnique({ where: { id: offerId } }); // idempotente
+    if ((offer.status as OfferStatus) === target) // idempotente
+      return { offer: { id: offer.id, status: offer.status, onCover: offer.onCover }, principalOfferId };
     assertOfferTransition(offer.status as OfferStatus, target);
-    return tx.preorderOffer.update({ where: { id: offerId }, data: { status: target } });
+    await tx.preorderOffer.update({ where: { id: offerId }, data: { status: target } });
+    // Ocultar/cancelar la principal la vuelve inelegible → limpiar principalOfferId en la misma tx.
+    if (target !== OFFER_STATUS.ACTIVE) await clearPrincipalIfMatches(tx, offer.campaignId, offerId);
+    const principal = target !== OFFER_STATUS.ACTIVE && principalOfferId === offerId ? null : principalOfferId;
+    return { offer: { id: offer.id, status: target, onCover: offer.onCover }, principalOfferId: principal };
+  });
+}
+
+/**
+ * Lleva/baja una oferta de la PORTADA (P-03 · Estudio). Solo DRAFT. Idempotente. Bajar de portada a la oferta
+ * principal limpia `principalOfferId` en la misma tx (no se auto-elige otra, D-008).
+ */
+export async function setOfferOnCover(offerId: number, onCover: boolean, actorUserId: string | null, client: Client = prisma): Promise<OfferReconcileResult> {
+  return client.$transaction(async (tx) => {
+    const { offer, storeId, campaignStatus, principalOfferId } = await loadOfferLocked(tx, offerId);
+    await authorizeCampaignAction(tx, storeId, actorUserId, CAMPAIGN_ACTION.MANAGE_OFFERS);
+    assertDraftEditable(campaignStatus);
+    if (offer.onCover === onCover) // idempotente
+      return { offer: { id: offer.id, status: offer.status, onCover: offer.onCover }, principalOfferId };
+    await tx.preorderOffer.update({ where: { id: offerId }, data: { onCover } });
+    if (!onCover) await clearPrincipalIfMatches(tx, offer.campaignId, offerId);
+    const principal = !onCover && principalOfferId === offerId ? null : principalOfferId;
+    return { offer: { id: offer.id, status: offer.status, onCover }, principalOfferId: principal };
   });
 }
 
 export const hidePreorderOffer = (offerId: number, actor: string | null, client: Client = prisma) => setOfferStatus(offerId, OFFER_STATUS.HIDDEN, actor, client);
 export const showPreorderOffer = (offerId: number, actor: string | null, client: Client = prisma) => setOfferStatus(offerId, OFFER_STATUS.ACTIVE, actor, client);
 export const cancelPreorderOffer = (offerId: number, actor: string | null, client: Client = prisma) => setOfferStatus(offerId, OFFER_STATUS.CANCELLED, actor, client);
+
+/**
+ * REORDENA las ofertas de una campaña DRAFT (P-03 · Estudio). `orderedOfferIds` debe ser una PERMUTACIÓN
+ * exacta de las ofertas de la campaña; `buildReorderPlan` (dominio puro) lo valida y produce `sortOrder =
+ * índice`. Todo en una tx bajo el lock de campaña → serializa con publish y otras ediciones. Idempotente:
+ * reordenar al mismo orden reescribe los mismos valores.
+ */
+export async function reorderPreorderOffers(campaignId: number, orderedOfferIds: number[], actorUserId: string | null, client: Client = prisma) {
+  return client.$transaction(async (tx) => {
+    const { storeId, status } = await lockCampaignOf(tx, campaignId);
+    await authorizeCampaignAction(tx, storeId, actorUserId, CAMPAIGN_ACTION.MANAGE_OFFERS);
+    assertDraftEditable(status);
+    const existing = await tx.preorderOffer.findMany({ where: { campaignId }, select: { id: true } });
+    const plan = buildReorderPlan(existing.map((o) => o.id), orderedOfferIds);
+    for (const { offerId, sortOrder } of plan) {
+      await tx.preorderOffer.update({ where: { id: offerId }, data: { sortOrder } });
+    }
+  });
+}
 
 /** Elimina una oferta solo si la campaña está en DRAFT (nunca borra ofertas históricas de publicadas). */
 export async function removeDraftPreorderOffer(offerId: number, actorUserId: string | null, client: Client = prisma) {

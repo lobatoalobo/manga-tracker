@@ -8,7 +8,9 @@ import { Pill, type PillTono } from "@/components/retail/ui/Pill";
 // (la página provee el wrapper full-height, p. ej. 100dvh). Depende de Pill.
 
 export type Fase = "creacion" | "preventa" | "cierre" | "preparacion" | "entrega";
-export type EdicionHeader = { numero: number | string; semana: string; estado: { label: string; tono?: PillTono } };
+// Identidad de la edición en el masthead. Se muestra `titulo` si está; si no, `#numero` (compat). El número
+// editorial propio aún no existe en el modelo (será un campo de otro slice); por eso `numero` es opcional.
+export type EdicionHeader = { titulo?: string; numero?: number | string; semana: string; estado: { label: string; tono?: PillTono } };
 
 // Etiquetas de la nav: vocabulario de UI del workspace (no dominio).
 const FASE_LABEL: Record<Fase, string> = {
@@ -53,6 +55,7 @@ export function WorkspaceShell({
   edicion,
   faseActual,
   fasesDisponibles,
+  fasesVisibles,
   onNavegar,
   children,
   aside,
@@ -61,12 +64,15 @@ export function WorkspaceShell({
   edicion: EdicionHeader;
   faseActual: Fase;
   fasesDisponibles?: Fase[];
+  /** Fases que se RENDERIZAN en la nav (default: todas). Permite mostrar solo las que tienen ruta real. */
+  fasesVisibles?: Fase[];
   onNavegar?: (fase: Fase) => void;
   children: ReactNode;
   aside?: ReactNode;
   pie?: ReactNode;
 }) {
   const disponibles = fasesDisponibles ?? FASES; // default: todas navegables
+  const visibles = fasesVisibles ?? FASES; // default: todas visibles
 
   return (
     <div data-retail-shell style={shell}>
@@ -74,7 +80,7 @@ export function WorkspaceShell({
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
           <p style={{ fontFamily: "var(--sans)", fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--ink-3)", margin: 0 }}>Edición</p>
           <h1 style={{ fontFamily: "var(--serif)", fontSize: 22, fontWeight: 600, letterSpacing: "-.01em", margin: 0 }}>
-            #{edicion.numero} <span style={{ fontFamily: "var(--sans)", fontSize: 14, fontWeight: 400, color: "var(--ink-2)" }}>· {edicion.semana}</span>
+            {edicion.titulo != null ? edicion.titulo : <>#{edicion.numero}</>} <span style={{ fontFamily: "var(--sans)", fontSize: 14, fontWeight: 400, color: "var(--ink-2)" }}>· {edicion.semana}</span>
           </h1>
           <span style={{ marginLeft: "auto" }}>
             <Pill tono={edicion.estado.tono ?? "neutral"} dot>
@@ -83,7 +89,7 @@ export function WorkspaceShell({
           </span>
         </div>
         <nav aria-label="Fases de la edición" style={{ display: "flex", gap: 18, marginTop: 8, overflowX: "auto" }}>
-          {FASES.map((f) => (
+          {visibles.map((f) => (
             <NavItem key={f} fase={f} activa={f === faseActual} disponible={disponibles.includes(f)} onNavegar={onNavegar} />
           ))}
         </nav>
