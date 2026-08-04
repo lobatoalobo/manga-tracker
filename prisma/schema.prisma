@@ -796,13 +796,19 @@ model PreorderCampaign {
   closesAt        DateTime?
   publishedAt     DateTime?
   closedAt        DateTime?
+  // ADR-013 (X-4): la oferta PRINCIPAL de la portada. Una sola columna ⇒ exactamente una principal por
+  // campaña. SetNull al borrar/desvincular la oferta (la portada queda sin principal; no se auto-elige, D-008).
+  principalOfferId Int?
   createdByUserId String? // ref de auditoría; nullable + SetNull para no perder la campaña si el creador borra su cuenta
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   store     Store           @relation(fields: [storeId], references: [id], onDelete: Restrict)
   createdBy User?           @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
-  offers    PreorderOffer[]
+  // Dos relaciones con PreorderOffer ⇒ Prisma exige nombrarlas ambas. `CampaignOffers` = las ofertas de la
+  // campaña; `CampaignPrincipal` = la principal de la portada (FK en esta tabla, SetNull).
+  offers         PreorderOffer[] @relation("CampaignOffers")
+  principalOffer PreorderOffer?  @relation("CampaignPrincipal", fields: [principalOfferId], references: [id], onDelete: SetNull)
   orders    StoreOrder[] // reservas sobre la campaña (Restrict: una campaña con órdenes no se borra)
 
   @@index([storeId])
@@ -811,6 +817,7 @@ model PreorderCampaign {
   @@index([publishedAt])
   @@index([opensAt])
   @@index([closesAt])
+  @@index([principalOfferId])
 }
 
 // Un tomo REAL del catálogo ofrecido en una campaña. `volume` → Volume (RESTRICT): no se borra un Volume
@@ -832,16 +839,21 @@ model PreorderOffer {
   preorderPriceCents   Int
   status               String   @default("ACTIVE")
   sortOrder            Int      @default(0)
+  // ADR-013 (X-4): llevada a portada (graduado). default false ⇒ las filas existentes quedan fuera de portada.
+  onCover              Boolean  @default(false)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  campaign   PreorderCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign    PreorderCampaign   @relation("CampaignOffers", fields: [campaignId], references: [id], onDelete: Cascade)
+  // Back-relation de la principal (navegación ORM; lista por requisito de Prisma, aunque semánticamente una).
+  principalOf PreorderCampaign[] @relation("CampaignPrincipal")
   volume     Volume?          @relation(fields: [volumeId], references: [id], onDelete: Restrict)
   orderLines StoreOrderLine[] // líneas de reserva que congelaron esta oferta (Restrict: no se borra si hay líneas)
 
   @@unique([campaignId, volumeId])
   @@index([campaignId])
   @@index([volumeId])
+  @@index([campaignId, onCover])
 }
 
 // ============================================================================
