@@ -1,0 +1,50 @@
+import { BookMarked, ChevronLeft } from "lucide-react";
+import { NAV } from "./mock-home";
+import { StoreInfoCard } from "./StoreInfoCard";
+import { UserInfoCard } from "./UserInfoCard";
+
+/** Sidebar fijo (≈260px), gris muy oscuro: logo + navegación + card de tienda + card de usuario. */
+export function StoreSidebar() {
+  return (
+    <div className="flex h-full w-[260px] flex-col bg-[#0f1016] text-slate-300">
+      {/* Logo */}
+      <div className="flex items-center gap-3 px-5 pb-2 pt-6">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-indigo-500 text-white shadow-lg shadow-violet-500/20">
+          <BookMarked size={20} strokeWidth={2.2} aria-hidden />
+        </span>
+        <span className="leading-tight">
+          <span className="block text-base font-semibold text-white">Nakama</span>
+          <span className="block text-xs text-slate-400">Store</span>
+        </span>
+      </div>
+
+      {/* Navegación */}
+      <nav className="mt-6 flex-1 space-y-1 overflow-y-auto px-3">
+        {NAV.map(({ label, icon: Icon, active }) => (
+          <a
+            key={label}
+            href="#"
+            aria-current={active ? "page" : undefined}
+            className={
+              active
+                ? "flex items-center gap-3 rounded-xl bg-violet-600 px-3 py-2.5 text-sm font-medium text-white shadow-lg shadow-violet-600/25"
+                : "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-100"
+            }
+          >
+            <Icon size={18} strokeWidth={2} aria-hidden />
+            {label}
+          </a>
+        ))}
+      </nav>
+
+      {/* Pie: tienda + usuario + contraer */}
+      <div className="space-y-2 border-t border-white/5 px-3 py-4">
+        <StoreInfoCard />
+        <UserInfoCard />
+        <button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-slate-500 transition-colors hover:text-slate-300">
+          <ChevronLeft size={14} aria-hidden /> Contraer menú
+        </button>
+      </div>
+    </div>
+  );
+}
