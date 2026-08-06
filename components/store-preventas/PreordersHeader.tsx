@@ -31,7 +31,7 @@ export function PreordersHeader({ slug }: { slug: string }) {
             <p className="text-sm text-slate-500">Gestioná todas las preventas de tu tienda.</p>
           </div>
         </div>
-        <Link href={`/tiendas/${slug}/admin/preventas/nueva`} className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-600/25 transition-colors hover:bg-violet-700">
+        <Link href={`/tiendas/${slug}/preventas/nueva`} className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-600/25 transition-colors hover:bg-violet-700">
           <Plus size={18} aria-hidden /> Nueva preventa
         </Link>
       </div>

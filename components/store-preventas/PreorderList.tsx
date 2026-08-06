@@ -14,7 +14,7 @@ function EmptyState({ slug, filtered }: { slug: string; filtered: boolean }) {
         {filtered ? "No hay preventas que coincidan con el filtro." : "Todavía no hay preventas."}
       </p>
       {filtered ? null : (
-        <Link href={`/tiendas/${slug}/admin/preventas/nueva`} className="mt-1 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-600/25 transition-colors hover:bg-violet-700">
+        <Link href={`/tiendas/${slug}/preventas/nueva`} className="mt-1 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-600/25 transition-colors hover:bg-violet-700">
           Crear la primera preventa
         </Link>
       )}
