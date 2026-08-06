@@ -1,14 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { Menu, CalendarDays, Plus } from "lucide-react";
 import { TopbarActions } from "@/components/store-home/TopbarActions";
 import { useOpenMenu } from "@/components/store-home/StoreShell";
 
 /**
  * Encabezado de la pantalla Preventas: fila de acciones (buscador + campana + avatar) y, debajo, el título de la
- * sección con su ícono y el botón "Nueva preventa". El botón todavía no navega ni crea datos.
+ * sección con su ícono y el botón "Nueva preventa" (navega al alta real de campaña).
  */
-export function PreordersHeader() {
+export function PreordersHeader({ slug }: { slug: string }) {
   const onMenu = useOpenMenu();
   return (
     <header className="space-y-6">
@@ -30,9 +31,9 @@ export function PreordersHeader() {
             <p className="text-sm text-slate-500">Gestioná todas las preventas de tu tienda.</p>
           </div>
         </div>
-        <button type="button" className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-600/25 transition-colors hover:bg-violet-700">
+        <Link href={`/tiendas/${slug}/admin/preventas/nueva`} className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-600/25 transition-colors hover:bg-violet-700">
           <Plus size={18} aria-hidden /> Nueva preventa
-        </button>
+        </Link>
       </div>
     </header>
   );
