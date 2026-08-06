@@ -11,17 +11,26 @@ import {
 
 export type Tone = "violet" | "amber" | "emerald" | "sky" | "slate" | "rose";
 
-export interface NavItem { label: string; icon: LucideIcon; active?: boolean }
+/** Clave estable de cada sección del sidebar. La pantalla activa se resuelve por clave, no por texto. */
+export type NavKey =
+  | "inicio" | "preventas" | "catalogo" | "pedidos" | "clientes"
+  | "pagos" | "stock" | "reportes" | "config";
+
+/**
+ * `href`: función que arma la URL con el slug real de la tienda. Solo las secciones ya implementadas la tienen;
+ * el resto queda como placeholder sin destino (no navega todavía).
+ */
+export interface NavItem { key: NavKey; label: string; icon: LucideIcon; href?: (slug: string) => string }
 export const NAV: NavItem[] = [
-  { label: "Inicio", icon: Home, active: true },
-  { label: "Preventas", icon: CalendarDays },
-  { label: "Catálogo", icon: BookOpen },
-  { label: "Pedidos", icon: ClipboardList },
-  { label: "Clientes", icon: Users },
-  { label: "Pagos", icon: CreditCard },
-  { label: "Stock", icon: Boxes },
-  { label: "Reportes", icon: BarChart3 },
-  { label: "Configuración", icon: Settings },
+  { key: "inicio", label: "Inicio", icon: Home, href: (s) => `/tiendas/${s}/home` },
+  { key: "preventas", label: "Preventas", icon: CalendarDays, href: (s) => `/tiendas/${s}/preventas` },
+  { key: "catalogo", label: "Catálogo", icon: BookOpen },
+  { key: "pedidos", label: "Pedidos", icon: ClipboardList },
+  { key: "clientes", label: "Clientes", icon: Users },
+  { key: "pagos", label: "Pagos", icon: CreditCard },
+  { key: "stock", label: "Stock", icon: Boxes },
+  { key: "reportes", label: "Reportes", icon: BarChart3 },
+  { key: "config", label: "Configuración", icon: Settings },
 ];
 
 export const STORE = { name: "Crumb Manga Store", plan: "Plan Tienda", initial: "C" };
