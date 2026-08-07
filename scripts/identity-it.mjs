@@ -58,6 +58,7 @@ try {
     "tests/retail-handoff.integration.test.ts",
     "tests/retail-optional-volume.integration.test.ts",
     "tests/retail-preorders-dashboard.integration.test.ts",
+    "tests/retail-studio.integration.test.ts",
     "tests/collection-apply.integration.test.ts",
     "tests/collection-projection.integration.test.ts",
     "tests/collection-immediate.integration.test.ts",
