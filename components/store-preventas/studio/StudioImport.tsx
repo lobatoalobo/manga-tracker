@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { MessageCircle, Plus, Upload, Search, ClipboardList, Check } from "lucide-react";
 import { pesosToCents } from "@/lib/retail/format";
-import { reviewRowsFromMessage, reviewRowsFromCsv, reviewRowToManual, reviewRowValid, type ReviewRow } from "./format";
+import { reviewRowsFromMessage, reviewRowsFromCsv, reviewRowsFromSheet, reviewRowToManual, reviewRowValid, type ReviewRow } from "./format";
 import type { ManualOfferRow } from "@/app/tiendas/[slug]/preventas/actions";
 import type { OfferVolumeCandidate } from "@/lib/retail/volumeSearch";
 
@@ -86,20 +86,35 @@ function FilePanel({ manualEnabled, busy, onAddManualBatch }: Props) {
   const [rows, setRows] = useState<ReviewRow[] | null>(null);
   const [name, setName] = useState("");
 
+  const [err, setErr] = useState<string | null>(null);
+
   async function onFile(file: File) {
     setName(file.name);
-    const text = await file.text();
-    setRows(/\.csv$/i.test(file.name) ? reviewRowsFromCsv(text) : reviewRowsFromMessage(text));
+    setErr(null);
+    try {
+      if (/\.xlsx?$/i.test(file.name)) {
+        const readXlsxFile = (await import("read-excel-file/browser")).default;
+        const matrix = (await readXlsxFile(file)) as unknown as (string | number | boolean | Date | null)[][];
+        setRows(reviewRowsFromSheet(matrix));
+      } else {
+        const text = await file.text();
+        setRows(/\.csv$/i.test(file.name) ? reviewRowsFromCsv(text) : reviewRowsFromMessage(text));
+      }
+    } catch {
+      setErr("No pudimos leer el archivo. Revisá que sea un CSV, TXT o Excel válido.");
+      setRows(null);
+    }
   }
 
   return (
     <Panel>
       <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/40 px-6 py-8 text-center">
         <Upload size={22} className="text-slate-400" aria-hidden />
-        <span className="text-sm font-medium text-slate-600">{name || "Elegí un archivo CSV o TXT"}</span>
-        <span className="text-xs text-slate-400">Excel (.xlsx) llega en la próxima actualización.</span>
-        <input type="file" accept=".csv,.txt,text/plain,text/csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
+        <span className="text-sm font-medium text-slate-600">{name || "Elegí un archivo CSV, TXT o Excel"}</span>
+        <span className="text-xs text-slate-400">Columnas: editorial, título, volumen, precio lista, precio preventa, descuento, reimpresión.</span>
+        <input type="file" accept=".csv,.txt,.xlsx,.xls,text/plain,text/csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
       </label>
+      {err ? <p className="mt-3 text-sm text-rose-600">{err}</p> : null}
       {rows ? (rows.length === 0 ? <EmptyReview /> : !manualEnabled ? <div className="mt-4"><GatingNote /></div> : <ReviewTable initial={rows} busy={busy} onAdd={onAddManualBatch} />) : null}
     </Panel>
   );

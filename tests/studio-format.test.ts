@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { reviewRowsFromCsv, reviewRowsFromMessage, reviewRowToManual, studioSummary, previewFromState } from "@/components/store-preventas/studio/format";
+import { reviewRowsFromCsv, reviewRowsFromMessage, reviewRowsFromSheet, reviewRowToManual, studioSummary, previewFromState } from "@/components/store-preventas/studio/format";
 import type { StudioState } from "@/lib/retail/studio";
 
 describe("studio/format · CSV → filas de revisión", () => {
@@ -19,6 +19,21 @@ IVREA,Call of the Night,1,,,,si`;
 
   it("reviewRowToManual convierte pesos → centavos", () => {
     expect(reviewRowToManual(rows[0])).toEqual({ title: "One Piece", volumeNumber: 109, publisher: "IVREA", isbn: null, listPriceCents: 1_200_000, preorderPriceCents: 1_100_000, isReprint: false, publisherDiscountPct: 10 });
+  });
+});
+
+describe("studio/format · Excel (matriz) → filas de revisión", () => {
+  it("mapea una hoja con números y saltea filas vacías", () => {
+    const matrix: (string | number | null)[][] = [
+      ["Editorial", "Título", "Volumen", "Precio lista", "Precio preventa", "Descuento", "Reimpresión"],
+      ["IVREA", "One Piece", 109, 12000, 11000, 10, "no"],
+      [null, null, null, null, null, null, null],
+      ["PLANETA", "Nausicaä", 6, 36900, 36900, null, "no"],
+    ];
+    const rows = reviewRowsFromSheet(matrix);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ title: "One Piece", volumeNumber: "109", listPesos: "12000", preorderPesos: "11000", discountPct: "10" });
+    expect(rows[1]).toMatchObject({ title: "Nausicaä", volumeNumber: "6", preorderPesos: "36900" });
   });
 });
 

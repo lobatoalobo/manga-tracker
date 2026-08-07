@@ -71,43 +71,47 @@ export function reviewRowsFromMessage(text: string): ReviewRow[] {
 const stripDiacritics = (s: string): string => s.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 const norm = (s: string): string => stripDiacritics(s);
 
-/** CSV simple (coma o punto y coma; sin comillas complejas). Mapea columnas por encabezado tolerante. */
+interface ColIdx { title: number; vol: number; pub: number; list: number; pre: number; disc: number; re: number }
+
+/** Mapea encabezados (ya normalizados) a índices de columna, tolerante a nombres. */
+function mapColumns(headers: string[]): ColIdx {
+  const col = (names: string[]) => headers.findIndex((h) => names.some((n) => h.includes(n)));
+  const list = col(["lista", "list"]);
+  // Preventa: prioriza "preventa"/"preorder"; solo cae a un "precio" genérico que NO sea la columna de lista.
+  let pre = col(["preventa", "preorder"]);
+  if (pre < 0) pre = headers.findIndex((h, idx) => h.includes("precio") && idx !== list);
+  return { title: col(["titulo", "title", "obra"]), vol: col(["volumen", "vol", "tomo"]), pub: col(["editorial", "publisher"]), list, pre, disc: col(["descuento", "disc"]), re: col(["reimp", "reprint"]) };
+}
+
+function buildReviewRow(cells: string[], idx: ColIdx): ReviewRow {
+  const at = (i: number) => (i >= 0 ? (cells[i] ?? "").trim() : "");
+  const title = at(idx.title);
+  const preorder = at(idx.pre);
+  const list = at(idx.list) || preorder;
+  const isReprint = /^(s[ií]|true|1|x)$/i.test(at(idx.re));
+  const needsReview = !title || (!isReprint && !preorder);
+  return { include: !needsReview, title, volumeNumber: at(idx.vol).replace(/[^\d]/g, ""), publisher: at(idx.pub), listPesos: list.replace(/[^\d]/g, ""), preorderPesos: preorder.replace(/[^\d]/g, ""), isReprint, discountPct: at(idx.disc).replace(/[^\d]/g, ""), needsReview };
+}
+
+function reviewRowsFromTable(headerCells: string[], dataRows: string[][]): ReviewRow[] {
+  const idx = mapColumns(headerCells.map(norm));
+  return dataRows.map((cells) => buildReviewRow(cells, idx));
+}
+
+/** CSV (coma o punto y coma; sin comillas complejas). Mapea columnas por encabezado tolerante. */
 export function reviewRowsFromCsv(text: string): ReviewRow[] {
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length < 2) return [];
   const delim = (lines[0].match(/;/g)?.length ?? 0) > (lines[0].match(/,/g)?.length ?? 0) ? ";" : ",";
-  const headers = lines[0].split(delim).map((h) => norm(h));
-  const col = (names: string[]) => headers.findIndex((h) => names.some((n) => h.includes(n)));
-  const iTitle = col(["titulo", "title", "obra"]);
-  const iVol = col(["volumen", "vol", "tomo"]);
-  const iPub = col(["editorial", "publisher"]);
-  const iList = col(["lista", "list"]);
-  // Preventa: prioriza "preventa"/"preorder"; solo cae a un "precio" genérico que NO sea la columna de lista.
-  let iPre = col(["preventa", "preorder"]);
-  if (iPre < 0) iPre = headers.findIndex((h, idx) => h.includes("precio") && idx !== iList);
-  const iDisc = col(["descuento", "disc"]);
-  const iRe = col(["reimp", "reprint"]);
+  return reviewRowsFromTable(lines[0].split(delim), lines.slice(1).map((l) => l.split(delim)));
+}
 
-  return lines.slice(1).map((line) => {
-    const cells = line.split(delim).map((c) => c.trim());
-    const at = (i: number) => (i >= 0 ? cells[i] ?? "" : "");
-    const title = at(iTitle);
-    const preorder = at(iPre);
-    const list = at(iList) || preorder;
-    const isReprint = /^(s[ií]|true|1|x)$/i.test(at(iRe));
-    const needsReview = !title || (!isReprint && !preorder);
-    return {
-      include: !needsReview,
-      title,
-      volumeNumber: at(iVol).replace(/[^\d]/g, ""),
-      publisher: at(iPub),
-      listPesos: list.replace(/[^\d]/g, ""),
-      preorderPesos: preorder.replace(/[^\d]/g, ""),
-      isReprint,
-      discountPct: at(iDisc).replace(/[^\d]/g, ""),
-      needsReview,
-    };
-  });
+/** Matriz de una hoja de cálculo (read-excel-file) → filas de revisión. Misma lógica que CSV. */
+export function reviewRowsFromSheet(matrix: (string | number | boolean | Date | null)[][]): ReviewRow[] {
+  const rows = matrix.filter((r) => r.some((c) => c != null && String(c).trim()));
+  if (rows.length < 2) return [];
+  const toStr = (r: (string | number | boolean | Date | null)[]) => r.map((c) => (c == null ? "" : String(c)));
+  return reviewRowsFromTable(toStr(rows[0]), rows.slice(1).map(toStr));
 }
 
 /** ¿La fila de revisión es agregable (título + precios válidos)? */
