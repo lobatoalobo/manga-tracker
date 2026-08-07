@@ -830,6 +830,11 @@ model PreorderOffer {
   isbnSnapshot         String?
   listPriceCents       Int
   preorderPriceCents   Int
+  // Estudio SaaS: la oferta puede ser una REIMPRESIÓN (agrupa aparte en el mensaje al cliente) y llevar el
+  // descuento snapshot de su editorial en esta preventa (0..100). Aditivos y no comerciales: no afectan precios
+  // ni cumplimiento; alimentan la vista previa del mensaje. Detectados por el parser, editables por la tienda.
+  isReprint            Boolean  @default(false)
+  publisherDiscountPct Int?
   status               String   @default("ACTIVE")
   sortOrder            Int      @default(0)
   createdAt            DateTime @default(now())

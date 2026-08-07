@@ -41,10 +41,20 @@ export type AddOfferInput = {
   listPriceCents: number;
   preorderPriceCents: number;
   sortOrder?: number;
+  /** Metadatos de vista previa (aditivos, no comerciales). */
+  isReprint?: boolean;
+  publisherDiscountPct?: number | null;
 } & (
   | { mode: "linked"; volumeId: number }
   | { mode: "manual"; descriptor: ManualOfferInput }
 );
+
+/** Normaliza el descuento a un entero 0..100, o null si no es válido. PURO. */
+function normalizeDiscount(pct: number | null | undefined): number | null {
+  if (pct == null || !Number.isFinite(pct)) return null;
+  const n = Math.round(pct);
+  return n >= 0 && n <= 100 ? n : null;
+}
 
 type OfferSnapshotFields = {
   titleSnapshot: string;
@@ -100,6 +110,8 @@ export async function addPreorderOffer(input: AddOfferInput, actorUserId: string
           preorderPriceCents: input.preorderPriceCents,
           status: OFFER_STATUS.ACTIVE,
           sortOrder: input.sortOrder ?? 0,
+          isReprint: input.isReprint ?? false,
+          publisherDiscountPct: normalizeDiscount(input.publisherDiscountPct),
         },
       });
     } catch (err) {
@@ -122,6 +134,8 @@ export interface UpdateOfferPatch {
   listPriceCents?: number;
   preorderPriceCents?: number;
   sortOrder?: number;
+  isReprint?: boolean;
+  publisherDiscountPct?: number | null;
 }
 
 /** Edita precios/orden de una oferta. Solo en DRAFT (precios congelados tras publicar, §13). */
@@ -139,6 +153,8 @@ export async function updatePreorderOffer(offerId: number, patch: UpdateOfferPat
         ...(patch.listPriceCents !== undefined ? { listPriceCents: patch.listPriceCents } : {}),
         ...(patch.preorderPriceCents !== undefined ? { preorderPriceCents: patch.preorderPriceCents } : {}),
         ...(patch.sortOrder !== undefined ? { sortOrder: patch.sortOrder } : {}),
+        ...(patch.isReprint !== undefined ? { isReprint: patch.isReprint } : {}),
+        ...(patch.publisherDiscountPct !== undefined ? { publisherDiscountPct: normalizeDiscount(patch.publisherDiscountPct) } : {}),
       },
     });
   });
